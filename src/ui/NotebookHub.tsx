@@ -43,7 +43,10 @@ const factText = (id: string): string | null => {
 };
 
 const panelStyle: React.CSSProperties = {
-  position: 'absolute',
+  // fixed to the viewport, not the hub button's corner wrapper — an absolute
+  // panel inside that wrapper resolves top/left against the tiny corner box
+  // and renders off-viewport (same bug class as the reset dialog)
+  position: 'fixed',
   top: 80,
   left: '50%',
   transform: 'translateX(-50%)',
