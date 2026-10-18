@@ -36,6 +36,10 @@ function FlowerInstances() {
 
   const onClick = (e: ThreeEvent<MouseEvent>, plantId: string) => {
     e.stopPropagation();
+    // with a placement tool active, clicking the meadow means planting —
+    // the notebook only opens when the player is just looking around
+    const s = usePlacementStore.getState();
+    if (s.selectedPlantId || s.selectedStructureId) return;
     const idx = e.instanceId;
     const itemId = idx === undefined ? undefined : idMaps.current[plantId]?.[idx];
     if (itemId) openNotebook({ kind: 'plant', id: itemId });

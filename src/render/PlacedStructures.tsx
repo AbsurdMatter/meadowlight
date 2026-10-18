@@ -26,6 +26,8 @@ export function PlacedStructures() {
 
   const onClick = (e: ThreeEvent<MouseEvent>, structureId: string) => {
     e.stopPropagation();
+    const s = usePlacementStore.getState();
+    if (s.selectedPlantId || s.selectedStructureId) return;
     openNotebook({ kind: 'structure', id: structureId });
   };
 
