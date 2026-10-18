@@ -1,11 +1,34 @@
 import { PLANTS } from '../data/plants';
 import { usePlacementStore } from '../render/placementStore';
 
+const chipStyle = (active: boolean): React.CSSProperties => ({
+  border: active ? '2px solid #d24a43' : '2px solid transparent',
+  borderRadius: 12,
+  padding: '6px 10px',
+  background: active ? '#ffe9b8' : '#fff8e8',
+  cursor: 'pointer',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 2,
+  fontFamily: 'inherit',
+});
+
+const buttonStyle = (active: boolean): React.CSSProperties => ({
+  padding: '2px 10px',
+  borderRadius: 8,
+  border: `2px solid ${active ? '#7a9d54' : '#b0a58c'}`,
+  background: active ? '#dcedc2' : '#f0ead9',
+  color: '#5a4322',
+  fontFamily: 'inherit',
+  cursor: 'pointer',
+});
+
 export function Palette() {
   const selectedPlantId = usePlacementStore((s) => s.selectedPlantId);
   const select = usePlacementStore((s) => s.select);
-  const randomRotation = usePlacementStore((s) => s.randomRotation);
-  const toggleRandomRotation = usePlacementStore((s) => s.toggleRandomRotation);
+  const placementVariation = usePlacementStore((s) => s.placementVariation);
+  const toggleVariation = usePlacementStore((s) => s.toggleVariation);
 
   return (
     <div
@@ -33,20 +56,9 @@ export function Palette() {
           gap: 6,
         }}
       >
-        <span>Random rotation: {randomRotation ? 'on' : 'off'}</span>
-        <button
-          onClick={toggleRandomRotation}
-          style={{
-            padding: '2px 10px',
-            borderRadius: 8,
-            border: `2px solid ${randomRotation ? '#7a9d54' : '#b0a58c'}`,
-            background: randomRotation ? '#dcedc2' : '#f0ead9',
-            color: '#5a4322',
-            fontFamily: 'inherit',
-            cursor: 'pointer',
-          }}
-        >
-          {randomRotation ? 'ON' : 'OFF'}
+        <span>Random rotation: {placementVariation ? 'on' : 'off'}</span>
+        <button onClick={toggleVariation} style={buttonStyle(placementVariation)}>
+          {placementVariation ? 'ON' : 'OFF'}
         </button>
         <span style={{ opacity: 0.65 }}>(F)</span>
       </div>
@@ -57,18 +69,7 @@ export function Palette() {
             <button
               key={p.id}
               onClick={() => select(active ? null : p.id)}
-              style={{
-                border: active ? '2px solid #d24a43' : '2px solid transparent',
-                borderRadius: 12,
-                padding: '6px 10px',
-                background: active ? '#ffe9b8' : '#fff8e8',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 2,
-                fontFamily: 'inherit',
-              }}
+              style={chipStyle(active)}
             >
               <span
                 style={{

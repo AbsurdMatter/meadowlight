@@ -1,5 +1,7 @@
 import { usePlacementStore } from '../render/placementStore';
+import { variationFor } from './variation';
 import type { PlacedItem } from './persistence';
+
 
 declare global {
   interface Window {
@@ -16,13 +18,14 @@ export function installTestHook() {
   if (typeof window === 'undefined') return;
   window.__meadowlight = {
     plant: (plantId, x, z) => {
-      const { plant, ghostRotationY } = usePlacementStore.getState();
+      const { plant, ghostRotationY, placementVariation } = usePlacementStore.getState();
       plant({
         id: crypto.randomUUID(),
         plantId,
         position: [x, 0, z],
         rotationY: ghostRotationY,
         phase: Math.random() * Math.PI * 2,
+        variation: variationFor(placementVariation),
       });
     },
     removeAt: (id) => usePlacementStore.getState().removeAt(id),

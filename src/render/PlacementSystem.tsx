@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { MEADOW_SIZE, terrainHeight } from '../engine/terrain';
 import { PLANT_BY_ID } from '../data/plants';
 import { usePlacementStore } from './placementStore';
+import { variationFor } from '../engine/variation';
 import { VoxelFlower } from './VoxelFlower';
 
 const HALF = MEADOW_SIZE / 2;
@@ -38,7 +39,6 @@ export function PlacementSystem() {
   });
 
   const dragState = useRef({ x: 0, y: 0, button: -1 });
-
   useEffect(() => {
     const onPointerDown = (e: PointerEvent) => {
       dragState.current = { x: e.clientX, y: e.clientY, button: e.button };
@@ -60,7 +60,7 @@ export function PlacementSystem() {
       }
       if (e.key === 'r' || e.key === 'R') rotateGhost();
       if (e.key === 'f' || e.key === 'F')
-        usePlacementStore.getState().toggleRandomRotation();
+        usePlacementStore.getState().toggleVariation();
     };
     const onContextMenu = (e: MouseEvent) => {
       if (wasDrag(e)) return;
@@ -98,7 +98,6 @@ export function PlacementSystem() {
   }, [camera, gl, raycaster, rotateGhost]);
 
   const def = selectedPlantId ? PLANT_BY_ID[selectedPlantId] : null;
-
   const plantHere = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     const ne = e.nativeEvent as MouseEvent;
@@ -107,17 +106,17 @@ export function PlacementSystem() {
       return;
     }
     if (!selectedPlantId || !ghost) return;
-    const randomRotation = usePlacementStore.getState().randomRotation;
-    const baseRotation = randomRotation ? Math.random() * Math.PI * 2 : 0;
+    const variationOn = usePlacementStore.getState().placementVariation;
+    const variation = variationFor(variationOn);
     plant({
       id: crypto.randomUUID(),
       plantId: selectedPlantId,
       position: ghost,
-      rotationY: baseRotation + ghostRotationY,
+      rotationY: ghostRotationY,
       phase: Math.random() * Math.PI * 2,
+      variation,
     });
   };
-
   return (
     <group>
       {ghost && def && (

@@ -1,3 +1,5 @@
+import { DEFAULT_PLACEMENT_VARIATION } from './variation';
+
 export interface PlacedItem {
   id: string;
   plantId: string;
@@ -5,24 +7,36 @@ export interface PlacedItem {
   rotationY: number;
   /** deterministic per-item phase for idle sway, so instances stay stable */
   phase: number;
+  /**
+   * Placement-variation jitter, decided once at placement time and frozen
+   * into the save. Items saved before session 2 have undefined fields and
+   * are NEVER re-randomized: loaders backfill neutral values (jitter 0).
+   */
+  variation?: {
+    /** extra Y rotation beyond the player's R-rotation */
+    rotationY: number;
+    /** small vertical offset so plants follow the rolling terrain */
+    heightJitter: number;
+    /** small lean, radians (a few degrees) */
+    tiltX: number;
+    tiltZ: number;
+  };
 }
 
 /**
- * World schema v2:
+ * World schema:
  *   v1: { items: PlacedItem[] }            (implicit, unversioned)
- *   v2: { version: 2, items: PlacedItem[], randomRotation: boolean }
- * v1 payloads load unchanged; the version field is added on next save.
+ *   v2: { version: 2, items, randomRotation }
+ *   v3: { version: 3, items, placementVariation }  (additive; v1/v2 load fine)
  */
 const STORAGE_KEY = 'meadowlight.world.v2';
 const LEGACY_KEY = 'meadowlight.world.v1';
 
 export interface WorldData {
-  version: 2;
+  version: 3;
   items: PlacedItem[];
-  randomRotation: boolean;
+  placementVariation: boolean;
 }
-
-export const DEFAULT_RANDOM_ROTATION = true;
 
 function parseItems(parsed: unknown): PlacedItem[] {
   if (!Array.isArray(parsed)) return [];
@@ -38,40 +52,55 @@ function parseItems(parsed: unknown): PlacedItem[] {
     )
     .map((p) => ({
       ...p,
-      // preserve saved phase; only backfill if absent (never re-randomize
-      // already-placed items)
-      phase: typeof (p as PlacedItem).phase === 'number' ? (p as PlacedItem).phase : Math.random() * Math.PI * 2,
+      // preserve saved phase and variation; backfill neutrally (never
+      // re-randomize already-placed items)
+      phase: typeof (p as PlacedItem).phase === 'number' ? (p as PlacedItem).phase : 0,
+      variation: p.variation ?? { rotationY: 0, heightJitter: 0, tiltX: 0, tiltZ: 0 },
     }));
 }
 
 export function loadWorld(): WorldData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
-    if (!raw) return { version: 2, items: [], randomRotation: DEFAULT_RANDOM_ROTATION };
+    if (!raw) {
+      return {
+        version: 3,
+        items: [],
+        placementVariation: DEFAULT_PLACEMENT_VARIATION,
+      };
+    }
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && Array.isArray((parsed as WorldData).items)) {
       const data = parsed as WorldData;
+      const variation =
+        typeof data.placementVariation === 'boolean'
+          ? data.placementVariation
+          : DEFAULT_PLACEMENT_VARIATION;
       return {
-        version: 2,
+        version: 3,
         items: parseItems(data.items),
-        randomRotation: typeof data.randomRotation === 'boolean' ? data.randomRotation : DEFAULT_RANDOM_ROTATION,
+        placementVariation: variation,
       };
     }
     // v1 shape: bare array of items
     return {
-      version: 2,
+      version: 3,
       items: parseItems(parsed),
-      randomRotation: DEFAULT_RANDOM_ROTATION,
+      placementVariation: DEFAULT_PLACEMENT_VARIATION,
     };
   } catch {
-    return { version: 2, items: [], randomRotation: DEFAULT_RANDOM_ROTATION };
+    return {
+      version: 3,
+      items: [],
+      placementVariation: DEFAULT_PLACEMENT_VARIATION,
+    };
   }
 }
 
-export function saveWorld(items: PlacedItem[], randomRotation: boolean): void {
+export function saveWorld(data: Omit<WorldData, 'version'>): void {
   try {
-    const data: WorldData = { version: 2, items, randomRotation };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    const payload: WorldData = { version: 3, ...data };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     localStorage.removeItem(LEGACY_KEY);
   } catch {
     // storage may be unavailable (private mode); the meadow just lives in memory
