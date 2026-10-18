@@ -62,6 +62,30 @@ rendering reads world state from `src/render/`. Tuning values (colors,
 speeds, spawn rates) live in `src/data/` — never in components.
 `?demo=1` (dev build only) plants a curated meadow for instant demos.
 
+## Embedding & deploying
+
+Meadowlight builds to a fully static `dist/` folder:
+
+```bash
+npm run build
+```
+
+- **Any host, any subpath.** Assets use relative paths (`base: './'`), so
+  `dist/` works at a domain root, a subfolder, GitHub Pages, or itch.io
+  ZIP hosting without rebuilding.
+- **No page scroll, any aspect ratio.** The canvas fills the viewport and
+  resizes with its container (already `overflow: hidden` on `html/body`);
+  iframe-embed with `width: 100%; height: 100%` and it tracks the frame.
+- **Saves in embeds.** Same-origin embedding (or hosting the built folder
+  yourself) preserves saves normally. Third-party iframe embeds may be
+  served **storage-partitioned** localStorage by modern browsers, meaning
+  each embedding site gets its own save slot — saves won't follow the
+  player across sites, and the meadow boots fresh there. Nothing breaks;
+  nothing syncs.
+- **Sharing.** `og:image` points at `og-image.png` next to the built
+  `index.html` — replace it (1200×630 works best) with your favorite
+  postcard screenshot.
+
 ## Credits
 
 Built with [three.js](https://threejs.org), React, and a fondness for bees.
