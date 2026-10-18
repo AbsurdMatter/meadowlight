@@ -1,3 +1,6 @@
+import type { StructureId } from '../data/structures';
+import type { Season } from '../data/seasons';
+import type { MilestoneId } from '../data/milestones';
 import { DEFAULT_PLACEMENT_VARIATION } from './variation';
 
 export interface PlacedItem {
@@ -23,11 +26,20 @@ export interface PlacedItem {
   };
 }
 
+export interface PlacedStructure {
+  id: string;
+  structureId: StructureId;
+  position: [number, number, number];
+  rotationY: number;
+  variation?: PlacedItem['variation'];
+}
+
 /**
  * World schema:
  *   v1: { items: PlacedItem[] }            (implicit, unversioned)
  *   v2: { version: 2, items, randomRotation }
- *   v3: { version: 3, items, placementVariation }  (additive; v1/v2 load fine)
+ *   v3: { version: 3, items, structures, milestones, season,
+ *         placementVariation }              (all additive; v1/v2 load fine)
  */
 const STORAGE_KEY = 'meadowlight.world.v2';
 const LEGACY_KEY = 'meadowlight.world.v1';
@@ -35,7 +47,12 @@ const LEGACY_KEY = 'meadowlight.world.v1';
 export interface WorldData {
   version: 3;
   items: PlacedItem[];
+  structures: PlacedStructure[];
+  milestones: MilestoneId[];
+  season: Season;
   placementVariation: boolean;
+  /** kept from v2 so the F toggle state persists across versions */
+  randomRotation: boolean;
 }
 
 function parseItems(parsed: unknown): PlacedItem[] {
@@ -59,6 +76,30 @@ function parseItems(parsed: unknown): PlacedItem[] {
     }));
 }
 
+function parseStructures(parsed: unknown): PlacedStructure[] {
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter(
+    (p): p is PlacedStructure =>
+      p &&
+      typeof p.id === 'string' &&
+      typeof p.structureId === 'string' &&
+      Array.isArray(p.position) &&
+      p.position.length === 3 &&
+      typeof p.rotationY === 'number',
+  );
+}
+
+function parseSeason(parsed: unknown): Season {
+  const s = parsed as Season;
+  if (s === 'spring' || s === 'summer' || s === 'autumn' || s === 'winter') return s;
+  return 'summer';
+}
+
+function parseMilestones(parsed: unknown): MilestoneId[] {
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((m): m is MilestoneId => typeof m === 'string');
+}
+
 export function loadWorld(): WorldData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
@@ -66,7 +107,11 @@ export function loadWorld(): WorldData {
       return {
         version: 3,
         items: [],
+        structures: [],
+        milestones: [],
+        season: 'summer',
         placementVariation: DEFAULT_PLACEMENT_VARIATION,
+        randomRotation: DEFAULT_PLACEMENT_VARIATION,
       };
     }
     const parsed = JSON.parse(raw);
@@ -75,24 +120,38 @@ export function loadWorld(): WorldData {
       const variation =
         typeof data.placementVariation === 'boolean'
           ? data.placementVariation
-          : DEFAULT_PLACEMENT_VARIATION;
+          : typeof data.randomRotation === 'boolean'
+            ? data.randomRotation
+            : DEFAULT_PLACEMENT_VARIATION;
       return {
         version: 3,
         items: parseItems(data.items),
+        structures: parseStructures(data.structures),
+        milestones: parseMilestones(data.milestones),
+        season: parseSeason(data.season),
         placementVariation: variation,
+        randomRotation: variation,
       };
     }
     // v1 shape: bare array of items
     return {
       version: 3,
       items: parseItems(parsed),
+      structures: [],
+      milestones: [],
+      season: 'summer',
       placementVariation: DEFAULT_PLACEMENT_VARIATION,
+      randomRotation: DEFAULT_PLACEMENT_VARIATION,
     };
   } catch {
     return {
       version: 3,
       items: [],
+      structures: [],
+      milestones: [],
+      season: 'summer',
       placementVariation: DEFAULT_PLACEMENT_VARIATION,
+      randomRotation: DEFAULT_PLACEMENT_VARIATION,
     };
   }
 }

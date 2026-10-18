@@ -1,15 +1,20 @@
 import { usePlacementStore } from '../render/placementStore';
 import { variationFor } from './variation';
-import type { PlacedItem } from './persistence';
-
+import type { PlacedItem, PlacedStructure } from './persistence';
+import type { StructureId } from '../data/structures';
 
 declare global {
   interface Window {
     __meadowlight?: {
       plant: (plantId: string, x: number, z: number) => void;
+      placeStructure: (structureId: StructureId, x: number, z: number) => void;
       removeAt: (id: string) => void;
+      removeStructure: (id: string) => void;
       items: () => PlacedItem[];
+      structures: () => PlacedStructure[];
       clear: () => void;
+      setSeason: (season: 'spring' | 'summer' | 'autumn' | 'winter') => void;
+      milestones: () => string[];
     };
   }
 }
@@ -28,8 +33,22 @@ export function installTestHook() {
         variation: variationFor(placementVariation),
       });
     },
+    placeStructure: (structureId, x, z) => {
+      const { placeStructure, ghostRotationY, placementVariation } = usePlacementStore.getState();
+      placeStructure({
+        id: crypto.randomUUID(),
+        structureId,
+        position: [x, 0, z],
+        rotationY: ghostRotationY,
+        variation: variationFor(placementVariation),
+      });
+    },
     removeAt: (id) => usePlacementStore.getState().removeAt(id),
+    removeStructure: (id) => usePlacementStore.getState().removeStructure(id),
     items: () => usePlacementStore.getState().items,
-    clear: () => usePlacementStore.setState({ items: [] }),
+    structures: () => usePlacementStore.getState().structures,
+    clear: () => usePlacementStore.setState({ items: [], structures: [] }),
+    setSeason: (season) => usePlacementStore.getState().setSeason(season),
+    milestones: () => usePlacementStore.getState().milestones,
   };
 }
