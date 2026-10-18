@@ -29,6 +29,9 @@ export function checkMilestones(
   const species = plantedSpecies(items.map((i) => i.plantId));
   const structureIds = structures.map((s) => s.structureId);
 
+  // firstFlower: the very first placement deserves a celebration
+  if (items.length >= 1 && !has('firstFlower')) fire('firstFlower');
+
   // fiveSpecies: 5 distinct species planted -> unlocks bee bath
   if (species.length >= 5 && !has('fiveSpecies')) fire('fiveSpecies');
 

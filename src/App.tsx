@@ -12,6 +12,7 @@ import { OrbitControlsLite } from './render/OrbitControlsLite';
 import { Palette } from './ui/Palette';
 import { SeasonDial } from './ui/SeasonDial';
 import { ResetDialog } from './ui/ResetDialog';
+import { NotebookHub } from './ui/NotebookHub';
 import { Toasts } from './ui/Toasts';
 import { Notebook } from './ui/Notebook';
 import { MilestoneWatcher } from './ui/MilestoneWatcher';
@@ -95,6 +96,11 @@ export default function App() {
       {loaded && (
         <div style={{ position: 'absolute', top: 64, right: 12 }}>
           <ResetDialog />
+        </div>
+      )}
+      {loaded && (
+        <div style={{ position: 'absolute', bottom: 16, right: 12 }}>
+          <NotebookHub />
         </div>
       )}
       {loaded && <Toasts />}

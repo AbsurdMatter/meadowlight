@@ -1,4 +1,6 @@
 export type MilestoneId =
+  | 'firstFlower'
+  | 'firstSwarm'
   | 'fiveSpecies'
   | 'tenSpecies'
   | 'firstHive'
@@ -17,6 +19,16 @@ export interface MilestoneDef {
 }
 
 export const MILESTONES: MilestoneDef[] = [
+  {
+    id: 'firstFlower',
+    label: 'The first bloom',
+    detail: 'Your first flower is in the ground — every meadow starts with one.',
+  },
+  {
+    id: 'firstSwarm',
+    label: 'Wings in the air',
+    detail: 'Bees are foraging! A colony visits flowers at its own gentle rhythm.',
+  },
   {
     id: 'fiveSpecies',
     label: 'A varied buffet',

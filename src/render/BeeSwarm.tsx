@@ -34,6 +34,7 @@ const world: PollinatorWorld = { flowers: [], water: [], shelter: [], season: 's
 /** flower id -> world position (+bloom info), rebuilt from the store each frame */
 const flowerById = new Map<string, { x: number; y: number; z: number; plantId: string }>();
 let crashLogged = false;
+let firstSwarmFired = false;
 
 /** Build the shared engine view of the world from the placement store (no duplicated state). */
 function syncWorld() {
@@ -230,6 +231,17 @@ export function BeeSwarm() {
       wings.setMatrixAt(bi, tmpMat);
     }
     beeDebug.count = bees.current.length;
+    if (bees.current.length > 0 && !firstSwarmFired) {
+      firstSwarmFired = true;
+      const s2 = usePlacementStore.getState();
+      if (!s2.milestones.includes('firstSwarm')) {
+        s2.earnMilestone(
+          'firstSwarm',
+          'Wings in the air',
+          'Bees are foraging! A colony visits flowers at its own gentle rhythm.',
+        );
+      }
+    }
     body.count = bees.current.length;
     stripes.count = bees.current.length;
     wings.count = bees.current.length;
