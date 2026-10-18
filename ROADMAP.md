@@ -67,7 +67,11 @@ Goal: v0.1 done, demo-ready.
    "come back tomorrow" vibe) — dismissible, never required.
 6. Performance pass: instancing audit, adaptive bee cap, LOD for distant voxels.
 7. Visual polish: grass movement, long shadows, subtle bloom (three.js
-   postprocessing), morning/evening light warmth.
+   postprocessing), morning/evening light warmth. Water rework: replace the
+   rounded/oval pond plane with voxel water cubes consistent with the voxel
+   style — no rounded edges, no clipped shoreline cutting through terrain;
+   the water reads as boxes matching the terrain geometry. Gentle shimmer
+   optional within the perf budget.
 8. Palette grouped by type: Flowers (all six species), then Structures
    (hive, bee bath, bee hotel, hedge) — visual grouping with section labels.
 9. Verify Definition of Done in AGENTS.md; tag `v0.1`.
