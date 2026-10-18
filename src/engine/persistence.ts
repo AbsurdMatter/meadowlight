@@ -46,6 +46,10 @@ export interface PlacedStructure {
  */
 const STORAGE_KEY = 'meadowlight.world.v2';
 const LEGACY_KEY = 'meadowlight.world.v1';
+/** corrupt/unknown-version saves are preserved here before booting fresh */
+const BACKUP_KEY = 'meadowlight.world._backup';
+/** versions this build understands (anything else = unknown, backed up) */
+const KNOWN_VERSIONS = new Set([1, 2, 3, 4]);
 
 export interface WorldData {
   version: 4;
@@ -123,25 +127,57 @@ function parseOnboardingDismissed(parsed: unknown): boolean {
   return parsed === true;
 }
 
+function freshWorld(): WorldData {
+  return {
+    version: 4,
+    items: [],
+    structures: [],
+    milestones: [],
+    season: 'summer',
+    placementVariation: DEFAULT_PLACEMENT_VARIATION,
+    randomRotation: DEFAULT_PLACEMENT_VARIATION,
+    seenFacts: [],
+    wildSeasons: [],
+    onboardingDismissed: false,
+  };
+}
+
+/**
+ * A save nobody can read must never blank-screen the game: the blob is
+ * copied to _backup (the player's meadow is never silently destroyed) and
+ * the app boots fresh. Unknown FUTURE versions get the same mercy — this
+ * build cannot know their shape.
+ */
+function backupAndStartFresh(raw: string, key: string): WorldData {
+  try {
+    localStorage.setItem(BACKUP_KEY, raw);
+    localStorage.removeItem(key);
+  } catch {
+    // even the backup failing must not crash boot
+  }
+  return freshWorld();
+}
+
 export function loadWorld(): WorldData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
     if (!raw) {
-      return {
-        version: 4,
-        items: [],
-        structures: [],
-        milestones: [],
-        season: 'summer',
-        placementVariation: DEFAULT_PLACEMENT_VARIATION,
-        randomRotation: DEFAULT_PLACEMENT_VARIATION,
-        seenFacts: [],
-        wildSeasons: [],
-      };
+      return freshWorld();
     }
-    const parsed = JSON.parse(raw);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      // unparseable JSON: preserve it, boot fresh
+      return backupAndStartFresh(raw, STORAGE_KEY);
+    }
     if (parsed && typeof parsed === 'object' && Array.isArray((parsed as WorldData).items)) {
       const data = parsed as WorldData;
+      const version = typeof data.version === 'number' ? data.version : 1;
+      if (!KNOWN_VERSIONS.has(version)) {
+        // unknown version (from a newer build?): preserve it, boot fresh
+        return backupAndStartFresh(raw, STORAGE_KEY);
+      }
       const variation =
         typeof data.placementVariation === 'boolean'
           ? data.placementVariation
@@ -162,31 +198,17 @@ export function loadWorld(): WorldData {
       };
     }
     // v1 shape: bare array of items
-    return {
-      version: 4,
-      items: parseItems(parsed),
-      structures: [],
-      milestones: [],
-      season: 'summer',
-      placementVariation: DEFAULT_PLACEMENT_VARIATION,
-      randomRotation: DEFAULT_PLACEMENT_VARIATION,
-      seenFacts: [],
-      wildSeasons: [],
-      onboardingDismissed: false,
-    };
+    if (Array.isArray(parsed)) {
+      return {
+        ...freshWorld(),
+        items: parseItems(parsed),
+      };
+    }
+    // neither shape: preserve it, boot fresh
+    return backupAndStartFresh(raw, STORAGE_KEY);
   } catch {
-    return {
-      version: 4,
-      items: [],
-      structures: [],
-      milestones: [],
-      season: 'summer',
-      placementVariation: DEFAULT_PLACEMENT_VARIATION,
-      randomRotation: DEFAULT_PLACEMENT_VARIATION,
-      seenFacts: [],
-      wildSeasons: [],
-      onboardingDismissed: false,
-    };
+    // storage itself threw: boot fresh, nothing to preserve
+    return freshWorld();
   }
 }
 
