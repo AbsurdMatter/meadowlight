@@ -24,6 +24,18 @@ const CAPACITY_PER_SPECIES = 400;
 const OFF_BLOOM_SCALE = 0.25;
 const OFF_BLOOM_LIGHTEN = 0.35;
 
+/**
+ * Perf pass (session 3):
+ *  - SWAY_LOD_DISTANCE: flowers farther than this from the camera skip the
+ *    per-frame sway rotation (their matrix is still written with zero sway,
+ *    keeping placement/season visuals identical; 0.08 rad sway is
+ *    imperceptible beyond this distance).
+ *  - colorDirty: instance colors only change on season/bloom flips or when
+ *    the item set changes — rewriting them every frame was the single
+ *    biggest per-frame waste in the profile.
+ */
+const SWAY_LOD_DISTANCE = 30;
+
 function FlowerInstances() {
   const items = usePlacementStore((s) => s.items);
   const season = usePlacementStore((s) => s.season);
@@ -33,6 +45,8 @@ function FlowerInstances() {
   });
   /** instanceId -> item id per species, rebuilt each frame alongside matrices */
   const idMaps = useRef<Record<string, string[]>>({});
+  /** last (season, itemCount) each species' colors were written for */
+  const colorKey = useRef<Record<string, string>>({});
 
   const onClick = (e: ThreeEvent<MouseEvent>, plantId: string) => {
     e.stopPropagation();
@@ -44,20 +58,27 @@ function FlowerInstances() {
     const itemId = idx === undefined ? undefined : idMaps.current[plantId]?.[idx];
     if (itemId) openNotebook({ kind: 'plant', id: itemId });
   };
-  useFrame(({ clock }) => {
+  useFrame(({ clock, camera }) => {
     const r = refs.current;
     const t = clock.elapsedTime;
     for (const def of PLANTS) {
       const mesh = r.meshes[def.id];
       if (!mesh) continue;
       const blooming = inBloom(def.id, season);
+      const thisColorKey = season + ':' + items.length;
+      const colorsDirty = colorKey.current[def.id] !== thisColorKey;
+      colorKey.current[def.id] = thisColorKey;
       const ids: string[] = [];
       let i = 0;
       for (const item of items) {
         if (item.plantId !== def.id) continue;
         const variation = item.variation ?? noVariation();
-        const swayZ = Math.sin(t * 0.9 + item.phase) * def.sway;
-        const swayX = Math.cos(t * 0.7 + item.phase * 1.3) * def.sway * 0.5;
+        // LOD: skip the sway rotations when far from the camera (imperceptible)
+        const dx = item.position[0] - camera.position.x;
+        const dz = item.position[2] - camera.position.z;
+        const near = dx * dx + dz * dz <= SWAY_LOD_DISTANCE * SWAY_LOD_DISTANCE;
+        const swayZ = near ? Math.sin(t * 0.9 + item.phase) * def.sway : 0;
+        const swayX = near ? Math.cos(t * 0.7 + item.phase * 1.3) * def.sway * 0.5 : 0;
         ids.push(item.id);
         for (let pi = 0; pi < def.parts.length; pi++) {
           const part = def.parts[pi];
@@ -88,12 +109,14 @@ function FlowerInstances() {
           );
           tmpMat.multiply(scaleMat);
           mesh.setMatrixAt(i, tmpMat);
-          tmpColor.set(part.color);
-          if (petal && !blooming) {
-            dullColor.copy(tmpColor).lerp(new THREE.Color('#b9b39a'), OFF_BLOOM_LIGHTEN);
-            mesh.setColorAt(i, dullColor);
-          } else {
-            mesh.setColorAt(i, tmpColor);
+          if (colorsDirty) {
+            tmpColor.set(part.color);
+            if (petal && !blooming) {
+              dullColor.copy(tmpColor).lerp(new THREE.Color('#b9b39a'), OFF_BLOOM_LIGHTEN);
+              mesh.setColorAt(i, dullColor);
+            } else {
+              mesh.setColorAt(i, tmpColor);
+            }
           }
           i++;
         }
@@ -101,7 +124,7 @@ function FlowerInstances() {
       mesh.count = i;
       idMaps.current[def.id] = ids;
       mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      if (colorsDirty && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
   });
   return (
