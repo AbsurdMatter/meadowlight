@@ -134,6 +134,16 @@ audio playing) is NOT done. When you cannot observe it in this environment,
 say so and put it on the user's manual checklist rather than reporting it as
 working.
 
+### Verify the observable, not a proxy
+A UI feature is verified only when the harness checks what the user actually
+experiences. For panels, toasts, and overlays that means reading rendered
+geometry from the DOM: element present AND within the viewport AND visible —
+never string-presence in innerHTML, handler invocation, or absence of errors.
+(The notebook hub shipped broken through two "verifications" that checked the
+DOM for the panel's text while it rendered 850px below the fold:
+position:absolute inside a small corner wrapper pushes children off-viewport —
+anchor full-screen UI with position:fixed and read back its viewport rect.)
+
 ## Session 1 decisions (context for later sessions)
 - Rendering: one InstancedMesh per species-part; instance colors are written
   every frame (correctness over cleverness — perf headroom is ~3x the budget).

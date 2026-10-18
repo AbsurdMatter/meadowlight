@@ -123,10 +123,17 @@ raycast vs. rolling terrain — the offset was latent since session 1), notebook
 handlers swallowing placement clicks (stopPropagation), stale ghost under UI
 overlays (shared R3F pointer), right-click removal lost in the DOM-input
 refactor, modal notebook requiring close-button dismissal, milestone
-thresholds unreachable in normal play (toasts never fired in any real session).
+thresholds unreachable in normal play (toasts never fired in any real session),
+dead notebook hub button (panel opened but rendered off-viewport: position:
+absolute inside a corner wrapper — same bug class as the misplaced reset
+dialog), acceptance-gate preview-kill exit race (scripted run now tears down
+deterministically).
 Lessons: never store array indices or raw object references as entity
 references into mutable arrays; ghost preview and click placement must share
 one resolution path; UI overlays must not capture pointer events that belong
 to the canvas; a feature reported "delivered" must be observed firing, not
 just implemented — milestone toasts existed in code and never fired once in
-real play.
+real play; verify the user-visible observable (click, then read rendered
+geometry: present + in-viewport + visible), never a proxy like
+innerHTML string-presence or handler invocation — the notebook hub passed
+two proxy "verifications" while invisible below the fold.
