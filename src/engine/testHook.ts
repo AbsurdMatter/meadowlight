@@ -2,6 +2,9 @@ import { usePlacementStore } from '../render/placementStore';
 import { variationFor } from './variation';
 import type { PlacedItem, PlacedStructure } from './persistence';
 import type { StructureId } from '../data/structures';
+import type { PerspectiveCamera, WebGLRenderer } from 'three';
+import type { Size } from '@react-three/fiber';
+import { beeDebug } from '../render/BeeSwarm';
 
 declare global {
   interface Window {
@@ -15,6 +18,13 @@ declare global {
       clear: () => void;
       setSeason: (season: 'spring' | 'summer' | 'autumn' | 'winter') => void;
       milestones: () => string[];
+      beeCount: () => number;
+      __three?: {
+        camera: PerspectiveCamera;
+        gl: WebGLRenderer;
+        size: Size;
+        scene: unknown;
+      };
     };
   }
 }
@@ -50,5 +60,6 @@ export function installTestHook() {
     clear: () => usePlacementStore.setState({ items: [], structures: [] }),
     setSeason: (season) => usePlacementStore.getState().setSeason(season),
     milestones: () => usePlacementStore.getState().milestones,
+    beeCount: () => beeDebug.count,
   };
 }
