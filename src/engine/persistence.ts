@@ -39,13 +39,15 @@ export interface PlacedStructure {
  *   v1: { items: PlacedItem[] }            (implicit, unversioned)
  *   v2: { version: 2, items, randomRotation }
  *   v3: { version: 3, items, structures, milestones, season,
- *         placementVariation }              (all additive; v1/v2 load fine)
+ *         placementVariation, seenFacts }  (all additive; v1/v2 load fine)
+ *   v4: { version: 4, ..., wildSeasons }   (seasons a wild corner has
+ *         survived, for the wildYearSurvived milestone; additive)
  */
 const STORAGE_KEY = 'meadowlight.world.v2';
 const LEGACY_KEY = 'meadowlight.world.v1';
 
 export interface WorldData {
-  version: 3;
+  version: 4;
   items: PlacedItem[];
   structures: PlacedStructure[];
   milestones: MilestoneId[];
@@ -55,6 +57,8 @@ export interface WorldData {
   randomRotation: boolean;
   /** ids of facts the player has seen (additive; older saves just have none) */
   seenFacts?: string[];
+  /** seasons the meadow's wild corner has survived (v4, additive) */
+  wildSeasons?: string[];
 }
 
 function parseItems(parsed: unknown): PlacedItem[] {
@@ -107,12 +111,17 @@ function parseSeenFacts(parsed: unknown): string[] {
   return parsed.filter((f): f is string => typeof f === 'string');
 }
 
+function parseWildSeasons(parsed: unknown): string[] {
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((f): f is string => typeof f === 'string');
+}
+
 export function loadWorld(): WorldData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
     if (!raw) {
       return {
-        version: 3,
+        version: 4,
         items: [],
         structures: [],
         milestones: [],
@@ -120,6 +129,7 @@ export function loadWorld(): WorldData {
         placementVariation: DEFAULT_PLACEMENT_VARIATION,
         randomRotation: DEFAULT_PLACEMENT_VARIATION,
         seenFacts: [],
+        wildSeasons: [],
       };
     }
     const parsed = JSON.parse(raw);
@@ -132,7 +142,7 @@ export function loadWorld(): WorldData {
             ? data.randomRotation
             : DEFAULT_PLACEMENT_VARIATION;
       return {
-        version: 3,
+        version: 4,
         items: parseItems(data.items),
         structures: parseStructures(data.structures),
         milestones: parseMilestones(data.milestones),
@@ -140,11 +150,12 @@ export function loadWorld(): WorldData {
         placementVariation: variation,
         randomRotation: variation,
         seenFacts: parseSeenFacts(data.seenFacts),
+        wildSeasons: parseWildSeasons(data.wildSeasons),
       };
     }
     // v1 shape: bare array of items
     return {
-      version: 3,
+      version: 4,
       items: parseItems(parsed),
       structures: [],
       milestones: [],
@@ -152,10 +163,11 @@ export function loadWorld(): WorldData {
       placementVariation: DEFAULT_PLACEMENT_VARIATION,
       randomRotation: DEFAULT_PLACEMENT_VARIATION,
       seenFacts: [],
+      wildSeasons: [],
     };
   } catch {
     return {
-      version: 3,
+      version: 4,
       items: [],
       structures: [],
       milestones: [],
@@ -163,6 +175,7 @@ export function loadWorld(): WorldData {
       placementVariation: DEFAULT_PLACEMENT_VARIATION,
       randomRotation: DEFAULT_PLACEMENT_VARIATION,
       seenFacts: [],
+      wildSeasons: [],
     };
   }
 }
@@ -179,7 +192,7 @@ export function clearSavedWorld(): void {
 
 export function saveWorld(data: Omit<WorldData, 'version'>): void {
   try {
-    const payload: WorldData = { version: 3, ...data };
+    const payload: WorldData = { version: 4, ...data };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     localStorage.removeItem(LEGACY_KEY);
   } catch {

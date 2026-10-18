@@ -6,6 +6,7 @@ import { Sky } from './render/Sky';
 import { PlantedFlowers } from './render/PlantedFlowers';
 import { PlacedStructures } from './render/PlacedStructures';
 import { BeeSwarm } from './render/BeeSwarm';
+import { SolitaryBees } from './render/SolitaryBees';
 import { PlacementSystem } from './render/PlacementSystem';
 import { DebugBridge } from './render/DebugBridge';
 import { OrbitControlsLite } from './render/OrbitControlsLite';
@@ -56,6 +57,7 @@ function Scene() {
       <PlantedFlowers />
       <PlacedStructures />
       <BeeSwarm />
+      <SolitaryBees />
       <PlacementSystem />
       <DebugBridge />
       <OrbitControlsLite />

@@ -1,6 +1,6 @@
 import type { PlantPart } from './plants';
 
-export type StructureId = 'hive' | 'bath' | 'hotel' | 'hedge';
+export type StructureId = 'hive' | 'bath' | 'hotel' | 'hedge' | 'wildcorner';
 
 export interface StructureDef {
   id: StructureId;
@@ -16,6 +16,10 @@ export interface StructureDef {
 const WOOD = '#8a5a2b';
 const DARK_WOOD = '#6d4420';
 const STRAW = '#d9b36a';
+
+const TUFT_GREEN = '#7d9b4e';
+const TUFT_DRY = '#b0a45f';
+const STALK = '#a98d4f';
 
 export const STRUCTURES: StructureDef[] = [
   {
@@ -81,6 +85,24 @@ export const STRUCTURES: StructureDef[] = [
       { size: [1.2, 0.35, 0.38], offset: [-0.1, 1.02, 0.02], color: '#77995b' },
       { size: [0.3, 0.25, 0.2], offset: [-0.85, 0.55, 0.28], color: '#77995b' },
       { size: [0.28, 0.2, 0.2], offset: [0.9, 0.5, 0.3], color: '#77995b' },
+    ],
+  },
+  {
+    id: 'wildcorner',
+    name: 'Wild Corner',
+    emoji: '\u{1F33F}',
+    radius: 1.3,
+    footprint: 0.9,
+    parts: [
+      { size: [1.6, 0.12, 1.6], offset: [0, 0.06, 0], color: '#9a8352' },
+      { size: [0.16, 0.7, 0.16], offset: [-0.5, 0.35, -0.3], color: TUFT_GREEN },
+      { size: [0.14, 0.55, 0.14], offset: [-0.28, 0.28, 0.32], color: TUFT_DRY },
+      { size: [0.18, 0.85, 0.18], offset: [0.02, 0.43, -0.48], color: TUFT_GREEN },
+      { size: [0.13, 0.5, 0.13], offset: [0.34, 0.25, 0.4], color: TUFT_DRY },
+      { size: [0.12, 0.9, 0.12], offset: [0.5, 0.45, 0.05], color: TUFT_GREEN },
+      { size: [0.1, 0.6, 0.1], offset: [-0.12, 0.3, 0.55], color: STALK },
+      { size: [0.22, 0.18, 0.22], offset: [0.42, 0.09, -0.42], color: '#8a7343' },
+      { size: [0.1, 0.45, 0.1], offset: [-0.62, 0.22, 0.18], color: STALK },
     ],
   },
 ];

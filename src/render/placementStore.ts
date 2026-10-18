@@ -30,6 +30,8 @@ export interface PlacementState {
   /** ids of facts the player has seen (persisted, additive save field) */
   seenFacts: string[];
   markFactSeen: (id: string) => void;
+  /** seasons a wild corner has been present for (persisted, v4 additive) */
+  wildSeasons: string[];
   /** true while a blocking dialog (reset confirmation) is open: no placement */
   modalOpen: boolean;
   setModalOpen: (open: boolean) => void;
@@ -67,11 +69,19 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   notebook: null,
   modalOpen: false,
   seenFacts: initial.seenFacts ?? [],
+  wildSeasons: initial.wildSeasons ?? [],
   markFactSeen: (id) =>
     set((s) => (s.seenFacts.includes(id) ? s : { seenFacts: [...s.seenFacts, id] })),
   setModalOpen: (open) => set({ modalOpen: open }),
   plant: (item) => set((s) => ({ items: [...s.items, item] })),
-  placeStructure: (structure) => set((s) => ({ structures: [...s.structures, structure] })),
+  placeStructure: (structure) =>
+    set((s) => ({
+      structures: [...s.structures, structure],
+      wildSeasons:
+        structure.structureId === 'wildcorner' && !s.wildSeasons.includes(s.season)
+          ? [...s.wildSeasons, s.season]
+          : s.wildSeasons,
+    })),
   removeAt: (id) => set((s) => ({ items: s.items.filter((it) => it.id !== id) })),
   removeStructure: (id) =>
     set((s) => ({ structures: s.structures.filter((it) => it.id !== id) })),
@@ -86,7 +96,11 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       return { placementVariation: next };
     }),
   setSeason: (season) => {
-    set({ season });
+    set((s) => {
+      const hasWildCorner = s.structures.some((st) => st.structureId === 'wildcorner');
+      if (!hasWildCorner || s.wildSeasons.includes(season)) return { season };
+      return { season, wildSeasons: [...s.wildSeasons, season] };
+    });
     get().save();
   },
   earnMilestone: (id, label, detail) => {
@@ -114,6 +128,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       toasts: [],
       modalOpen: false,
       seenFacts: [],
+      wildSeasons: [],
     });
     get().save();
   },
@@ -127,6 +142,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       placementVariation: s.placementVariation,
       randomRotation: s.placementVariation,
       seenFacts: s.seenFacts,
+      wildSeasons: s.wildSeasons,
     });
   },
 }));

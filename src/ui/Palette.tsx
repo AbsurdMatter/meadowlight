@@ -54,11 +54,13 @@ export function Palette() {
   const hedgeUnlocked = milestones.includes('firstHive') || milestones.includes('hedgesUnlocked');
   const hotelUnlocked = milestones.includes('tenSpecies');
 
+  const wildUnlocked = milestones.includes('hotelGuests');
   const unlocked: Record<StructureId, boolean> = {
     hive: true,
     bath: bathUnlocked,
     hotel: hotelUnlocked,
     hedge: hedgeUnlocked,
+    wildcorner: wildUnlocked,
   };
 
   return (
