@@ -103,3 +103,16 @@ If a verification step requires installing system packages, native libraries,
 or chasing environment dependencies (e.g. X11, browsers for headless testing),
 stop and propose the simplest honest alternative (in-app harness, manual user
 check) instead of continuing to install.
+
+## Session 1 decisions (context for later sessions)
+- Rendering: one InstancedMesh per species-part; instance colors are written
+  every frame (correctness over cleverness — perf headroom is ~3x the budget).
+- Sway: per-frame instance matrix updates; no per-object React state.
+- Camera: custom OrbitControls implementation (drei was dropped); left-click
+  zoom, right-click pan; clamped polar angle and distance.
+- Placement variation: random rotation (Y) + slight height/tilt jitter on
+  placement, toggleable with F (persisted; existing saves never re-randomized).
+- Save schema lives in localStorage; keep it versioned and additive — session 2
+  adds hives, milestones, season state to it.
+- Perf: `npm run test:perf` in-app harness (toggle key), `npm run test:smoke`
+  build gate; 60fps @ 200+ items budget.
