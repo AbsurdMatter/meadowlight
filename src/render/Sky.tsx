@@ -1,12 +1,13 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
-import { Canvas, useThree } from '@react-three/fiber';
+import { useThree } from '@react-three/fiber';
+import { FOG } from '../data/environment';
 
 export const PALETTE = {
   skyTop: '#6fa8dc',
   skyMid: '#a8cdf0',
   skyHorizon: '#ffd9a0',
-  fog: '#f2c98a',
+  fog: FOG.color,
   sun: '#ffd9a0',
 };
 
@@ -32,10 +33,8 @@ export function Sky() {
 
   useMemo(() => {
     scene.background = skyTexture;
-    scene.fog = new THREE.Fog(PALETTE.fog, 30, 90);
+    scene.fog = new THREE.Fog(FOG.color, FOG.near, FOG.far);
   }, [scene, skyTexture]);
 
   return null;
 }
-
-void Canvas;

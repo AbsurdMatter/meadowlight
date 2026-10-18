@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Meadow } from './render/Meadow';
+import { Background } from './render/Background';
 import { Sky } from './render/Sky';
 import { PlantedFlowers } from './render/PlantedFlowers';
 import { PlacementSystem } from './render/PlacementSystem';
@@ -13,27 +14,29 @@ function Scene() {
   return (
     <>
       <Sky />
-      <hemisphereLight args={['#ffe6c7', '#5a7a4a', 0.55]} />
+      <hemisphereLight args={['#ffe6c7', '#5a7a4a', 0.6]} />
       <directionalLight
-        position={[18, 14, 8]}
-        intensity={1.6}
+        position={[24, 16, 10]}
+        intensity={1.5}
         color="#ffd9a0"
         castShadow
         shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-30}
-        shadow-camera-right={30}
-        shadow-camera-top={30}
-        shadow-camera-bottom={-30}
+        shadow-camera-left={-26}
+        shadow-camera-right={26}
+        shadow-camera-top={26}
+        shadow-camera-bottom={-26}
+        shadow-camera-near={4}
+        shadow-camera-far={80}
+        shadow-bias={-0.0004}
+        shadow-normalBias={0.6}
+        shadow-radius={6}
       />
-      <ambientLight intensity={0.25} color="#fff3e0" />
+      <ambientLight intensity={0.32} color="#fff3e0" />
       <Meadow />
+      <Background />
       <PlantedFlowers />
       <PlacementSystem />
-      <OrbitControlsLite
-        maxPolarAngle={Math.PI * 0.47}
-        minDistance={6}
-        maxDistance={38}
-      />
+      <OrbitControlsLite />
     </>
   );
 }

@@ -1,41 +1,36 @@
 import { useEffect, useRef } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { CAMERA_BOUNDS } from '../data/environment';
 
-interface Props {
-  minDistance?: number;
-  maxDistance?: number;
-  maxPolarAngle?: number;
-}
-
-export function OrbitControlsLite({
-  minDistance = 6,
-  maxDistance = 38,
-  maxPolarAngle = Math.PI * 0.47,
-}: Props) {
+export function OrbitControlsLite() {
   const { camera, gl } = useThree();
   const state = useRef({
     target: new THREE.Vector3(0, 0, 0),
     spherical: new THREE.Spherical(),
-    panOffset: new THREE.Vector3(),
   });
 
   useEffect(() => {
     const dom = gl.domElement;
     const s = state.current;
     s.spherical.setFromVector3(camera.position.clone().sub(s.target));
+    s.spherical.phi = THREE.MathUtils.clamp(
+      s.spherical.phi,
+      CAMERA_BOUNDS.minPolarAngle,
+      CAMERA_BOUNDS.maxPolarAngle,
+    );
+    s.spherical.radius = THREE.MathUtils.clamp(
+      s.spherical.radius,
+      CAMERA_BOUNDS.minDistance,
+      CAMERA_BOUNDS.maxDistance,
+    );
 
     let dragging = false;
     let button = -1;
     let lastX = 0;
     let lastY = 0;
-    let panDeltaX = 0;
-    let panDeltaY = 0;
 
-    const panScale = () => {
-      const dist = camera.position.distanceTo(s.target);
-      return (dist * 0.0018);
-    };
+    const panScale = () => camera.position.distanceTo(s.target) * 0.0018;
 
     const onPointerDown = (e: PointerEvent) => {
       dragging = true;
@@ -53,18 +48,27 @@ export function OrbitControlsLite({
       lastY = e.clientY;
       if (button === 2) {
         s.spherical.theta -= dx * 0.005;
-        s.spherical.phi -= dy * 0.005;
-        s.spherical.phi = THREE.MathUtils.clamp(s.spherical.phi, 0.08, maxPolarAngle);
+        s.spherical.phi = THREE.MathUtils.clamp(
+          s.spherical.phi - dy * 0.005,
+          CAMERA_BOUNDS.minPolarAngle,
+          CAMERA_BOUNDS.maxPolarAngle,
+        );
         s.spherical.makeSafe();
       } else if (button === 0) {
         const scale = panScale();
-        panDeltaX = -dx * scale;
-        panDeltaY = -dy * scale;
-        const pan = new THREE.Vector3();
-        pan.setFromMatrixColumn(camera.matrix, 0).multiplyScalar(panDeltaX);
-        pan.add(new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1).multiplyScalar(panDeltaY));
-        s.panOffset.add(pan);
+        const pan = new THREE.Vector3()
+          .setFromMatrixColumn(camera.matrix, 0)
+          .multiplyScalar(-dx * scale);
+        pan.add(
+          new THREE.Vector3()
+            .setFromMatrixColumn(camera.matrix, 1)
+            .multiplyScalar(-dy * scale),
+        );
         s.target.add(pan);
+        const t = CAMERA_BOUNDS.panTargetLimit;
+        s.target.x = THREE.MathUtils.clamp(s.target.x, -t, t);
+        s.target.z = THREE.MathUtils.clamp(s.target.z, -t, t);
+        s.target.y = 0;
       }
     };
 
@@ -77,8 +81,8 @@ export function OrbitControlsLite({
       e.preventDefault();
       s.spherical.radius = THREE.MathUtils.clamp(
         s.spherical.radius * (1 + Math.sign(e.deltaY) * 0.08),
-        minDistance,
-        maxDistance,
+        CAMERA_BOUNDS.minDistance,
+        CAMERA_BOUNDS.maxDistance,
       );
     };
 
@@ -106,7 +110,7 @@ export function OrbitControlsLite({
       dom.removeEventListener('wheel', onWheel);
       dom.removeEventListener('contextmenu', onContextMenu);
     };
-  }, [camera, gl, maxPolarAngle, minDistance, maxDistance]);
+  }, [camera, gl]);
 
   return null;
 }
