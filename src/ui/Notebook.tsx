@@ -36,12 +36,20 @@ export function Notebook() {
     if (entry && (selectedPlantId || selectedStructureId)) close();
   }, [entry, selectedPlantId, selectedStructureId, close]);
 
-  // click outside dismisses
+  // click outside dismisses — but only for world/canvas clicks. Clicks on UI
+  // chrome (buttons, panels) must NOT close the card mid-click: re-rendering
+  // between pointerdown and click would swallow that UI element's own click
+  // handler (observed: notebook-hub button appeared dead). The card stays for
+  // UI clicks; it dismisses on canvas clicks, Escape, or starting a placement.
   useEffect(() => {
     if (!entry) return;
     const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
       const card = document.getElementById('notebook-card');
-      if (card && !card.contains(e.target as Node)) close();
+      if (card && card.contains(target)) return;
+      const isCanvas = target.tagName === 'CANVAS' || !!target.closest('canvas');
+      if (isCanvas) close();
     };
     window.addEventListener('pointerdown', onPointerDown, { capture: true });
     return () =>
