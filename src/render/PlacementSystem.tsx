@@ -57,7 +57,13 @@ export function PlacementSystem() {
    * when the ray never reaches the meadow (cursor over the sky or horizon).
    */
   const resolvePlacement = (): [number, number, number] | null => {
-    raycaster.setFromCamera(pointerNdc.current, camera);
+    return raycastTerrain(pointerNdc.current);
+  };
+
+  /** Terrain-accurate ground hit for any NDC point (placement cursor or a
+   *  right-click) — same heightfield march, so remove and place agree. */
+  const raycastTerrain = (ndc: THREE.Vector2): [number, number, number] | null => {
+    raycaster.setFromCamera(ndc, camera);
     const { ray } = raycaster;
     // coarse march along the ray until it dips below the terrain
     const MAX_T = 120;
@@ -95,6 +101,16 @@ export function PlacementSystem() {
     const target = ray.intersectPlane(groundPlane.current, hit.current);
     if (!target) return null;
     return clampToMeadow(target.x, target.z);
+  };
+
+  /** Ground position for a DOM mouse event on the canvas (terrain-accurate). */
+  const groundAt = (e: MouseEvent): [number, number, number] | null => {
+    const rect = gl.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    return raycastTerrain(ndc);
   };
 
   const clampToMeadow = (x: number, z: number): [number, number, number] | null => {
@@ -140,19 +156,17 @@ export function PlacementSystem() {
         usePlacementStore.getState().toggleVariation();
     };
     const onContextMenu = (e: MouseEvent) => {
-      if (wasClick(e)) return;
+      // a right-click that moved > slop was a camera rotate, not a remove
+      const wasRotateDrag =
+        dragState.current.button === e.button &&
+        Math.hypot(e.clientX - dragState.current.x, e.clientY - dragState.current.y) > CLICK_SLOP_PX;
+      if (wasRotateDrag) return;
       e.preventDefault();
       const s = usePlacementStore.getState();
-      const rect = gl.domElement.getBoundingClientRect();
-      const ndc = new THREE.Vector2(
-        ((e.clientX - rect.left) / rect.width) * 2 - 1,
-        -((e.clientY - rect.top) / rect.height) * 2 + 1,
-      );
-      raycaster.setFromCamera(ndc, camera);
-      const target = raycaster.ray.intersectPlane(groundPlane.current, hit.current);
-      if (!target) return;
-      const x = THREE.MathUtils.clamp(target.x, -HALF + 1, HALF - 1);
-      const z = THREE.MathUtils.clamp(target.z, -HALF + 1, HALF - 1);
+      const spot = groundAt(e);
+      if (!spot) return;
+      const x = spot[0];
+      const z = spot[2];
       // structures first (they're chunkier), then flowers
       let bestStructureId: string | null = null;
       let bestStructureDist = 2.0;
