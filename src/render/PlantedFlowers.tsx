@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PLANTS } from '../data/plants';
 import { usePlacementStore } from './placementStore';
@@ -27,9 +27,19 @@ const OFF_BLOOM_LIGHTEN = 0.35;
 function FlowerInstances() {
   const items = usePlacementStore((s) => s.items);
   const season = usePlacementStore((s) => s.season);
+  const openNotebook = usePlacementStore((s) => s.openNotebook);
   const refs = useRef<{ meshes: Record<string, THREE.InstancedMesh | null> }>({
     meshes: {},
   });
+  /** instanceId -> item id per species, rebuilt each frame alongside matrices */
+  const idMaps = useRef<Record<string, string[]>>({});
+
+  const onClick = (e: ThreeEvent<MouseEvent>, plantId: string) => {
+    e.stopPropagation();
+    const idx = e.instanceId;
+    const itemId = idx === undefined ? undefined : idMaps.current[plantId]?.[idx];
+    if (itemId) openNotebook({ kind: 'plant', id: itemId });
+  };
   useFrame(({ clock }) => {
     const r = refs.current;
     const t = clock.elapsedTime;
@@ -37,12 +47,14 @@ function FlowerInstances() {
       const mesh = r.meshes[def.id];
       if (!mesh) continue;
       const blooming = inBloom(def.id, season);
+      const ids: string[] = [];
       let i = 0;
       for (const item of items) {
         if (item.plantId !== def.id) continue;
         const variation = item.variation ?? noVariation();
         const swayZ = Math.sin(t * 0.9 + item.phase) * def.sway;
         const swayX = Math.cos(t * 0.7 + item.phase * 1.3) * def.sway * 0.5;
+        ids.push(item.id);
         for (let pi = 0; pi < def.parts.length; pi++) {
           const part = def.parts[pi];
           const petal = part.petal === true;
@@ -83,6 +95,7 @@ function FlowerInstances() {
         }
       }
       mesh.count = i;
+      idMaps.current[def.id] = ids;
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
@@ -99,6 +112,7 @@ function FlowerInstances() {
           castShadow
           receiveShadow
           frustumCulled={false}
+          onClick={(e) => onClick(e, def.id)}
         >
           <boxGeometry args={[1, 1, 1]} />
           <meshLambertMaterial />

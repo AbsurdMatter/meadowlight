@@ -11,6 +11,9 @@ import { DebugBridge } from './render/DebugBridge';
 import { OrbitControlsLite } from './render/OrbitControlsLite';
 import { Palette } from './ui/Palette';
 import { SeasonDial } from './ui/SeasonDial';
+import { Toasts } from './ui/Toasts';
+import { Notebook } from './ui/Notebook';
+import { MilestoneWatcher } from './ui/MilestoneWatcher';
 import { PerfOverlay } from './ui/PerfOverlay';
 import { usePlacementStore } from './render/placementStore';
 import { SEASON_INFO } from './data/seasons';
@@ -87,6 +90,9 @@ export default function App() {
       </Canvas>
       {loaded && <Palette />}
       {loaded && <SeasonDial />}
+      {loaded && <Toasts />}
+      {loaded && <Notebook />}
+      <MilestoneWatcher />
       {PerfOverlay && <PerfOverlay />}
       <div
         style={{

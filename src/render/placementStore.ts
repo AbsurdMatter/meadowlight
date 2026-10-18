@@ -25,6 +25,7 @@ export interface PlacementState {
   placementVariation: boolean;
   /** the milestone that most recently fired (for the toast stack) */
   toasts: Toast[];
+  notebook: { kind: 'plant' | 'structure' | 'meadow'; id: string } | null;
   plant: (item: PlacedItem) => void;
   placeStructure: (s: PlacedStructure) => void;
   removeAt: (id: string) => void;
@@ -36,6 +37,8 @@ export interface PlacementState {
   setSeason: (season: Season) => void;
   earnMilestone: (id: MilestoneId, label: string, detail: string) => void;
   dismissToast: (id: number) => void;
+  openNotebook: (entry: PlacementState['notebook']) => void;
+  closeNotebook: () => void;
   save: () => void;
 }
 
@@ -52,6 +55,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   ghostRotationY: 0,
   placementVariation: initial.placementVariation,
   toasts: [],
+  notebook: null,
   plant: (item) => set((s) => ({ items: [...s.items, item] })),
   placeStructure: (structure) => set((s) => ({ structures: [...s.structures, structure] })),
   removeAt: (id) => set((s) => ({ items: s.items.filter((it) => it.id !== id) })),
@@ -81,6 +85,8 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
     get().save();
   },
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+  openNotebook: (entry) => set({ notebook: entry }),
+  closeNotebook: () => set({ notebook: null }),
   save: () => {
     const s = get();
     saveWorld({

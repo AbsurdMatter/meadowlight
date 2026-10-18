@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { STRUCTURES } from '../data/structures';
 import { usePlacementStore } from './placementStore';
@@ -19,10 +19,15 @@ const CAPACITY_PER_STRUCTURE = 60;
 
 export function PlacedStructures() {
   const structures = usePlacementStore((s) => s.structures);
+  const openNotebook = usePlacementStore((s) => s.openNotebook);
   const refs = useRef<{ meshes: Partial<Record<string, THREE.InstancedMesh | null>> }>({
     meshes: {},
   });
 
+  const onClick = (e: ThreeEvent<MouseEvent>, structureId: string) => {
+    e.stopPropagation();
+    openNotebook({ kind: 'structure', id: structureId });
+  };
 
   useFrame(({ clock }) => {
     const r = refs.current;
@@ -75,6 +80,7 @@ export function PlacedStructures() {
           castShadow
           receiveShadow
           frustumCulled={false}
+          onClick={(e) => onClick(e, def.id)}
         >
           <boxGeometry args={[1, 1, 1]} />
           <meshLambertMaterial />
