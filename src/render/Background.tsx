@@ -84,13 +84,24 @@ function Hills() {
 }
 
 function Lake() {
-  const waterRef = useRef<THREE.Mesh>(null);
+  const waterRef = useRef<THREE.InstancedMesh>(null);
   const shoreRef = useRef<THREE.InstancedMesh>(null);
 
   const shoreCount = useMemo(() => {
-    const step = 1.4;
+    const step = LAKE.voxelStep;
     const ringArea = Math.PI * ((LAKE.radius + LAKE.shoreWidth) ** 2 - LAKE.radius ** 2);
     return Math.ceil(ringArea / (step * step)) * 2;
+  }, []);
+
+  /**
+   * Voxel water capacity: every grid cell whose center lies within
+   * radius + one step (boundary cells included) — the same step grid the
+   * shore ring uses, snapped to cell centers. Generous upper bound.
+   */
+  const waterCount = useMemo(() => {
+    const step = LAKE.voxelStep;
+    const r = LAKE.radius + step;
+    return Math.ceil(Math.PI * (r * 1.2) ** 2 / (step * step)) + 8;
   }, []);
 
   useEffect(() => {
@@ -102,7 +113,7 @@ function Lake() {
     const fogColor = new THREE.Color(FOG.color);
     const bed = new THREE.Color(LAKE.bedColor);
     const sand = new THREE.Color(LAKE.shoreColor);
-    const step = 1.4;
+    const step = LAKE.voxelStep;
     let i = 0;
     for (let x = -60; x <= 60; x += step) {
       for (let z = -60; z <= 60; z += step) {
@@ -130,18 +141,58 @@ function Lake() {
     shore.computeBoundingSphere();
   }, []);
 
-  useFrame(({ clock }) => {
+  /**
+   * Voxel water surface: instanced cubes on the step grid, snapped to cell
+   * centers (no rounded disc). A cell is water when its center is within
+   * LAKE.radius; boundary cells whose center is just outside but whose
+   * area still overlaps the disc get a partial-width box, so the waterline
+   * steps cleanly into the shore. Each cube's top sits at
+   * LAKE.level + LAKE.surfaceHeight (a visible voxel lip above the old
+   * plane level); depth tint blends the two water colors so shallow edges
+   * read warmer.
+   */
+  useEffect(() => {
     const water = waterRef.current;
     if (!water) return;
-    const t = clock.elapsedTime;
-    water.position.y = LAKE.level + Math.sin(t * 0.5) * LAKE.bobAmplitude;
-    const material = water.material as THREE.MeshLambertMaterial;
-    const mix = (Math.sin(t * (Math.PI * 2 / LAKE.tintCycleSeconds)) + 1) / 2;
-    material.color.set(LAKE.colorA).lerp(new THREE.Color(LAKE.colorB), mix * 0.4);
-  });
-
-  const lakeX = LAKE.center[0];
-  const lakeZ = LAKE.center[1];
+    const mat = new THREE.Matrix4();
+    const color = new THREE.Color();
+    const colorA = new THREE.Color(LAKE.colorA);
+    const colorB = new THREE.Color(LAKE.colorB);
+    const bed = new THREE.Color(LAKE.bedColor);
+    const step = LAKE.voxelStep;
+    const cx = LAKE.center[0];
+    const cz = LAKE.center[1];
+    const topY = LAKE.level + LAKE.surfaceHeight;
+    let i = 0;
+    for (let gx = -60; gx <= 60; gx += step) {
+      for (let gz = -60; gz <= 60; gz += step) {
+        const x = cx + Math.round((gx - cx) / step) * step;
+        const z = cz + Math.round((gz - cz) / step) * step;
+        const d = Math.hypot(x - cx, z - cz);
+        if (d > LAKE.radius + step * 0.5) continue;
+        // fraction of the cell covered by the disc (0..1)
+        const cover = THREE.MathUtils.clamp((LAKE.radius - d) / step + 0.5, 0, 1);
+        if (cover <= 0.05) continue;
+        const size = step * Math.max(0.35, cover);
+        const ground = backgroundHeight(x, z);
+        // cube extends from below the ground up to the waterline lip
+        const bottom = Math.min(ground - 0.4, topY - 1.6);
+        const h = topY - bottom;
+        mat.makeScale(size, h, size);
+        mat.setPosition(x, bottom + h / 2, z);
+        water.setMatrixAt(i, mat);
+        // depth tint: shallow (near the rim) shows more bed color through
+        const depth = THREE.MathUtils.clamp((LAKE.radius - d) / LAKE.radius, 0, 1);
+        color.copy(colorA).lerp(colorB, 0.4).lerp(bed, (1 - depth) * LAKE.shallowTint);
+        water.setColorAt(i, color);
+        i++;
+      }
+    }
+    water.count = i;
+    water.instanceMatrix.needsUpdate = true;
+    if (water.instanceColor) water.instanceColor.needsUpdate = true;
+    water.computeBoundingSphere();
+  }, []);
 
   return (
     <group>
@@ -149,14 +200,10 @@ function Lake() {
         <boxGeometry args={[1, 1, 1]} />
         <meshLambertMaterial />
       </instancedMesh>
-      <mesh
-        ref={waterRef}
-        position={[lakeX, LAKE.level, lakeZ]}
-        rotation={[-Math.PI / 2, 0, 0]}
-      >
-        <circleGeometry args={[LAKE.radius, 48]} />
-        <meshLambertMaterial color={LAKE.colorA} transparent opacity={LAKE.opacity} />
-      </mesh>
+      <instancedMesh ref={waterRef} args={[undefined, undefined, waterCount]} receiveShadow>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshLambertMaterial transparent opacity={LAKE.opacity} vertexColors />
+      </instancedMesh>
     </group>
   );
 }

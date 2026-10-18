@@ -49,6 +49,17 @@ export const LAKE = {
   shoreWidth: 2.6,
   bobAmplitude: 0.03,
   tintCycleSeconds: 9,
+  /**
+   * Voxel water rework (session 3): the surface is instanced cubes on this
+   * step grid (same cell size as the shore ring), snapped to cell centers —
+   * no rounded edges. Boundary cells become partial-width boxes so the
+   * waterline steps cleanly into the terrain instead of slicing it.
+   */
+  voxelStep: 1.4,
+  /** water cube top sits this far above LAKE.level (visible voxel lip) */
+  surfaceHeight: 0.22,
+  /** shallower water = more bed color showing through */
+  shallowTint: 0.55,
 };
 
 export const TREES = {
