@@ -32,6 +32,9 @@ export interface PlacementState {
   markFactSeen: (id: string) => void;
   /** seasons a wild corner has been present for (persisted, v4 additive) */
   wildSeasons: string[];
+  /** true once onboarding was dismissed — overlay never shows again (v4) */
+  onboardingDismissed: boolean;
+  dismissOnboarding: () => void;
   /** true while a blocking dialog (reset confirmation) is open: no placement */
   modalOpen: boolean;
   setModalOpen: (open: boolean) => void;
@@ -70,6 +73,11 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   modalOpen: false,
   seenFacts: initial.seenFacts ?? [],
   wildSeasons: initial.wildSeasons ?? [],
+  onboardingDismissed: initial.onboardingDismissed ?? false,
+  dismissOnboarding: () => {
+    set({ onboardingDismissed: true });
+    get().save();
+  },
   markFactSeen: (id) =>
     set((s) => (s.seenFacts.includes(id) ? s : { seenFacts: [...s.seenFacts, id] })),
   setModalOpen: (open) => set({ modalOpen: open }),
@@ -129,6 +137,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       modalOpen: false,
       seenFacts: [],
       wildSeasons: [],
+      onboardingDismissed: false,
     });
     get().save();
   },
@@ -143,6 +152,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       randomRotation: s.placementVariation,
       seenFacts: s.seenFacts,
       wildSeasons: s.wildSeasons,
+      onboardingDismissed: s.onboardingDismissed,
     });
   },
 }));

@@ -16,6 +16,7 @@ import { ResetDialog } from './ui/ResetDialog';
 import { NotebookHub } from './ui/NotebookHub';
 import { PostcardButton } from './ui/PostcardButton';
 import { AudioToggle } from './ui/AudioToggle';
+import { Onboarding } from './ui/Onboarding';
 import { Toasts } from './ui/Toasts';
 import { Notebook } from './ui/Notebook';
 import { MilestoneWatcher } from './ui/MilestoneWatcher';
@@ -109,6 +110,7 @@ export default function App() {
           <NotebookHub />
         </div>
       )}
+      {loaded && <Onboarding />}
       {loaded && <Toasts />}
       {loaded && <Notebook />}
       <MilestoneWatcher />

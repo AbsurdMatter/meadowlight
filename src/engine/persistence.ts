@@ -40,8 +40,9 @@ export interface PlacedStructure {
  *   v2: { version: 2, items, randomRotation }
  *   v3: { version: 3, items, structures, milestones, season,
  *         placementVariation, seenFacts }  (all additive; v1/v2 load fine)
- *   v4: { version: 4, ..., wildSeasons }   (seasons a wild corner has
- *         survived, for the wildYearSurvived milestone; additive)
+ *   v4: { version: 4, ..., wildSeasons, onboardingDismissed }
+ *         (seasons a wild corner has survived; onboarding show-once;
+ *         both additive — existing saves see no onboarding retroactively)
  */
 const STORAGE_KEY = 'meadowlight.world.v2';
 const LEGACY_KEY = 'meadowlight.world.v1';
@@ -59,6 +60,8 @@ export interface WorldData {
   seenFacts?: string[];
   /** seasons the meadow's wild corner has survived (v4, additive) */
   wildSeasons?: string[];
+  /** true once the player has dismissed the onboarding (v4, additive) */
+  onboardingDismissed?: boolean;
 }
 
 function parseItems(parsed: unknown): PlacedItem[] {
@@ -116,6 +119,10 @@ function parseWildSeasons(parsed: unknown): string[] {
   return parsed.filter((f): f is string => typeof f === 'string');
 }
 
+function parseOnboardingDismissed(parsed: unknown): boolean {
+  return parsed === true;
+}
+
 export function loadWorld(): WorldData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
@@ -151,6 +158,7 @@ export function loadWorld(): WorldData {
         randomRotation: variation,
         seenFacts: parseSeenFacts(data.seenFacts),
         wildSeasons: parseWildSeasons(data.wildSeasons),
+        onboardingDismissed: parseOnboardingDismissed(data.onboardingDismissed),
       };
     }
     // v1 shape: bare array of items
@@ -164,6 +172,7 @@ export function loadWorld(): WorldData {
       randomRotation: DEFAULT_PLACEMENT_VARIATION,
       seenFacts: [],
       wildSeasons: [],
+      onboardingDismissed: false,
     };
   } catch {
     return {
@@ -176,6 +185,7 @@ export function loadWorld(): WorldData {
       randomRotation: DEFAULT_PLACEMENT_VARIATION,
       seenFacts: [],
       wildSeasons: [],
+      onboardingDismissed: false,
     };
   }
 }
