@@ -93,6 +93,17 @@ lazily (default OFF), are wrapped in an error boundary so a bug in them can
 never blank the app, and never bind browser-reserved keys (F1–F12,
 Ctrl/Ctrl+Shift combos). Verify the production build excludes them.
 
+### Issue tracking: the repo is the backlog, not the chat
+Bugs, verification gaps, and future ideas live in GitHub Issues — chat context is
+not durable. At session start, read open issues and include any labeled for the
+current session in your plan. At session end, report which issues you addressed,
+fixed, or closed (with the commit/PR link). A bug found by the user in a browser
+pass is filed as an issue containing the observable (how reproduced, what was
+seen, what was expected) — work from the observable, never a proxy. New
+session-scope bugs you find go into issues too, not just the report. Title
+prefixes carry triage: [v0.1.1] = cheap patch candidate, [v2] = out of current
+scope (do not implement), [blocker] = must land before merge.
+
 ### Interruption hygiene
 When a task is aborted or redirected mid-flight, report the exact state the
 repo was left in: partial installs, deleted files, uncommitted changes, and
