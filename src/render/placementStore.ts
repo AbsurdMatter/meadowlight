@@ -27,6 +27,9 @@ export interface PlacementState {
   /** the milestone that most recently fired (for the toast stack) */
   toasts: Toast[];
   notebook: { kind: 'plant' | 'structure' | 'meadow'; id: string } | null;
+  /** ids of facts the player has seen (persisted, additive save field) */
+  seenFacts: string[];
+  markFactSeen: (id: string) => void;
   /** true while a blocking dialog (reset confirmation) is open: no placement */
   modalOpen: boolean;
   setModalOpen: (open: boolean) => void;
@@ -63,6 +66,9 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   toasts: [],
   notebook: null,
   modalOpen: false,
+  seenFacts: initial.seenFacts ?? [],
+  markFactSeen: (id) =>
+    set((s) => (s.seenFacts.includes(id) ? s : { seenFacts: [...s.seenFacts, id] })),
   setModalOpen: (open) => set({ modalOpen: open }),
   plant: (item) => set((s) => ({ items: [...s.items, item] })),
   placeStructure: (structure) => set((s) => ({ structures: [...s.structures, structure] })),
@@ -107,6 +113,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       notebook: null,
       toasts: [],
       modalOpen: false,
+      seenFacts: [],
     });
     get().save();
   },
@@ -119,6 +126,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       season: s.season,
       placementVariation: s.placementVariation,
       randomRotation: s.placementVariation,
+      seenFacts: s.seenFacts,
     });
   },
 }));

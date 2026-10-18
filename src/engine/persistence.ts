@@ -53,6 +53,8 @@ export interface WorldData {
   placementVariation: boolean;
   /** kept from v2 so the F toggle state persists across versions */
   randomRotation: boolean;
+  /** ids of facts the player has seen (additive; older saves just have none) */
+  seenFacts?: string[];
 }
 
 function parseItems(parsed: unknown): PlacedItem[] {
@@ -100,6 +102,11 @@ function parseMilestones(parsed: unknown): MilestoneId[] {
   return parsed.filter((m): m is MilestoneId => typeof m === 'string');
 }
 
+function parseSeenFacts(parsed: unknown): string[] {
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((f): f is string => typeof f === 'string');
+}
+
 export function loadWorld(): WorldData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
@@ -112,6 +119,7 @@ export function loadWorld(): WorldData {
         season: 'summer',
         placementVariation: DEFAULT_PLACEMENT_VARIATION,
         randomRotation: DEFAULT_PLACEMENT_VARIATION,
+        seenFacts: [],
       };
     }
     const parsed = JSON.parse(raw);
@@ -131,6 +139,7 @@ export function loadWorld(): WorldData {
         season: parseSeason(data.season),
         placementVariation: variation,
         randomRotation: variation,
+        seenFacts: parseSeenFacts(data.seenFacts),
       };
     }
     // v1 shape: bare array of items
@@ -142,6 +151,7 @@ export function loadWorld(): WorldData {
       season: 'summer',
       placementVariation: DEFAULT_PLACEMENT_VARIATION,
       randomRotation: DEFAULT_PLACEMENT_VARIATION,
+      seenFacts: [],
     };
   } catch {
     return {
@@ -152,6 +162,7 @@ export function loadWorld(): WorldData {
       season: 'summer',
       placementVariation: DEFAULT_PLACEMENT_VARIATION,
       randomRotation: DEFAULT_PLACEMENT_VARIATION,
+      seenFacts: [],
     };
   }
 }
