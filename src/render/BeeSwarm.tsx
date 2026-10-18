@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, type RootState } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BEE_TUNING } from '../data/bees';
 import { PLANT_BY_ID } from '../data/plants';
@@ -12,7 +12,12 @@ interface BeeState {
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   hiveIndex: number;
-  targetFlower: number | null;
+  /** id of the placed flower item this bee heads to. Never an array index:
+   *  ids stay valid across remove / stress-restore / save-load, and are
+   *  re-resolved from the placement store every frame. */
+  targetFlowerId: string | null;
+  /** true while heading home to the hive */
+  headingHome: boolean;
   phase: number;
   restingUntil: number;
 }
@@ -26,6 +31,9 @@ const lookMat = new THREE.Matrix4();
 const scaleMat = new THREE.Matrix4();
 const up = new THREE.Vector3(0, 1, 0);
 const world: PollinatorWorld = { flowers: [], water: [], shelter: [], season: 'summer' };
+/** flower id -> world position (+bloom info), rebuilt from the store each frame */
+const flowerById = new Map<string, { x: number; y: number; z: number; plantId: string }>();
+let crashLogged = false;
 
 /** Build the shared engine view of the world from the placement store (no duplicated state). */
 function syncWorld() {
@@ -36,6 +44,16 @@ function syncWorld() {
     z: f.position[2],
     plantId: f.plantId,
   }));
+  flowerById.clear();
+  for (const f of s.items) {
+    const variation = f.variation ?? noVariation();
+    flowerById.set(f.id, {
+      x: f.position[0],
+      y: f.position[1] + variation.heightJitter,
+      z: f.position[2],
+      plantId: f.plantId,
+    });
+  }
   world.water = s.structures
     .filter((st) => st.structureId === 'bath')
     .map((st) => ({ x: st.position[0], z: st.position[2] }));
@@ -64,12 +82,13 @@ export function BeeSwarm() {
       .normalize()
       .multiplyScalar(BEE_TUNING.speed * 0.5),
     hiveIndex,
-    targetFlower: null,
+    targetFlowerId: null,
+    headingHome: true,
     phase,
     restingUntil: 0,
   });
 
-  useFrame((state, delta) => {
+  const updateSwarm = (state: RootState, delta: number) => {
     const body = bodyRef.current;
     const stripes = stripeRef.current;
     const wings = wingRef.current;
@@ -127,9 +146,9 @@ export function BeeSwarm() {
     }
 
     const t = state.clock.elapsedTime;
-    const blooming = world.flowers
-      .map((f, idx) => ({ f, idx }))
-      .filter(({ f }) => foraging && inBloom(f.plantId, s.season));
+    const blooming = s.items
+      .filter((f) => foraging && inBloom(f.plantId, s.season))
+      .map((f) => f.id);
 
     for (let bi = 0; bi < bees.current.length; bi++) {
       const bee = bees.current[bi];
@@ -141,27 +160,33 @@ export function BeeSwarm() {
         wings.setMatrixAt(bi, tmpMat);
         continue;
       }
-      if (bee.restingUntil > t) {
-        // sit on the flower/hive, wings slow
-      } else if (bee.targetFlower === null) {
-        // pick a target: mostly flowers, sometimes home
+
+      // resolve the target by id every frame: if the flower was removed
+      // (deletion, stress-test restore, save/load), re-target or go home
+      let flowerInfo = bee.targetFlowerId ? flowerById.get(bee.targetFlowerId) : undefined;
+      if (flowerInfo && !inBloom(flowerInfo.plantId, s.season)) flowerInfo = undefined;
+      if (bee.targetFlowerId !== null && !flowerInfo) {
+        bee.targetFlowerId = null;
+        bee.headingHome = true;
+      }
+
+      if (bee.restingUntil <= t && bee.targetFlowerId === null) {
+        // pick a new target: mostly flowers, sometimes home
         if (blooming.length > 0 && Math.random() > 0.15) {
-          bee.targetFlower = blooming[Math.floor(Math.random() * blooming.length)].idx;
+          bee.targetFlowerId = blooming[Math.floor(Math.random() * blooming.length)];
+          bee.headingHome = false;
         } else {
-          bee.targetFlower = -1; // home
+          bee.headingHome = true; // home
         }
       }
 
       const target = new THREE.Vector3();
-      if (bee.targetFlower !== null && bee.targetFlower >= 0) {
-        const item = s.items[bee.targetFlower];
-        const flower = world.flowers[bee.targetFlower];
-        const def = PLANT_BY_ID[flower.plantId];
-        const variation = item.variation ?? noVariation();
+      if (bee.targetFlowerId !== null && flowerInfo) {
+        const def = PLANT_BY_ID[flowerInfo.plantId];
         target.set(
-          flower.x,
-          item.position[1] + variation.heightJitter + (def ? def.height * 0.8 : 0.6),
-          flower.z,
+          flowerInfo.x,
+          flowerInfo.y + (def ? def.height * 0.8 : 0.6),
+          flowerInfo.z,
         );
       } else {
         target.set(hive.position[0], hive.position[1] + 1.5, hive.position[2]);
@@ -176,7 +201,8 @@ export function BeeSwarm() {
             t +
             BEE_TUNING.restSeconds[0] +
             Math.random() * (BEE_TUNING.restSeconds[1] - BEE_TUNING.restSeconds[0]);
-          bee.targetFlower = null;
+          bee.targetFlowerId = null;
+          bee.headingHome = true;
         } else {
           toTarget.normalize().multiplyScalar(BEE_TUNING.speed);
           // gentle wander so flight feels alive
@@ -210,6 +236,19 @@ export function BeeSwarm() {
     body.instanceMatrix.needsUpdate = true;
     stripes.instanceMatrix.needsUpdate = true;
     wings.instanceMatrix.needsUpdate = true;
+  };
+
+  useFrame((state, delta) => {
+    try {
+      updateSwarm(state, delta);
+    } catch (err) {
+      // invariant: no exception may ever escape the frame loop; contain it,
+      // log once, and keep the app alive
+      if (!crashLogged) {
+        crashLogged = true;
+        console.error('[bees] frame error contained (swarm pauses, app unaffected):', err);
+      }
+    }
   });
 
   const bodyGeo = useMemo(() => new THREE.BoxGeometry(...BEE_TUNING.bodySize), []);
