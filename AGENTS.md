@@ -104,6 +104,15 @@ or chasing environment dependencies (e.g. X11, browsers for headless testing),
 stop and propose the simplest honest alternative (in-app harness, manual user
 check) instead of continuing to install.
 
+### Commit granularity is mandatory
+Every session's work lands as multiple commits, each independently describable:
+one commit per feature unit (e.g. placement variation, bee simulation, season
+dial, notebook), not one mega-commit per session. A rule of thumb: if a commit
+message needs "and" more than twice, split it. This keeps the PR reviewable,
+makes regressions bisectable (`git bisect`), and lets a bad unit be reverted
+without losing the session. A single "session 2" commit will be rejected —
+restructure before pushing (see `git add -p` / interactive rebase).
+
 ## Session 1 decisions (context for later sessions)
 - Rendering: one InstancedMesh per species-part; instance colors are written
   every frame (correctness over cleverness — perf headroom is ~3x the budget).
