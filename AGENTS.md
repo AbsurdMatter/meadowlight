@@ -104,6 +104,24 @@ or chasing environment dependencies (e.g. X11, browsers for headless testing),
 stop and propose the simplest honest alternative (in-app harness, manual user
 check) instead of continuing to install.
 
+## Session 2 decisions (context for later sessions)
+
+- Input model (one input path, DOM-level on the canvas): left-click places or
+  inspects; right-click DESELECTS the placement tool first (switch to inspect
+  mode) — only with no tool selected does right-click remove the object under
+  the cursor. So: tool+left = place; tool+right = deselect only;
+  no-tool+left = inspect (notebook); no-tool+right = remove.
+- Placement raycast walks the terrain heightfield (not a flat y=0 plane) and
+  is shared by the ghost preview, the placement click, and removal — ghost and
+  validity can never disagree.
+- Bee targeting is by placed-item id, re-resolved from the store every frame
+  (never array indices); the bee frame loop is exception-guarded.
+- Notebook is an ambient panel (Escape / click-outside / starting a placement
+  dismisses); facts vary by season and context, seen-facts persist in the
+  save (v3 additive field `seenFacts`).
+- Milestones include early ones (first bloom, first swarm) so something
+  celebrates within the first minutes of play.
+
 ## Session 1 decisions (context for later sessions)
 - Rendering: one InstancedMesh per species-part; instance colors are written
   every frame (correctness over cleverness — perf headroom is ~3x the budget).

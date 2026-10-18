@@ -184,8 +184,15 @@ export function PlacementSystem() {
         Math.hypot(e.clientX - dragState.current.x, e.clientY - dragState.current.y) > CLICK_SLOP_PX;
       if (wasRotateDrag) return;
       e.preventDefault();
-      if (usePlacementStore.getState().modalOpen) return;
       const s = usePlacementStore.getState();
+      // with a tool selected, right-click deselects the tool (inspect mode);
+      // only with no tool selected does right-click remove
+      if (s.modalOpen) return;
+      if (s.selectedPlantId || s.selectedStructureId) {
+        s.select(null);
+        s.selectStructure(null);
+        return;
+      }
       const spot = groundAt(e);
       if (!spot) return;
       const x = spot[0];
