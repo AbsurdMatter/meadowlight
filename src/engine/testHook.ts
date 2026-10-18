@@ -6,6 +6,7 @@ import type { PerspectiveCamera, WebGLRenderer } from 'three';
 import type { Size } from '@react-three/fiber';
 import { beeDebug } from '../render/BeeSwarm';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
+import { capturePostcardPng } from './postcard';
 import { ghostDebug } from '../render/PlacementSystem';
 
 declare global {
@@ -23,6 +24,7 @@ declare global {
       beeCount: () => number;
     solitaryBeeCount: () => number;
     rareBeeCount: () => number;
+    capturePostcard: () => string | null;
       ghostPosition: () => { pos: [number, number, number] | null; valid: boolean };
       resetWorld: () => void;
       openNotebookPlant: (itemId: string) => void;
@@ -70,6 +72,7 @@ export function installTestHook() {
     beeCount: () => beeDebug.count,
     solitaryBeeCount: () => solitaryBeeDebug.count,
     rareBeeCount: () => rareBeeDebug.count,
+    capturePostcard: () => capturePostcardPng(),
     ghostPosition: () => ({ pos: ghostDebug.pos, valid: ghostDebug.valid }),
     resetWorld: () => usePlacementStore.getState().resetWorld(),
     openNotebookPlant: (itemId) =>

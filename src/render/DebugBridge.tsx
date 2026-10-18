@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { useThree } from '@react-three/fiber';
 import type { PerspectiveCamera, WebGLRenderer } from 'three';
+import type { Scene } from 'three';
+import { registerPostcardCapture } from '../engine/postcard';
 import type { Size } from '@react-three/fiber';
 
 /**
@@ -18,6 +20,11 @@ export function DebugBridge() {
       size: size as Size,
       scene,
     };
+    registerPostcardCapture({
+      renderer: gl as WebGLRenderer,
+      scene: scene as Scene,
+      camera: camera as PerspectiveCamera,
+    });
   }, [camera, gl, size, scene]);
   return null;
 }
