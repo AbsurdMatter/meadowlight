@@ -35,7 +35,16 @@ export function PlacementSystem() {
    *  overlays (which swallow R3F's shared `pointer` updates) */
   const pointerNdc = useRef(new THREE.Vector2(0, 0));
   const pointerInsideCanvas = useRef(false);
-  const dragState = useRef({ x: 0, y: 0, button: -1 });
+  const dragState = useRef({
+    x: 0,
+    y: 0,
+    button: -1,
+    travel: 0,
+    /** travel of the last COMPLETED press-release cycle; contextmenu (which
+     *  some browsers fire at press time, others at release) reads this */
+    lastTravel: 0,
+    lastButton: -1,
+  });
 
   useEffect(() => {
     const canvas = gl.domElement;
@@ -50,6 +59,7 @@ export function PlacementSystem() {
         e.clientX <= rect.right &&
         e.clientY >= rect.top &&
         e.clientY <= rect.bottom;
+
     };
     window.addEventListener('pointermove', onMove);
     return () => window.removeEventListener('pointermove', onMove);
@@ -110,15 +120,11 @@ export function PlacementSystem() {
     return clampToMeadow(target.x, target.z);
   };
 
-  /** Ground position for a DOM mouse event on the canvas (terrain-accurate). */
-  const groundAt = (e: MouseEvent): [number, number, number] | null => {
-    const rect = gl.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(
-      ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      -((e.clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    return raycastTerrain(ndc);
+  /** Ground position for stored NDC coordinates (terrain-accurate). */
+  const resolveFromNdc = (ndcX: number, ndcY: number): [number, number, number] | null => {
+    return raycastTerrain(new THREE.Vector2(ndcX, ndcY));
   };
+
 
   const clampToMeadow = (x: number, z: number): [number, number, number] | null => {
     const cx = THREE.MathUtils.clamp(x, -HALF + 1, HALF - 1);
@@ -163,12 +169,42 @@ export function PlacementSystem() {
   });
 
   useEffect(() => {
+    let pressTravel = 0;
+    let pressButton = -1;
+    let pressX = 0;
+    let pressY = 0;
+    const onPointerMove = (e: PointerEvent) => {
+      if (pressButton === -1) return;
+      pressTravel += Math.hypot(e.clientX - pressX, e.clientY - pressY);
+      pressX = e.clientX;
+      pressY = e.clientY;
+    };
     const onPointerDown = (e: PointerEvent) => {
-      dragState.current = { x: e.clientX, y: e.clientY, button: e.button };
+      pressButton = e.button;
+      pressTravel = 0;
+      pressX = e.clientX;
+      pressY = e.clientY;
+      dragState.current.button = e.button;
+      dragState.current.travel = 0;
+    };
+    const onPointerUp = () => {
+      // close the press-release cycle: remember how far this press traveled
+      const wasDrag = pressTravel > CLICK_SLOP_PX;
+      const button = pressButton;
+      dragState.current.lastTravel = pressTravel;
+      dragState.current.lastButton = pressButton;
+      pressButton = -1;
+      // some browsers fire contextmenu at press time, before the drag even
+      // happens — those were parked as pending and are resolved here, now that
+      // the full press-release travel is known
+      if (pendingContext && button !== -1) {
+        pendingContext = false;
+        if (!wasDrag) handleContextMenuAction(button);
+      }
     };
     const wasClick = (e: MouseEvent) =>
-      dragState.current.button === e.button &&
-      Math.hypot(e.clientX - dragState.current.x, e.clientY - dragState.current.y) <= CLICK_SLOP_PX;
+      dragState.current.lastButton === e.button &&
+      dragState.current.lastTravel <= CLICK_SLOP_PX;
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.altKey || e.metaKey) return;
       const target = e.target as HTMLElement | null;
@@ -185,23 +221,20 @@ export function PlacementSystem() {
       if (e.key === 'f' || e.key === 'F')
         usePlacementStore.getState().toggleVariation();
     };
-    const onContextMenu = (e: MouseEvent) => {
-      // a right-click that moved > slop was a camera rotate, not a remove
-      const wasRotateDrag =
-        dragState.current.button === e.button &&
-        Math.hypot(e.clientX - dragState.current.x, e.clientY - dragState.current.y) > CLICK_SLOP_PX;
-      if (wasRotateDrag) return;
-      e.preventDefault();
+    /** the actual right-click action: deselect-first, then remove (shared by
+     *  the immediate path and the pending-contextmenu path) */
+    const handleContextMenuAction = (button: number) => {
       const s = usePlacementStore.getState();
+      if (s.modalOpen) return;
       // with a tool selected, right-click deselects the tool (inspect mode);
       // only with no tool selected does right-click remove
-      if (s.modalOpen) return;
       if (s.selectedPlantId || s.selectedStructureId) {
         s.select(null);
         s.selectStructure(null);
         return;
       }
-      const spot = groundAt(e);
+      if (button !== 2) return;
+      const spot = resolveFromNdc(pressNdcX, pressNdcY);
       if (!spot) return;
       const x = spot[0];
       const z = spot[2];
@@ -230,6 +263,31 @@ export function PlacementSystem() {
         }
       }
       if (bestId) s.removeAt(bestId);
+    };
+
+    /** NDC of the most recent pointer position, for remove targeting */
+    let pressNdcX = 0;
+    let pressNdcY = 0;
+    let pendingContext = false;
+
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      // never show the browser menu on the canvas
+      const rect = gl.domElement.getBoundingClientRect();
+      pressNdcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      pressNdcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      if (pressButton !== -1) {
+        // contextmenu fired at press time (before the drag): park it and
+        // resolve on pointerup once the full travel is known
+        pendingContext = true;
+        return;
+      }
+      // contextmenu after release: use the completed cycle
+      const wasRotateDrag =
+        dragState.current.lastButton === e.button &&
+        dragState.current.lastTravel > CLICK_SLOP_PX;
+      if (wasRotateDrag) return;
+      handleContextMenuAction(e.button);
     };
     /** Placement click: DOM-level, using the exact same resolvePlacement() the
      *  ghost preview uses — validity always matches what the ghost shows, and
@@ -263,11 +321,15 @@ export function PlacementSystem() {
       }
     };
     gl.domElement.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    gl.domElement.addEventListener('pointerup', onPointerUp);
     window.addEventListener('keydown', onKey);
     gl.domElement.addEventListener('contextmenu', onContextMenu);
     gl.domElement.addEventListener('click', onClick);
     return () => {
       gl.domElement.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointermove', onPointerMove);
+      gl.domElement.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('keydown', onKey);
       gl.domElement.removeEventListener('contextmenu', onContextMenu);
       gl.domElement.removeEventListener('click', onClick);
