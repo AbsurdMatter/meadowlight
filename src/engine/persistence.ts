@@ -3,6 +3,8 @@ export interface PlacedItem {
   plantId: string;
   position: [number, number, number];
   rotationY: number;
+  /** deterministic per-item phase for idle sway, so instances stay stable */
+  phase: number;
 }
 
 const STORAGE_KEY = 'meadowlight.world.v1';
@@ -13,15 +15,17 @@ export function loadWorld(): PlacedItem[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (p): p is PlacedItem =>
-        p &&
-        typeof p.id === 'string' &&
-        typeof p.plantId === 'string' &&
-        Array.isArray(p.position) &&
-        p.position.length === 3 &&
-        typeof p.rotationY === 'number',
-    );
+    return parsed
+      .filter(
+        (p): p is PlacedItem =>
+          p &&
+          typeof p.id === 'string' &&
+          typeof p.plantId === 'string' &&
+          Array.isArray(p.position) &&
+          p.position.length === 3 &&
+          typeof p.rotationY === 'number',
+      )
+      .map((p) => ({ ...p, phase: typeof p.phase === 'number' ? p.phase : Math.random() * Math.PI * 2 }));
   } catch {
     return [];
   }

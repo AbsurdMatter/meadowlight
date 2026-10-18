@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
 import { Meadow } from './render/Meadow';
 import { Sky } from './render/Sky';
 import { PlantedFlowers } from './render/PlantedFlowers';
 import { PlacementSystem } from './render/PlacementSystem';
+import { OrbitControlsLite } from './render/OrbitControlsLite';
 import { Palette } from './ui/Palette';
+import { PerfOverlay } from './ui/PerfOverlay';
 import { usePlacementStore } from './render/placementStore';
 
 function Scene() {
@@ -29,18 +29,10 @@ function Scene() {
       <Meadow />
       <PlantedFlowers />
       <PlacementSystem />
-      <OrbitControls
+      <OrbitControlsLite
         maxPolarAngle={Math.PI * 0.47}
         minDistance={6}
         maxDistance={38}
-        enableDamping
-        dampingFactor={0.06}
-        enablePan
-        mouseButtons={{
-          LEFT: THREE.MOUSE.PAN,
-          MIDDLE: THREE.MOUSE.DOLLY,
-          RIGHT: THREE.MOUSE.ROTATE,
-        }}
       />
     </>
   );
@@ -76,6 +68,7 @@ export default function App() {
         <Scene />
       </Canvas>
       {loaded && <Palette />}
+      {PerfOverlay && <PerfOverlay />}
       <div
         style={{
           position: 'absolute',

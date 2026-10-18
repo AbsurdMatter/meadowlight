@@ -99,6 +99,7 @@ export function PlacementSystem() {
       plantId: selectedPlantId,
       position: ghost,
       rotationY: ghostRotationY,
+      phase: Math.random() * Math.PI * 2,
     });
   };
 
