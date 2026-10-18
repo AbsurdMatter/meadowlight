@@ -113,6 +113,14 @@ makes regressions bisectable (`git bisect`), and lets a bad unit be reverted
 without losing the session. A single "session 2" commit will be rejected —
 restructure before pushing (see `git add -p` / interactive rebase).
 
+### One input path per interaction
+Placement, removal, and any click-driven feature must share a single resolution
+path (resolvePlacement / one DOM input layer on the canvas). When adding UI,
+never add competing pointer handlers or stopPropagation chains — they silently
+swallow each other's events (this has broken both placement and right-click
+removal once already). New overlays must not capture pointer events that belong
+to the canvas.
+
 ## Session 1 decisions (context for later sessions)
 - Rendering: one InstancedMesh per species-part; instance colors are written
   every frame (correctness over cleverness — perf headroom is ~3x the budget).
@@ -125,3 +133,23 @@ restructure before pushing (see `git add -p` / interactive rebase).
   adds hives, milestones, season state to it.
 - Perf: `npm run test:perf` in-app harness (toggle key), `npm run test:smoke`
   build gate; 60fps @ 200+ items budget.
+
+## Session 2 decisions (context for later sessions)
+- Input handling is DOM-level on the canvas: left click = place, right click =
+  remove (preventDefault on contextmenu so the browser menu never appears).
+  Ghost preview and click placement both resolve through the single
+  resolvePlacement() (terrain ray-marched, so the ghost sits on the actual
+  ground) — never add a second placement path.
+- Pointer NDC is tracked from raw window pointermove events so the ghost keeps
+  following the cursor across UI overlays (and hides when off-canvas).
+- Bees target flower IDs, re-resolved from the placement store every frame —
+  never array indices or raw object references into mutable arrays. A missing
+  target re-targets or sends the bee home; nothing may throw from the frame
+  loop.
+- Occupancy: each placeable type has a footprint (radius/AABB, values in
+  src/data/); overlapping placement is invalid and the ghost shows the invalid
+  state, consistent with resolvePlacement().
+- Reset clears world state AND the localStorage save atomically; the confirm
+  dialog blocks placement input while open (modal input guard).
+- Notebook opens only when no placement tool is selected (click-with-tool =
+  planting, per standard builder UX).

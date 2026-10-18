@@ -38,6 +38,13 @@ Goal: the meadow comes alive and teaches.
 5. Field notebook: click any object → fact card from EDUCATION.md.
 6. Milestone toasts (DESIGN.md list) — soft, dismissible, never blocking.
 7. Bee hotel + hedge/shelter voxels, unlockable via milestones.
+8. Placement variation (deferred from session 1): random Y-rotation + slight
+   height jitter + minimal tilt on new placements, F toggle with UI indicator,
+   persisted; existing saves never re-randomized.
+9. Collision-aware placement: per-type footprints block overlapping placement;
+   the ghost shows the invalid state.
+10. Reset button with confirmation dialog; resets world state and the
+    localStorage save atomically.
 
 Commit: "session 2: ecology simulation + notebook + seasons".
 
@@ -70,6 +77,7 @@ Commit: "session 3: polish, audio, postcards — v0.1".
 Never de-scope: freeform placement, bee simulation, notebook facts, seasons.
 
 # Session 1 post-mortem:
+
 ### Session 1 — Voxel meadow (COMPLETE)
 Delivered: Vite + TS + React + three.js (@react-three/fiber) scaffold; freeform
 voxel terrain with golden-hour lighting; freeform placement with ghost preview
@@ -88,12 +96,21 @@ slight height jitter (matching terrain) + minimal tilt (a few degrees), applied
 on new placements only, toggleable with F with a UI indicator, persisted in
 localStorage; existing saves never re-randomized.
 
-### Session 2 — Pollinators (planned) [amend existing section]
-Additions to scope:
-- Placement variation (deferred from session 1, see above).
-- Bee simulation must query flower world state from the placement store,
-  including each flower's jittered position/rotation — no parallel/duplicated
-  flower state.
-- New persisted state (hives, bee bath, bee hotel, hedges, milestones, season)
-  is added versioned and additively to the existing save schema; session-1
-  saves must load without loss.
+### Session 2 — Pollinators (post-merge record)
+Delivered: placement variation (rotation/height/tilt jitter, F toggle with UI
+indicator, persisted), pollinator appeal engine, skep hive + bee bath + bee
+hotel + hedges (milestone-unlocked), bee swarm foraging between placed flowers
+(ID-targeted, re-resolved per frame from the placement store), season dial with
+bloom succession, field notebook, milestone toasts, versioned additive save
+migration (session-1 saves load without loss), collision-aware placement with
+invalid ghost state, reset button with confirmation dialog.
+Post-review fixes: stale-index bee targeting crash (bees held array indices;
+now hold IDs re-resolved each frame), ghost/terrain parallax (flat-plane
+raycast vs. rolling terrain — the offset was latent since session 1), notebook
+handlers swallowing placement clicks (stopPropagation), stale ghost under UI
+overlays (shared R3F pointer), right-click removal lost in the DOM-input
+refactor.
+Lessons: never store array indices or raw object references as entity
+references into mutable arrays; ghost preview and click placement must share
+one resolution path; UI overlays must not capture pointer events that belong
+to the canvas.
