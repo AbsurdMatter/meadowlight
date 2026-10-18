@@ -15,6 +15,7 @@ import { SeasonDial } from './ui/SeasonDial';
 import { ResetDialog } from './ui/ResetDialog';
 import { NotebookHub } from './ui/NotebookHub';
 import { PostcardButton } from './ui/PostcardButton';
+import { AudioToggle } from './ui/AudioToggle';
 import { Toasts } from './ui/Toasts';
 import { Notebook } from './ui/Notebook';
 import { MilestoneWatcher } from './ui/MilestoneWatcher';
@@ -103,6 +104,7 @@ export default function App() {
       )}
       {loaded && (
         <div style={{ position: 'absolute', bottom: 16, right: 12, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+          <AudioToggle />
           <PostcardButton />
           <NotebookHub />
         </div>

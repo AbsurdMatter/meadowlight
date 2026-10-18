@@ -7,6 +7,7 @@ import type { Size } from '@react-three/fiber';
 import { beeDebug } from '../render/BeeSwarm';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
 import { capturePostcardPng } from './postcard';
+import { audioDebugInfo, audioRunning } from './audio';
 import { ghostDebug } from '../render/PlacementSystem';
 
 declare global {
@@ -25,6 +26,8 @@ declare global {
     solitaryBeeCount: () => number;
     rareBeeCount: () => number;
     capturePostcard: () => string | null;
+    audioDebug: () => unknown;
+    audioIsRunning: () => boolean;
       ghostPosition: () => { pos: [number, number, number] | null; valid: boolean };
       resetWorld: () => void;
       openNotebookPlant: (itemId: string) => void;
@@ -73,6 +76,8 @@ export function installTestHook() {
     solitaryBeeCount: () => solitaryBeeDebug.count,
     rareBeeCount: () => rareBeeDebug.count,
     capturePostcard: () => capturePostcardPng(),
+    audioDebug: () => audioDebugInfo(),
+    audioIsRunning: () => audioRunning(),
     ghostPosition: () => ({ pos: ghostDebug.pos, valid: ghostDebug.valid }),
     resetWorld: () => usePlacementStore.getState().resetWorld(),
     openNotebookPlant: (itemId) =>
