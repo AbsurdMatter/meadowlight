@@ -45,6 +45,11 @@ Goal: the meadow comes alive and teaches.
    the ghost shows the invalid state.
 10. Reset button with confirmation dialog; resets world state and the
     localStorage save atomically.
+11. Ambient notebook: lenient dismissal, season-aware fact variants, seen-fact
+    tracking; notebook hub with learned facts and milestone states (locked
+    milestones visible).
+12. Deselect-first right click: right-click with a tool selected deselects the
+    tool; right-click with no tool removes.
 
 Commit: "session 2: ecology simulation + notebook + seasons".
 
@@ -63,7 +68,9 @@ Goal: v0.1 done, demo-ready.
 6. Performance pass: instancing audit, adaptive bee cap, LOD for distant voxels.
 7. Visual polish: grass movement, long shadows, subtle bloom (three.js
    postprocessing), morning/evening light warmth.
-8. Verify Definition of Done in AGENTS.md; tag `v0.1`.
+8. Palette grouped by type: Flowers (all six species), then Structures
+   (hive, bee bath, bee hotel, hedge) — visual grouping with section labels.
+9. Verify Definition of Done in AGENTS.md; tag `v0.1`.
 
 Commit: "session 3: polish, audio, postcards — v0.1".
 
@@ -103,14 +110,19 @@ hotel + hedges (milestone-unlocked), bee swarm foraging between placed flowers
 (ID-targeted, re-resolved per frame from the placement store), season dial with
 bloom succession, field notebook, milestone toasts, versioned additive save
 migration (session-1 saves load without loss), collision-aware placement with
-invalid ghost state, reset button with confirmation dialog.
+invalid ghost state, reset button with confirmation dialog, ambient notebook
+with season-aware facts and seen-fact tracking, notebook hub with learned facts
+and milestone states, deselect-first right-click input model.
 Post-review fixes: stale-index bee targeting crash (bees held array indices;
 now hold IDs re-resolved each frame), ghost/terrain parallax (flat-plane
 raycast vs. rolling terrain — the offset was latent since session 1), notebook
 handlers swallowing placement clicks (stopPropagation), stale ghost under UI
 overlays (shared R3F pointer), right-click removal lost in the DOM-input
-refactor.
+refactor, modal notebook requiring close-button dismissal, milestone
+thresholds unreachable in normal play (toasts never fired in any real session).
 Lessons: never store array indices or raw object references as entity
 references into mutable arrays; ghost preview and click placement must share
 one resolution path; UI overlays must not capture pointer events that belong
-to the canvas.
+to the canvas; a feature reported "delivered" must be observed firing, not
+just implemented — milestone toasts existed in code and never fired once in
+real play.

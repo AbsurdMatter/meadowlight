@@ -121,6 +121,19 @@ swallow each other's events (this has broken both placement and right-click
 removal once already). New overlays must not capture pointer events that belong
 to the canvas.
 
+### Reachability check for unlocks
+Every milestone/unlock threshold must be reachable in normal play — trace a
+realistic 10–20 minute session and confirm at least one unlock fires. An unlock
+nobody can hit is a broken feature, not a tuned one. (Milestone toasts existed
+in code for all of session 2 and never fired once in real play.)
+
+### Features must be observed firing
+"Implemented" and "works" are different claims: a feature that was coded but
+never observed doing its user-visible thing (toast firing, overlay appearing,
+audio playing) is NOT done. When you cannot observe it in this environment,
+say so and put it on the user's manual checklist rather than reporting it as
+working.
+
 ## Session 1 decisions (context for later sessions)
 - Rendering: one InstancedMesh per species-part; instance colors are written
   every frame (correctness over cleverness — perf headroom is ~3x the budget).
@@ -135,8 +148,10 @@ to the canvas.
   build gate; 60fps @ 200+ items budget.
 
 ## Session 2 decisions (context for later sessions)
-- Input handling is DOM-level on the canvas: left click = place, right click =
-  remove (preventDefault on contextmenu so the browser menu never appears).
+- Input handling is DOM-level on the canvas, with a deselect-first right
+  click: left = place (tool selected) / inspect (no tool); right = deselect
+  the active tool first, and only with no tool selected does right-click
+  remove. preventDefault on contextmenu so the browser menu never appears.
   Ghost preview and click placement both resolve through the single
   resolvePlacement() (terrain ray-marched, so the ghost sits on the actual
   ground) — never add a second placement path.
@@ -151,5 +166,11 @@ to the canvas.
   state, consistent with resolvePlacement().
 - Reset clears world state AND the localStorage save atomically; the confirm
   dialog blocks placement input while open (modal input guard).
-- Notebook opens only when no placement tool is selected (click-with-tool =
-  planting, per standard builder UX).
+- Notebook fact cards are ambient, never modal: lenient dismissal (click
+  outside, Escape, starting a placement), season-aware fact variants, and
+  seen-fact tracking persisted in the save. Never hard-hide a fact — re-clicks
+  must always show it; prefer unseen content and mark seen ones instead.
+- The notebook hub (icon near the palette) shows all learned facts grouped by
+  object and all milestones — locked milestones stay visible as gentle locked
+  entries. Notebook opens only when no placement tool is selected
+  (click-with-tool = planting, per standard builder UX).
