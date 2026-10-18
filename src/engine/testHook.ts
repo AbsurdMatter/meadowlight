@@ -5,6 +5,7 @@ import type { StructureId } from '../data/structures';
 import type { PerspectiveCamera, WebGLRenderer } from 'three';
 import type { Size } from '@react-three/fiber';
 import { beeDebug } from '../render/BeeSwarm';
+import { ghostDebug } from '../render/PlacementSystem';
 
 declare global {
   interface Window {
@@ -19,6 +20,7 @@ declare global {
       setSeason: (season: 'spring' | 'summer' | 'autumn' | 'winter') => void;
       milestones: () => string[];
       beeCount: () => number;
+      ghostPosition: () => { pos: [number, number, number] | null; valid: boolean };
       resetWorld: () => void;
       openNotebookPlant: (itemId: string) => void;
       __three?: {
@@ -63,6 +65,7 @@ export function installTestHook() {
     setSeason: (season) => usePlacementStore.getState().setSeason(season),
     milestones: () => usePlacementStore.getState().milestones,
     beeCount: () => beeDebug.count,
+    ghostPosition: () => ({ pos: ghostDebug.pos, valid: ghostDebug.valid }),
     resetWorld: () => usePlacementStore.getState().resetWorld(),
     openNotebookPlant: (itemId) =>
       usePlacementStore.getState().openNotebook({ kind: 'plant', id: itemId }),

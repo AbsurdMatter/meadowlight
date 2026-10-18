@@ -15,6 +15,10 @@ const HALF = MEADOW_SIZE / 2;
 /** max distance (px) between pointerdown and pointerup that still counts as a click */
 const CLICK_SLOP_PX = 6;
 
+/** live ghost ground position + validity, exposed for the test hook so
+ *  automated checks can compare the ghost against actual placements */
+export const ghostDebug = { pos: null as [number, number, number] | null, valid: true };
+
 export function PlacementSystem() {
   const selectedPlantId = usePlacementStore((s) => s.selectedPlantId);
   const selectedStructureId = usePlacementStore((s) => s.selectedStructureId);
@@ -150,7 +154,11 @@ export function PlacementSystem() {
     );
     if (next) {
       const blocked = placementBlocked(next[0], next[2]);
+      ghostDebug.pos = next;
+      ghostDebug.valid = !blocked;
       setGhostValid((prev) => (prev === !blocked ? prev : !blocked));
+    } else {
+      ghostDebug.pos = null;
     }
   });
 
