@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- voxel bee favicon: same box-geometry language as the game -->
+  <rect x="4" y="4" width="56" height="56" rx="10" fill="#ffe9b8"/>
+  <!-- wings -->
+  <rect x="8" y="14" width="18" height="7" rx="2" fill="#fdf6e3" opacity="0.9"/>
+  <rect x="38" y="14" width="18" height="7" rx="2" fill="#fdf6e3" opacity="0.9"/>
+  <!-- body -->
+  <rect x="14" y="22" width="36" height="26" rx="4" fill="#e8b83a"/>
+  <!-- stripes -->
+  <rect x="24" y="22" width="6" height="26" fill="#4a3527"/>
+  <rect x="36" y="22" width="6" height="26" fill="#4a3527"/>
+  <!-- eyes -->
+  <rect x="16" y="28" width="4" height="4" fill="#4a3527"/>
+  <rect x="44" y="28" width="4" height="4" fill="#4a3527"/>
+  <!-- stinger -->
+  <rect x="50" y="32" width="6" height="4" rx="1" fill="#4a3527"/>
+</svg>
