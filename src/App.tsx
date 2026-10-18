@@ -63,6 +63,7 @@ function Scene() {
 
 export default function App() {
   const selectedPlantId = usePlacementStore((s) => s.selectedPlantId);
+  const selectedStructureId = usePlacementStore((s) => s.selectedStructureId);
   const season = usePlacementStore((s) => s.season);
   const [loaded, setLoaded] = useState(false);
   const saveNow = useCallback(() => {
@@ -78,7 +79,7 @@ export default function App() {
     };
   }, [saveNow]);
   useEffect(() => setLoaded(true), []);
-  const placing = selectedPlantId;
+  const placing = selectedPlantId ?? selectedStructureId;
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
       <Canvas
