@@ -1,7 +1,11 @@
+import type { Season } from './seasons';
+
 export interface PlantPart {
   size: [number, number, number];
   offset: [number, number, number];
   color: string;
+  /** bloom parts shrink + dull when this species is out of season */
+  petal?: boolean;
 }
 
 export interface PlantDef {
@@ -11,6 +15,8 @@ export interface PlantDef {
   height: number;
   /** gentle idle sway strength */
   sway: number;
+  /** seasons in which this species is in bloom (succession) */
+  bloom: Season[];
   parts: PlantPart[];
 }
 
@@ -22,10 +28,11 @@ export const PLANTS: PlantDef[] = [
     name: 'Lavender',
     height: 1.1,
     sway: 0.08,
+    bloom: ['summer'],
     parts: [
       { size: [0.1, 0.7, 0.1], offset: [0, 0.35, 0], color: STEM_GREEN },
-      { size: [0.16, 0.34, 0.16], offset: [0, 0.86, 0], color: '#8f7ec9' },
-      { size: [0.12, 0.22, 0.12], offset: [0, 1.1, 0], color: '#a893d6' },
+      { size: [0.16, 0.34, 0.16], offset: [0, 0.86, 0], color: '#8f7ec9', petal: true },
+      { size: [0.12, 0.22, 0.12], offset: [0, 1.1, 0], color: '#a893d6', petal: true },
     ],
   },
   {
@@ -33,10 +40,11 @@ export const PLANTS: PlantDef[] = [
     name: 'Clover',
     height: 0.6,
     sway: 0.05,
+    bloom: ['spring', 'summer'],
     parts: [
       { size: [0.08, 0.35, 0.08], offset: [0, 0.18, 0], color: '#6f9a4c' },
-      { size: [0.28, 0.24, 0.28], offset: [0, 0.46, 0], color: '#e2a3bd' },
-      { size: [0.18, 0.14, 0.18], offset: [0, 0.62, 0], color: '#f0c1d3' },
+      { size: [0.28, 0.24, 0.28], offset: [0, 0.46, 0], color: '#e2a3bd', petal: true },
+      { size: [0.18, 0.14, 0.18], offset: [0, 0.62, 0], color: '#f0c1d3', petal: true },
     ],
   },
   {
@@ -44,10 +52,11 @@ export const PLANTS: PlantDef[] = [
     name: 'Wild Poppy',
     height: 1.0,
     sway: 0.12,
+    bloom: ['summer', 'autumn'],
     parts: [
       { size: [0.08, 0.6, 0.08], offset: [0, 0.3, 0], color: '#8fae67' },
-      { size: [0.34, 0.2, 0.34], offset: [0, 0.72, 0], color: '#d24a43' },
-      { size: [0.2, 0.12, 0.2], offset: [0, 0.9, 0], color: '#4a3527' },
+      { size: [0.34, 0.2, 0.34], offset: [0, 0.72, 0], color: '#d24a43', petal: true },
+      { size: [0.2, 0.12, 0.2], offset: [0, 0.9, 0], color: '#4a3527', petal: true },
     ],
   },
   {
@@ -55,11 +64,12 @@ export const PLANTS: PlantDef[] = [
     name: 'Sunflower',
     height: 2.0,
     sway: 0.06,
+    bloom: ['summer', 'autumn'],
     parts: [
       { size: [0.14, 1.3, 0.14], offset: [0, 0.65, 0], color: '#6d8f4a' },
       { size: [0.4, 0.14, 0.4], offset: [0.14, 0.9, 0], color: '#6d8f4a' },
-      { size: [0.44, 0.16, 0.44], offset: [0, 1.42, 0], color: '#f2c14e' },
-      { size: [0.26, 0.14, 0.26], offset: [0, 1.6, 0], color: '#8a5a2b' },
+      { size: [0.44, 0.16, 0.44], offset: [0, 1.42, 0], color: '#f2c14e', petal: true },
+      { size: [0.26, 0.14, 0.26], offset: [0, 1.6, 0], color: '#8a5a2b', petal: true },
     ],
   },
   {
@@ -67,10 +77,11 @@ export const PLANTS: PlantDef[] = [
     name: 'Wild Thyme',
     height: 0.4,
     sway: 0.04,
+    bloom: ['spring', 'summer'],
     parts: [
       { size: [0.1, 0.18, 0.1], offset: [0, 0.09, 0], color: '#6f8f52' },
-      { size: [0.36, 0.16, 0.36], offset: [0, 0.24, 0], color: '#9a7fae' },
-      { size: [0.22, 0.1, 0.22], offset: [0, 0.38, 0], color: '#b79ac9' },
+      { size: [0.36, 0.16, 0.36], offset: [0, 0.24, 0], color: '#9a7fae', petal: true },
+      { size: [0.22, 0.1, 0.22], offset: [0, 0.38, 0], color: '#b79ac9', petal: true },
     ],
   },
   {
@@ -78,11 +89,12 @@ export const PLANTS: PlantDef[] = [
     name: 'Forget-me-not',
     height: 0.55,
     sway: 0.07,
+    bloom: ['spring'],
     parts: [
       { size: [0.07, 0.3, 0.07], offset: [0, 0.15, 0], color: '#7a9d54' },
-      { size: [0.2, 0.12, 0.2], offset: [0.08, 0.34, 0], color: '#6f9fd8' },
-      { size: [0.2, 0.12, 0.2], offset: [-0.08, 0.3, 0.05], color: '#89b4e6' },
-      { size: [0.16, 0.1, 0.16], offset: [0.02, 0.44, -0.06], color: '#6f9fd8' },
+      { size: [0.2, 0.12, 0.2], offset: [0.08, 0.34, 0], color: '#6f9fd8', petal: true },
+      { size: [0.2, 0.12, 0.2], offset: [-0.08, 0.3, 0.05], color: '#89b4e6', petal: true },
+      { size: [0.16, 0.1, 0.16], offset: [0.02, 0.44, -0.06], color: '#6f9fd8', petal: true },
     ],
   },
 ];

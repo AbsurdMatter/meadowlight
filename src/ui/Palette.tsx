@@ -1,11 +1,51 @@
 import { PLANTS } from '../data/plants';
+import { STRUCTURES } from '../data/structures';
 import { usePlacementStore } from '../render/placementStore';
+import type { StructureId } from '../data/structures';
+
+const chipStyle = (active: boolean, enabled: boolean): React.CSSProperties => ({
+  border: active ? '2px solid #d24a43' : '2px solid transparent',
+  borderRadius: 12,
+  padding: '6px 10px',
+  background: active ? '#ffe9b8' : '#fff8e8',
+  cursor: enabled ? 'pointer' : 'not-allowed',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 2,
+  fontFamily: 'inherit',
+  opacity: enabled ? 1 : 0.45,
+});
+
+const buttonStyle = (active: boolean): React.CSSProperties => ({
+  padding: '2px 10px',
+  borderRadius: 8,
+  border: `2px solid ${active ? '#7a9d54' : '#b0a58c'}`,
+  background: active ? '#dcedc2' : '#f0ead9',
+  color: '#5a4322',
+  fontFamily: 'inherit',
+  cursor: 'pointer',
+});
 
 export function Palette() {
   const selectedPlantId = usePlacementStore((s) => s.selectedPlantId);
+  const selectedStructureId = usePlacementStore((s) => s.selectedStructureId);
   const select = usePlacementStore((s) => s.select);
-  const randomRotation = usePlacementStore((s) => s.randomRotation);
-  const toggleRandomRotation = usePlacementStore((s) => s.toggleRandomRotation);
+  const selectStructure = usePlacementStore((s) => s.selectStructure);
+  const placementVariation = usePlacementStore((s) => s.placementVariation);
+  const toggleVariation = usePlacementStore((s) => s.toggleVariation);
+  const milestones = usePlacementStore((s) => s.milestones);
+
+  const bathUnlocked = milestones.includes('fiveSpecies') || milestones.includes('beeBath');
+  const hedgeUnlocked = milestones.includes('firstHive') || milestones.includes('hedgesUnlocked');
+  const hotelUnlocked = milestones.includes('tenSpecies');
+
+  const unlocked: Record<StructureId, boolean> = {
+    hive: true,
+    bath: bathUnlocked,
+    hotel: hotelUnlocked,
+    hedge: hedgeUnlocked,
+  };
 
   return (
     <div
@@ -33,20 +73,9 @@ export function Palette() {
           gap: 6,
         }}
       >
-        <span>Random rotation: {randomRotation ? 'on' : 'off'}</span>
-        <button
-          onClick={toggleRandomRotation}
-          style={{
-            padding: '2px 10px',
-            borderRadius: 8,
-            border: `2px solid ${randomRotation ? '#7a9d54' : '#b0a58c'}`,
-            background: randomRotation ? '#dcedc2' : '#f0ead9',
-            color: '#5a4322',
-            fontFamily: 'inherit',
-            cursor: 'pointer',
-          }}
-        >
-          {randomRotation ? 'ON' : 'OFF'}
+        <span>Natural placement: {placementVariation ? 'on' : 'off'}</span>
+        <button onClick={toggleVariation} style={buttonStyle(placementVariation)}>
+          {placementVariation ? 'ON' : 'OFF'}
         </button>
         <span style={{ opacity: 0.65 }}>(F)</span>
       </div>
@@ -57,18 +86,7 @@ export function Palette() {
             <button
               key={p.id}
               onClick={() => select(active ? null : p.id)}
-              style={{
-                border: active ? '2px solid #d24a43' : '2px solid transparent',
-                borderRadius: 12,
-                padding: '6px 10px',
-                background: active ? '#ffe9b8' : '#fff8e8',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 2,
-                fontFamily: 'inherit',
-              }}
+              style={chipStyle(active, true)}
             >
               <span
                 style={{
@@ -80,6 +98,21 @@ export function Palette() {
                 }}
               />
               <span style={{ fontSize: 12, color: '#7a5a2b' }}>{p.name}</span>
+            </button>
+          );
+        })}
+        {STRUCTURES.map((st) => {
+          const active = selectedStructureId === st.id;
+          const enabled = unlocked[st.id];
+          return (
+            <button
+              key={st.id}
+              onClick={() => (enabled ? selectStructure(active ? null : st.id) : null)}
+              style={chipStyle(active, enabled)}
+              title={enabled ? st.name : 'keep tending the meadow to unlock this'}
+            >
+              <span style={{ fontSize: 18, lineHeight: '22px' }}>{st.emoji}</span>
+              <span style={{ fontSize: 12, color: '#7a5a2b' }}>{st.name}</span>
             </button>
           );
         })}
