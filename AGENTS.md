@@ -104,23 +104,35 @@ or chasing environment dependencies (e.g. X11, browsers for headless testing),
 stop and propose the simplest honest alternative (in-app harness, manual user
 check) instead of continuing to install.
 
-## Session 2 decisions (context for later sessions)
+### Commit granularity is mandatory
+Every session's work lands as multiple commits, each independently describable:
+one commit per feature unit (e.g. placement variation, bee simulation, season
+dial, notebook), not one mega-commit per session. A rule of thumb: if a commit
+message needs "and" more than twice, split it. This keeps the PR reviewable,
+makes regressions bisectable (`git bisect`), and lets a bad unit be reverted
+without losing the session. A single "session 2" commit will be rejected —
+restructure before pushing (see `git add -p` / interactive rebase).
 
-- Input model (one input path, DOM-level on the canvas): left-click places or
-  inspects; right-click DESELECTS the placement tool first (switch to inspect
-  mode) — only with no tool selected does right-click remove the object under
-  the cursor. So: tool+left = place; tool+right = deselect only;
-  no-tool+left = inspect (notebook); no-tool+right = remove.
-- Placement raycast walks the terrain heightfield (not a flat y=0 plane) and
-  is shared by the ghost preview, the placement click, and removal — ghost and
-  validity can never disagree.
-- Bee targeting is by placed-item id, re-resolved from the store every frame
-  (never array indices); the bee frame loop is exception-guarded.
-- Notebook is an ambient panel (Escape / click-outside / starting a placement
-  dismisses); facts vary by season and context, seen-facts persist in the
-  save (v3 additive field `seenFacts`).
-- Milestones include early ones (first bloom, first swarm) so something
-  celebrates within the first minutes of play.
+### One input path per interaction
+Placement, removal, and any click-driven feature must share a single resolution
+path (resolvePlacement / one DOM input layer on the canvas). When adding UI,
+never add competing pointer handlers or stopPropagation chains — they silently
+swallow each other's events (this has broken both placement and right-click
+removal once already). New overlays must not capture pointer events that belong
+to the canvas.
+
+### Reachability check for unlocks
+Every milestone/unlock threshold must be reachable in normal play — trace a
+realistic 10–20 minute session and confirm at least one unlock fires. An unlock
+nobody can hit is a broken feature, not a tuned one. (Milestone toasts existed
+in code for all of session 2 and never fired once in real play.)
+
+### Features must be observed firing
+"Implemented" and "works" are different claims: a feature that was coded but
+never observed doing its user-visible thing (toast firing, overlay appearing,
+audio playing) is NOT done. When you cannot observe it in this environment,
+say so and put it on the user's manual checklist rather than reporting it as
+working.
 
 ## Session 1 decisions (context for later sessions)
 - Rendering: one InstancedMesh per species-part; instance colors are written
@@ -134,3 +146,31 @@ check) instead of continuing to install.
   adds hives, milestones, season state to it.
 - Perf: `npm run test:perf` in-app harness (toggle key), `npm run test:smoke`
   build gate; 60fps @ 200+ items budget.
+
+## Session 2 decisions (context for later sessions)
+- Input handling is DOM-level on the canvas, with a deselect-first right
+  click: left = place (tool selected) / inspect (no tool); right = deselect
+  the active tool first, and only with no tool selected does right-click
+  remove. preventDefault on contextmenu so the browser menu never appears.
+  Ghost preview and click placement both resolve through the single
+  resolvePlacement() (terrain ray-marched, so the ghost sits on the actual
+  ground) — never add a second placement path.
+- Pointer NDC is tracked from raw window pointermove events so the ghost keeps
+  following the cursor across UI overlays (and hides when off-canvas).
+- Bees target flower IDs, re-resolved from the placement store every frame —
+  never array indices or raw object references into mutable arrays. A missing
+  target re-targets or sends the bee home; nothing may throw from the frame
+  loop.
+- Occupancy: each placeable type has a footprint (radius/AABB, values in
+  src/data/); overlapping placement is invalid and the ghost shows the invalid
+  state, consistent with resolvePlacement().
+- Reset clears world state AND the localStorage save atomically; the confirm
+  dialog blocks placement input while open (modal input guard).
+- Notebook fact cards are ambient, never modal: lenient dismissal (click
+  outside, Escape, starting a placement), season-aware fact variants, and
+  seen-fact tracking persisted in the save. Never hard-hide a fact — re-clicks
+  must always show it; prefer unseen content and mark seen ones instead.
+- The notebook hub (icon near the palette) shows all learned facts grouped by
+  object and all milestones — locked milestones stay visible as gentle locked
+  entries. Notebook opens only when no placement tool is selected
+  (click-with-tool = planting, per standard builder UX).
