@@ -23,7 +23,18 @@ export function PerfOverlay() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'F3' || e.key === 'f3' || e.key === 'p' || e.key === 'P') {
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.key === 'p' || e.key === 'P' || e.key === '`') {
         e.preventDefault();
         setOpen((o) => !o);
       }
@@ -123,7 +134,7 @@ export function PerfOverlay() {
           whiteSpace: 'pre',
         }}
       >
-        <div style={{ fontWeight: 'bold', marginBottom: 4 }}>perf overlay (F3/P)</div>
+        <div style={{ fontWeight: 'bold', marginBottom: 4 }}>perf overlay (P / ~)</div>
         <div>fps        {stats.fps}</div>
         <div>frame time {stats.frameMs.toFixed(2)} ms</div>
         <div>items      {stats.items}</div>

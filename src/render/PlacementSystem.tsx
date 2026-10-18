@@ -47,6 +47,17 @@ export function PlacementSystem() {
       dragState.current.button === e.button &&
       Math.hypot(e.clientX - dragState.current.x, e.clientY - dragState.current.y) > 6;
     const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
       if (e.key === 'r' || e.key === 'R') rotateGhost();
     };
     const onContextMenu = (e: MouseEvent) => {
