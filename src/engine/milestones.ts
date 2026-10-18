@@ -51,9 +51,13 @@ export function checkMilestones(
   // meadow blooms in all four seasons plus every species planted.
   if (species.length >= 6 && !has('tenSpecies')) fire('tenSpecies');
 
-  // yearRoundBloom: every season has at least one blooming species
+  // yearRoundBloom: no famine across the GROWING seasons (early spring to
+  // late autumn — EDUCATION.md). Winter is intentionally quiet (the colony
+  // clusters), so the old all-four-seasons check was unreachable with any
+  // palette — a milestone nobody could ever earn (reachability rule).
+  const growing = SEASONS.filter((se) => se !== 'winter');
   if (
-    yearRoundBloom(items.map((i) => i.plantId), SEASONS) &&
+    yearRoundBloom(items.map((i) => i.plantId), growing) &&
     !has('yearRoundBloom')
   ) {
     fire('yearRoundBloom');
