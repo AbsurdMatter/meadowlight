@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import * as THREE from 'three';
 import { Meadow } from './render/Meadow';
 import { Background } from './render/Background';
 import { Sky } from './render/Sky';
@@ -7,6 +8,8 @@ import { PlantedFlowers } from './render/PlantedFlowers';
 import { PlacedStructures } from './render/PlacedStructures';
 import { BeeSwarm } from './render/BeeSwarm';
 import { SolitaryBees } from './render/SolitaryBees';
+import { BloomPipeline } from './render/BloomPipeline';
+import { GrassTufts } from './render/GrassTufts';
 import { PlacementSystem } from './render/PlacementSystem';
 import { DebugBridge } from './render/DebugBridge';
 import { OrbitControlsLite } from './render/OrbitControlsLite';
@@ -21,6 +24,7 @@ import { MilestoneWatcher } from './ui/MilestoneWatcher';
 import { PerfOverlay } from './ui/PerfOverlay';
 import { usePlacementStore } from './render/placementStore';
 import { SEASON_INFO } from './data/seasons';
+import { LIGHT_WARMTH, LONG_SHADOWS } from './data/polish';
 
 const SEASON_LIGHT: Record<string, { sun: string; ambient: number; intensity: number }> = {
   spring: { sun: '#ffe9c0', ambient: 0.36, intensity: 1.4 },
@@ -29,6 +33,51 @@ const SEASON_LIGHT: Record<string, { sun: string; ambient: number; intensity: nu
   winter: { sun: '#dfe8f5', ambient: 0.42, intensity: 1.1 },
 };
 
+function SunLight({ season }: { season: string }) {
+  const light = SEASON_LIGHT[season];
+  const ref = useRef<THREE.DirectionalLight>(null);
+  useFrame(({ camera }) => {
+    const sun = ref.current;
+    if (!sun) return;
+    // camera polar angle: 1 = mid, 1.32 = lowest allowed (golden hour)
+    const polar = Math.atan2(
+      Math.hypot(camera.position.x, camera.position.z),
+      camera.position.y,
+    );
+    const warmth = LIGHT_WARMTH.enabled
+      ? THREE.MathUtils.clamp((polar - LIGHT_WARMTH.warmStartPolar) / (1.32 - LIGHT_WARMTH.warmStartPolar), 0, 1)
+      : 0;
+    if (LIGHT_WARMTH.enabled) {
+      sun.color.set(light.sun).lerp(new THREE.Color(LIGHT_WARMTH.warmSunColor), warmth * 0.85);
+      sun.intensity = light.intensity + warmth * LIGHT_WARMTH.warmIntensityBoost;
+    }
+    // long shadows: stretch the sun outward and lower as the camera drops
+    const stretch = LONG_SHADOWS.enabled
+      ? 1 + warmth * (LONG_SHADOWS.stretchMax - 1)
+      : 1;
+    sun.position.set(24 * Math.max(1, stretch * 0.9), 16 / Math.max(1, stretch * 0.8), 10 * stretch);
+  });
+  return (
+    <directionalLight
+      ref={ref}
+      position={[24, 16, 10]}
+      intensity={light.intensity}
+      color={light.sun}
+      castShadow
+      shadow-mapSize={[2048, 2048]}
+      shadow-camera-left={-26}
+      shadow-camera-right={26}
+      shadow-camera-top={26}
+      shadow-camera-bottom={-26}
+      shadow-camera-near={4}
+      shadow-camera-far={80}
+      shadow-bias={-0.0004}
+      shadow-normalBias={0.6}
+      shadow-radius={6}
+    />
+  );
+}
+
 function Scene() {
   const season = usePlacementStore((s) => s.season);
   const light = SEASON_LIGHT[season];
@@ -36,29 +85,16 @@ function Scene() {
     <>
       <Sky />
       <hemisphereLight args={['#ffe6c7', '#5a7a4a', 0.6]} />
-      <directionalLight
-        position={[24, 16, 10]}
-        intensity={light.intensity}
-        color={light.sun}
-        castShadow
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-26}
-        shadow-camera-right={26}
-        shadow-camera-top={26}
-        shadow-camera-bottom={-26}
-        shadow-camera-near={4}
-        shadow-camera-far={80}
-        shadow-bias={-0.0004}
-        shadow-normalBias={0.6}
-        shadow-radius={6}
-      />
+      <SunLight season={season} />
       <ambientLight intensity={light.ambient} color="#fff3e0" />
       <Meadow />
+      <GrassTufts />
       <Background />
       <PlantedFlowers />
       <PlacedStructures />
       <BeeSwarm />
       <SolitaryBees />
+      <BloomPipeline />
       <PlacementSystem />
       <DebugBridge />
       <OrbitControlsLite />
