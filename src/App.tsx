@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Meadow } from './render/Meadow';
@@ -35,6 +36,11 @@ function Scene() {
         enableDamping
         dampingFactor={0.06}
         enablePan
+        mouseButtons={{
+          LEFT: THREE.MOUSE.PAN,
+          MIDDLE: THREE.MOUSE.DOLLY,
+          RIGHT: THREE.MOUSE.ROTATE,
+        }}
       />
     </>
   );
@@ -84,7 +90,7 @@ export default function App() {
         }}
       >
         🐝 Meadowlight — {selectedPlantId ? 'click to plant' : 'pick a flower below'}
-        {' '}· right-click removes · R rotates
+        {' '}· right-drag rotates · R rotates plant
       </div>
     </div>
   );

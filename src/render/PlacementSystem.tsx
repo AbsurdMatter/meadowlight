@@ -37,11 +37,20 @@ export function PlacementSystem() {
     );
   });
 
+  const dragState = useRef({ x: 0, y: 0, button: -1 });
+
   useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      dragState.current = { x: e.clientX, y: e.clientY, button: e.button };
+    };
+    const wasDrag = (e: MouseEvent) =>
+      dragState.current.button === e.button &&
+      Math.hypot(e.clientX - dragState.current.x, e.clientY - dragState.current.y) > 6;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'r' || e.key === 'R') rotateGhost();
     };
     const onContextMenu = (e: MouseEvent) => {
+      if (wasDrag(e)) return;
       e.preventDefault();
       const s = usePlacementStore.getState();
       const rect = gl.domElement.getBoundingClientRect();
@@ -65,9 +74,11 @@ export function PlacementSystem() {
       }
       if (bestId) s.removeAt(bestId);
     };
+    gl.domElement.addEventListener('pointerdown', onPointerDown);
     window.addEventListener('keydown', onKey);
     gl.domElement.addEventListener('contextmenu', onContextMenu);
     return () => {
+      gl.domElement.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('keydown', onKey);
       gl.domElement.removeEventListener('contextmenu', onContextMenu);
     };
@@ -77,6 +88,11 @@ export function PlacementSystem() {
 
   const plantHere = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
+    const ne = e.nativeEvent as MouseEvent;
+    if (dragState.current.button === ne.button &&
+        Math.hypot(ne.clientX - dragState.current.x, ne.clientY - dragState.current.y) > 6) {
+      return;
+    }
     if (!selectedPlantId || !ghost) return;
     plant({
       id: crypto.randomUUID(),
