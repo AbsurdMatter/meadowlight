@@ -13,9 +13,7 @@ import { OrbitControlsLite } from './render/OrbitControlsLite';
 import { Palette } from './ui/Palette';
 import { SeasonDial } from './ui/SeasonDial';
 import { ResetDialog } from './ui/ResetDialog';
-import { NotebookHub } from './ui/NotebookHub';
-import { PostcardButton } from './ui/PostcardButton';
-import { AudioToggle } from './ui/AudioToggle';
+import { CornerControls } from './ui/CornerControls';
 import { Onboarding } from './ui/Onboarding';
 import { Toasts } from './ui/Toasts';
 import { Notebook } from './ui/Notebook';
@@ -103,13 +101,7 @@ export default function App() {
           <ResetDialog />
         </div>
       )}
-      {loaded && (
-        <div style={{ position: 'absolute', bottom: 16, right: 12, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
-          <AudioToggle />
-          <PostcardButton />
-          <NotebookHub />
-        </div>
-      )}
+      {loaded && <CornerControls />}
       {loaded && <Onboarding />}
       {loaded && <Toasts />}
       {loaded && <Notebook />}
@@ -128,9 +120,8 @@ export default function App() {
           pointerEvents: 'none',
         }}
       >
-        {'\u{1F41D}'} Meadowlight {SEASON_INFO[season].emoji} {SEASON_INFO[season].label} —{' '}
-        {placing ? 'click to place' : 'pick a flower below'} · right-drag rotates · R rotates ·{' '}
-        F natural placement
+        {'\u{1F41D}'} Meadowlight · {SEASON_INFO[season].emoji} {SEASON_INFO[season].label} ·{' '}
+        {placing ? 'click the meadow to place' : 'pick something to plant, or just wander'}
       </div>
     </div>
   );
