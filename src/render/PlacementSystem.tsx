@@ -3,16 +3,21 @@ import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { MEADOW_SIZE, terrainHeight } from '../engine/terrain';
 import { PLANT_BY_ID } from '../data/plants';
+import { STRUCTURE_BY_ID } from '../data/structures';
 import { usePlacementStore } from './placementStore';
 import { variationFor } from '../engine/variation';
+import type { StructureId } from '../data/structures';
 import { VoxelFlower } from './VoxelFlower';
+import { VoxelStructure } from './VoxelStructure';
 
 const HALF = MEADOW_SIZE / 2;
 
 export function PlacementSystem() {
   const selectedPlantId = usePlacementStore((s) => s.selectedPlantId);
+  const selectedStructureId = usePlacementStore((s) => s.selectedStructureId);
   const ghostRotationY = usePlacementStore((s) => s.ghostRotationY);
   const plant = usePlacementStore((s) => s.plant);
+  const placeStructure = usePlacementStore((s) => s.placeStructure);
   const rotateGhost = usePlacementStore((s) => s.rotateGhost);
   const { raycaster, camera, gl, pointer } = useThree();
   const groundPlane = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
@@ -20,7 +25,7 @@ export function PlacementSystem() {
   const [ghost, setGhost] = useState<[number, number, number] | null>(null);
 
   useFrame(() => {
-    if (!selectedPlantId) {
+    if (!selectedPlantId && !selectedStructureId) {
       setGhost(null);
       return;
     }
@@ -76,6 +81,21 @@ export function PlacementSystem() {
       if (!target) return;
       const x = THREE.MathUtils.clamp(target.x, -HALF + 1, HALF - 1);
       const z = THREE.MathUtils.clamp(target.z, -HALF + 1, HALF - 1);
+      // structures first (they're chunkier), then flowers
+      let bestStructureId: string | null = null;
+      let bestStructureDist = 2.0;
+      for (const it of s.structures) {
+        const def = STRUCTURE_BY_ID[it.structureId];
+        const d = Math.hypot(it.position[0] - x, it.position[2] - z);
+        if (d < bestStructureDist && def) {
+          bestStructureDist = d;
+          bestStructureId = it.id;
+        }
+      }
+      if (bestStructureId) {
+        s.removeStructure(bestStructureId);
+        return;
+      }
       let bestId: string | null = null;
       let bestDist = 1.3;
       for (const item of s.items) {
@@ -98,6 +118,9 @@ export function PlacementSystem() {
   }, [camera, gl, raycaster, rotateGhost]);
 
   const def = selectedPlantId ? PLANT_BY_ID[selectedPlantId] : null;
+  const structureDef = selectedStructureId
+    ? STRUCTURE_BY_ID[selectedStructureId as StructureId]
+    : null;
   const plantHere = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     const ne = e.nativeEvent as MouseEvent;
@@ -117,6 +140,24 @@ export function PlacementSystem() {
       variation,
     });
   };
+  const placeHere = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    const ne = e.nativeEvent as MouseEvent;
+    if (dragState.current.button === ne.button &&
+        Math.hypot(ne.clientX - dragState.current.x, ne.clientY - dragState.current.y) > 6) {
+      return;
+    }
+    if (!selectedStructureId || !ghost) return;
+    const variationOn = usePlacementStore.getState().placementVariation;
+    placeStructure({
+      id: crypto.randomUUID(),
+      structureId: selectedStructureId as StructureId,
+      position: ghost,
+      rotationY: ghostRotationY,
+      variation: variationFor(variationOn),
+    });
+  };
+
   return (
     <group>
       {ghost && def && (
@@ -125,6 +166,15 @@ export function PlacementSystem() {
           <mesh position={[ghost[0], ghost[1] + 0.02, ghost[2]]} rotation={[-Math.PI / 2, 0, 0]} onClick={plantHere}>
             <circleGeometry args={[0.7, 24]} />
             <meshBasicMaterial color="#fff0c0" transparent opacity={0.25} />
+          </mesh>
+        </>
+      )}
+      {ghost && structureDef && (
+        <>
+          <VoxelStructure def={structureDef} position={ghost} rotationY={ghostRotationY} ghost />
+          <mesh position={[ghost[0], ghost[1] + 0.02, ghost[2]]} rotation={[-Math.PI / 2, 0, 0]} onClick={placeHere}>
+            <circleGeometry args={[1.1, 24]} />
+            <meshBasicMaterial color="#ffe4a8" transparent opacity={0.3} />
           </mesh>
         </>
       )}

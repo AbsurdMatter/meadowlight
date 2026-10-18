@@ -4,6 +4,7 @@ import { Meadow } from './render/Meadow';
 import { Background } from './render/Background';
 import { Sky } from './render/Sky';
 import { PlantedFlowers } from './render/PlantedFlowers';
+import { PlacedStructures } from './render/PlacedStructures';
 import { PlacementSystem } from './render/PlacementSystem';
 import { OrbitControlsLite } from './render/OrbitControlsLite';
 import { Palette } from './ui/Palette';
@@ -35,6 +36,7 @@ function Scene() {
       <Meadow />
       <Background />
       <PlantedFlowers />
+      <PlacedStructures />
       <PlacementSystem />
       <OrbitControlsLite />
     </>
@@ -44,11 +46,9 @@ function Scene() {
 export default function App() {
   const selectedPlantId = usePlacementStore((s) => s.selectedPlantId);
   const [loaded, setLoaded] = useState(false);
-
   const saveNow = useCallback(() => {
     usePlacementStore.getState().save();
   }, []);
-
   useEffect(() => {
     const t = setInterval(saveNow, 3000);
     window.addEventListener('beforeunload', saveNow);
@@ -58,9 +58,8 @@ export default function App() {
       saveNow();
     };
   }, [saveNow]);
-
   useEffect(() => setLoaded(true), []);
-
+  const placing = selectedPlantId;
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
       <Canvas
@@ -85,8 +84,7 @@ export default function App() {
           pointerEvents: 'none',
         }}
       >
-        🐝 Meadowlight — {selectedPlantId ? 'click to plant' : 'pick a flower below'}
-        {' '}· right-drag rotates · R rotates plant · F random rotation
+🐝 Meadowlight — {placing ? 'click to place' : 'pick a flower below'} · right-drag rotates · R rotates · F natural placement
       </div>
     </div>
   );
