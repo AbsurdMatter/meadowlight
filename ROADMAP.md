@@ -68,3 +68,32 @@ Commit: "session 3: polish, audio, postcards — v0.1".
 4. Hedge/shelter voxels → keep static, drop mechanical wind-scoring
 
 Never de-scope: freeform placement, bee simulation, notebook facts, seasons.
+
+# Session 1 post-mortem:
+### Session 1 — Voxel meadow (COMPLETE)
+Delivered: Vite + TS + React + three.js (@react-three/fiber) scaffold; freeform
+voxel terrain with golden-hour lighting; freeform placement with ghost preview
+(zoom on left click, pan on right); six flower species (data in
+src/data/plants.ts); InstancedMesh rendering per species-part (colors written
+every frame — correctness over cleverness); animated sway via per-frame
+instance matrices; background landscape (hills, forest, water) with warm fog;
+drifting voxel clouds; clamped custom OrbitControls; localStorage save/load;
+in-app perf harness (toggle key, 200-flower stress test — ~190fps observed);
+test:smoke build gate (tsc + vite build); soft shadows, per-voxel color variation.
+Post-review fixes: reversed pan, perf overlay R3F-hook crash, terrain
+see-through holes, flower instancing regression.
+
+Deferred to session 2: general placement variation — random Y-rotation +
+slight height jitter (matching terrain) + minimal tilt (a few degrees), applied
+on new placements only, toggleable with F with a UI indicator, persisted in
+localStorage; existing saves never re-randomized.
+
+### Session 2 — Pollinators (planned) [amend existing section]
+Additions to scope:
+- Placement variation (deferred from session 1, see above).
+- Bee simulation must query flower world state from the placement store,
+  including each flower's jittered position/rotation — no parallel/duplicated
+  flower state.
+- New persisted state (hives, bee bath, bee hotel, hedges, milestones, season)
+  is added versioned and additively to the existing save schema; session-1
+  saves must load without loss.
