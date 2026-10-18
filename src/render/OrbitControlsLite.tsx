@@ -56,13 +56,15 @@ export function OrbitControlsLite() {
         s.spherical.makeSafe();
       } else if (button === 0) {
         const scale = panScale();
+        // matches three.js OrbitControls: panLeft uses -deltaX, panUp uses
+        // +deltaY — the world follows the cursor on both axes (grab feel)
         const pan = new THREE.Vector3()
           .setFromMatrixColumn(camera.matrix, 0)
           .multiplyScalar(-dx * scale);
         pan.add(
           new THREE.Vector3()
             .setFromMatrixColumn(camera.matrix, 1)
-            .multiplyScalar(-dy * scale),
+            .multiplyScalar(dy * scale),
         );
         s.target.add(pan);
         const t = CAMERA_BOUNDS.panTargetLimit;

@@ -86,7 +86,7 @@ export default function App() {
         }}
       >
         🐝 Meadowlight — {selectedPlantId ? 'click to plant' : 'pick a flower below'}
-        {' '}· right-drag rotates · R rotates plant
+        {' '}· right-drag rotates · R rotates plant · F random rotation
       </div>
     </div>
   );

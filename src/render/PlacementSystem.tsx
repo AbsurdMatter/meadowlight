@@ -59,6 +59,8 @@ export function PlacementSystem() {
         return;
       }
       if (e.key === 'r' || e.key === 'R') rotateGhost();
+      if (e.key === 'f' || e.key === 'F')
+        usePlacementStore.getState().toggleRandomRotation();
     };
     const onContextMenu = (e: MouseEvent) => {
       if (wasDrag(e)) return;
@@ -105,11 +107,13 @@ export function PlacementSystem() {
       return;
     }
     if (!selectedPlantId || !ghost) return;
+    const randomRotation = usePlacementStore.getState().randomRotation;
+    const baseRotation = randomRotation ? Math.random() * Math.PI * 2 : 0;
     plant({
       id: crypto.randomUUID(),
       plantId: selectedPlantId,
       position: ghost,
-      rotationY: ghostRotationY,
+      rotationY: baseRotation + ghostRotationY,
       phase: Math.random() * Math.PI * 2,
     });
   };
