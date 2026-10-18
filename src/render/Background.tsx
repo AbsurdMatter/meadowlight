@@ -46,12 +46,13 @@ function Hills() {
       for (let z = -outer; z <= outer; z += step) {
         const r = Math.hypot(x, z);
         if (r < HILLS.innerRadius || r > outer) continue;
-        const jx = x + (rng() - 0.5) * step * 0.7;
-        const jz = z + (rng() - 0.5) * step * 0.7;
+        const jx = x + (rng() - 0.5) * step * HILLS.jitter;
+        const jz = z + (rng() - 0.5) * step * HILLS.jitter;
         const h = backgroundHeight(jx, jz);
-        const size = step * (1.05 + rng() * 0.25);
-        mat.makeScale(size, HILLS.boxHeight, size);
-        mat.setPosition(jx, h - HILLS.boxHeight * 0.55, jz);
+        const size = step * (HILLS.minSize + rng() * (HILLS.maxSize - HILLS.minSize));
+        const extraDepth = Math.max(0, h - backgroundHeight(0, 0)) + 4;
+        mat.makeScale(size, HILLS.boxHeight + extraDepth, size);
+        mat.setPosition(jx, h - (HILLS.boxHeight + extraDepth) * 0.55, jz);
         mesh.setMatrixAt(i, mat);
         const local = Math.hypot(jx, jz);
         const nearMeadow = local < HILLS.liftStartRadius + 4;
@@ -77,7 +78,7 @@ function Hills() {
   return (
     <instancedMesh ref={meshRef} args={[undefined, undefined, count]} receiveShadow>
       <boxGeometry args={[1, 1, 1]} />
-      <meshLambertMaterial />
+      <meshLambertMaterial side={THREE.DoubleSide} />
     </instancedMesh>
   );
 }

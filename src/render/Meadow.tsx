@@ -20,8 +20,11 @@ export function Meadow() {
         const x = -MEADOW_SIZE / 2 + (ix + 0.5) * step;
         const z = -MEADOW_SIZE / 2 + (iz + 0.5) * step;
         const h = terrainHeight(x, z);
-        mat.makeScale(step * 1.02, 1.4, step * 1.02);
-        mat.setPosition(x, h - 0.75, z);
+        const r = Math.hypot(x, z);
+        const isEdge = r > MEADOW_SIZE / 2 - step * 1.5;
+        const depth = isEdge ? 8 : 1.4;
+        mat.makeScale(step * 1.02, depth, step * 1.02);
+        mat.setPosition(x, h - depth * 0.53, z);
         mesh.setMatrixAt(i, mat);
         color.set(
           GRASS_COLORS[

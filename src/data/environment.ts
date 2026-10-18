@@ -20,6 +20,12 @@ export const HILLS = {
   outerRadius: 50,
   step: 1.6,
   boxHeight: 1.4,
+  /** guaranteed overlap: worst-case neighbor center separation is
+   *  step * (1 + jitter) = 1.1 * step, so minSize 1.12 * step always covers it */
+  minSize: 1.12,
+  maxSize: 1.35,
+  /** horizontal jitter fraction of step (must satisfy (1+jitter) < minSize) */
+  jitter: 0.1,
   /** ground rises gently with distance from the meadow */
   liftStartRadius: 22,
   liftPerRadius: 0.045,
