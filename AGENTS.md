@@ -59,3 +59,47 @@ what belongs in the current session. Never work ahead of the session scope.
   a build that errors.
 - Do not add features from future sessions early. Do not add features not
   listed in ROADMAP.md at all.
+
+## Workflow & verification rules
+
+### "Verified" means it ran, not that it compiled
+"Done" and "verified" mean the app was launched in a browser and the feature was
+observed working — NOT that the build compiled, types passed, or the dev server
+started. Every user-facing feature must be confirmed visually/behaviorally before
+reporting it complete. If a check cannot be run in this environment, say so
+explicitly instead of claiming it passed.
+
+### No silent visual regressions
+Never trade visual quality for performance or refactoring. Any change to
+rendering (instancing, materials, lighting, geometry) must preserve the prior
+build's look: flower detail, shadows, sway animation, colors. Before a rendering
+change, note the current visual state; after, compare and confirm nothing
+regressed. If instancing loses per-instance color/shape/shadows, fix the
+instancing — do not ship the regression.
+
+### Branch & commit process
+Work on a `vibe/sessionN-*` branch. Main receives changes only via pull request
+after user verification. Commit in small, separately-describable units (core
+work, tests, atmosphere — separate commits) and push each.
+
+### Cross-platform scripts
+All npm scripts must work on Windows (the user's machine). Spawn binaries
+directly (e.g. `node_modules/typescript/bin/tsc`), never rely on shell PATH
+resolution, Unix-only paths, or Unix-only flags.
+
+### Dev-only UI hygiene
+Dev overlays and debug tools must not affect the default experience: they mount
+lazily (default OFF), are wrapped in an error boundary so a bug in them can
+never blank the app, and never bind browser-reserved keys (F1–F12,
+Ctrl/Ctrl+Shift combos). Verify the production build excludes them.
+
+### Interruption hygiene
+When a task is aborted or redirected mid-flight, report the exact state the
+repo was left in: partial installs, deleted files, uncommitted changes, and
+anything added then abandoned.
+
+### No rabbit holes
+If a verification step requires installing system packages, native libraries,
+or chasing environment dependencies (e.g. X11, browsers for headless testing),
+stop and propose the simplest honest alternative (in-app harness, manual user
+check) instead of continuing to install.
