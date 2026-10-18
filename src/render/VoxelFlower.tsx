@@ -11,9 +11,11 @@ export interface VoxelFlowerProps {
   /** override the def's sway (structures sway less) */
   swayStrength?: number;
   tilt?: [number, number];
+  /** invalid placement (occupied ground): red tint instead of the usual ghost look */
+  invalid?: boolean;
 }
 
-export function VoxelFlower({ def, position, rotationY, ghost, swayStrength, tilt }: VoxelFlowerProps) {
+export function VoxelFlower({ def, position, rotationY, ghost, swayStrength, tilt, invalid }: VoxelFlowerProps) {
   const groupRef = useRef<THREE.Group>(null);
   const phase = useRef(Math.random() * Math.PI * 2).current;
   const sway = swayStrength ?? def.sway ?? 0.05;
@@ -39,9 +41,9 @@ export function VoxelFlower({ def, position, rotationY, ghost, swayStrength, til
         >
           <boxGeometry args={part.size} />
           <meshLambertMaterial
-            color={part.color}
+            color={invalid ? '#d24a43' : part.color}
             transparent={ghost}
-            opacity={ghost ? 0.55 : 1}
+            opacity={ghost ? (invalid ? 0.5 : 0.55) : 1}
           />
         </mesh>
       ))}

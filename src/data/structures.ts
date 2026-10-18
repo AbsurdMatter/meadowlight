@@ -8,6 +8,8 @@ export interface StructureDef {
   emoji: string;
   /** world radius used for placement delete hit-testing */
   radius: number;
+  /** footprint radius for collision: nothing may be placed overlapping this */
+  footprint: number;
   parts: PlantPart[];
 }
 
@@ -21,6 +23,7 @@ export const STRUCTURES: StructureDef[] = [
     name: 'Skep Hive',
     emoji: '\u{1F41D}',
     radius: 1.4,
+    footprint: 1.5,
     parts: [
       { size: [1.2, 0.22, 1.2], offset: [0, 0.11, 0], color: DARK_WOOD },
       { size: [1.1, 0.42, 1.1], offset: [0, 0.42, 0], color: STRAW },
@@ -37,6 +40,7 @@ export const STRUCTURES: StructureDef[] = [
     name: 'Bee Bath',
     emoji: '\u{1FA7B}',
     radius: 1.1,
+    footprint: 1.2,
     parts: [
       { size: [0.9, 0.4, 0.9], offset: [0, 0.2, 0], color: '#b8b0a0' },
       { size: [1.1, 0.16, 1.1], offset: [0, 0.46, 0], color: '#cfc8ba' },
@@ -51,6 +55,7 @@ export const STRUCTURES: StructureDef[] = [
     name: 'Bee Hotel',
     emoji: '\u{1F3E8}',
     radius: 0.9,
+    footprint: 1.0,
     parts: [
       { size: [0.5, 1.5, 0.5], offset: [0, 0.55, 0], color: WOOD },
       { size: [0.8, 0.1, 0.8], offset: [0, 1.36, 0], color: DARK_WOOD },
@@ -67,6 +72,7 @@ export const STRUCTURES: StructureDef[] = [
     name: 'Hedge',
     emoji: '\u{1F33F}',
     radius: 1.2,
+    footprint: 1.4,
     parts: [
       { size: [2.0, 0.5, 0.55], offset: [-0.6, 0.25, 0], color: '#5f7a45' },
       { size: [1.7, 0.5, 0.5], offset: [0.55, 0.25, 0.06], color: '#6c8a4f' },

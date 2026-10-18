@@ -6,6 +6,7 @@ import { PLANT_BY_ID } from '../data/plants';
 import { STRUCTURE_BY_ID } from '../data/structures';
 import { usePlacementStore } from './placementStore';
 import { variationFor } from '../engine/variation';
+import { flowerBlocked, structureBlocked } from '../engine/collision';
 import type { StructureId } from '../data/structures';
 import { VoxelFlower } from './VoxelFlower';
 import { VoxelStructure } from './VoxelStructure';
@@ -23,6 +24,7 @@ export function PlacementSystem() {
   const groundPlane = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
   const hit = useRef(new THREE.Vector3());
   const [ghost, setGhost] = useState<[number, number, number] | null>(null);
+  const [ghostValid, setGhostValid] = useState(true);
   /** pointer position in NDC, tracked from raw pointermove events on the whole
    *  window so the ghost keeps following the cursor even when it crosses UI
    *  overlays (which swallow R3F's shared `pointer` updates) */
@@ -119,6 +121,21 @@ export function PlacementSystem() {
     return [cx, terrainHeight(cx, cz), cz];
   };
 
+  /** Same occupancy check for ghost preview and actual placement. */
+  const placementBlocked = (x: number, z: number): boolean => {
+    const s = usePlacementStore.getState();
+    if (s.selectedPlantId) return flowerBlocked(x, z, s.structures);
+    if (s.selectedStructureId)
+      return structureBlocked(
+        x,
+        z,
+        s.selectedStructureId as StructureId,
+        s.structures,
+        s.items,
+      );
+    return false;
+  };
+
   useFrame(() => {
     if ((!selectedPlantId && !selectedStructureId) || !pointerInsideCanvas.current) {
       setGhost(null);
@@ -130,6 +147,10 @@ export function PlacementSystem() {
         ? prev
         : next,
     );
+    if (next) {
+      const blocked = placementBlocked(next[0], next[2]);
+      setGhostValid((prev) => (prev === !blocked ? prev : !blocked));
+    }
   });
 
   useEffect(() => {
@@ -202,6 +223,7 @@ export function PlacementSystem() {
       if (!s.selectedPlantId && !s.selectedStructureId) return;
       const spot = resolvePlacement();
       if (!spot) return;
+      if (placementBlocked(spot[0], spot[2])) return;
       const variationOn = s.placementVariation;
       if (s.selectedPlantId) {
         s.plant({
@@ -242,10 +264,10 @@ export function PlacementSystem() {
   return (
     <group>
       {ghost && def && (
-        <VoxelFlower def={def} position={ghost} rotationY={ghostRotationY} ghost />
+        <VoxelFlower def={def} position={ghost} rotationY={ghostRotationY} ghost invalid={!ghostValid} />
       )}
       {ghost && structureDef && (
-        <VoxelStructure def={structureDef} position={ghost} rotationY={ghostRotationY} ghost />
+        <VoxelStructure def={structureDef} position={ghost} rotationY={ghostRotationY} ghost invalid={!ghostValid} />
       )}
     </group>
   );
