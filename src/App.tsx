@@ -11,6 +11,7 @@ import { DebugBridge } from './render/DebugBridge';
 import { OrbitControlsLite } from './render/OrbitControlsLite';
 import { Palette } from './ui/Palette';
 import { SeasonDial } from './ui/SeasonDial';
+import { ResetDialog } from './ui/ResetDialog';
 import { Toasts } from './ui/Toasts';
 import { Notebook } from './ui/Notebook';
 import { MilestoneWatcher } from './ui/MilestoneWatcher';
@@ -91,6 +92,11 @@ export default function App() {
       </Canvas>
       {loaded && <Palette />}
       {loaded && <SeasonDial />}
+      {loaded && (
+        <div style={{ position: 'absolute', top: 64, right: 12 }}>
+          <ResetDialog />
+        </div>
+      )}
       {loaded && <Toasts />}
       {loaded && <Notebook />}
       <MilestoneWatcher />

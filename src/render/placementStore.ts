@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import {
   loadWorld,
   saveWorld,
+  clearSavedWorld,
 } from '../engine/persistence';
 import type { PlacedItem, PlacedStructure } from '../engine/persistence';
 import { variationFor, type PlacementVariation } from '../engine/variation';
@@ -26,6 +27,9 @@ export interface PlacementState {
   /** the milestone that most recently fired (for the toast stack) */
   toasts: Toast[];
   notebook: { kind: 'plant' | 'structure' | 'meadow'; id: string } | null;
+  /** true while a blocking dialog (reset confirmation) is open: no placement */
+  modalOpen: boolean;
+  setModalOpen: (open: boolean) => void;
   plant: (item: PlacedItem) => void;
   placeStructure: (s: PlacedStructure) => void;
   removeAt: (id: string) => void;
@@ -39,6 +43,8 @@ export interface PlacementState {
   dismissToast: (id: number) => void;
   openNotebook: (entry: PlacementState['notebook']) => void;
   closeNotebook: () => void;
+  /** full reset: empty world + cleared save + default season/milestones */
+  resetWorld: () => void;
   save: () => void;
 }
 
@@ -56,6 +62,8 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   placementVariation: initial.placementVariation,
   toasts: [],
   notebook: null,
+  modalOpen: false,
+  setModalOpen: (open) => set({ modalOpen: open }),
   plant: (item) => set((s) => ({ items: [...s.items, item] })),
   placeStructure: (structure) => set((s) => ({ structures: [...s.structures, structure] })),
   removeAt: (id) => set((s) => ({ items: s.items.filter((it) => it.id !== id) })),
@@ -87,6 +95,21 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   openNotebook: (entry) => set({ notebook: entry }),
   closeNotebook: () => set({ notebook: null }),
+  resetWorld: () => {
+    clearSavedWorld();
+    set({
+      items: [],
+      structures: [],
+      milestones: [],
+      season: 'summer',
+      selectedPlantId: null,
+      selectedStructureId: null,
+      notebook: null,
+      toasts: [],
+      modalOpen: false,
+    });
+    get().save();
+  },
   save: () => {
     const s = get();
     saveWorld({

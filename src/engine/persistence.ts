@@ -156,6 +156,16 @@ export function loadWorld(): WorldData {
   }
 }
 
+/** Remove the saved world entirely (used by Reset — the save must not survive). */
+export function clearSavedWorld(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_KEY);
+  } catch {
+    // storage unavailable: nothing persisted, nothing to clear
+  }
+}
+
 export function saveWorld(data: Omit<WorldData, 'version'>): void {
   try {
     const payload: WorldData = { version: 3, ...data };

@@ -25,6 +25,7 @@ export function PlacementSystem() {
   const hit = useRef(new THREE.Vector3());
   const [ghost, setGhost] = useState<[number, number, number] | null>(null);
   const [ghostValid, setGhostValid] = useState(true);
+  const modalOpen = usePlacementStore((s) => s.modalOpen);
   /** pointer position in NDC, tracked from raw pointermove events on the whole
    *  window so the ghost keeps following the cursor even when it crosses UI
    *  overlays (which swallow R3F's shared `pointer` updates) */
@@ -137,7 +138,7 @@ export function PlacementSystem() {
   };
 
   useFrame(() => {
-    if ((!selectedPlantId && !selectedStructureId) || !pointerInsideCanvas.current) {
+    if ((!selectedPlantId && !selectedStructureId) || !pointerInsideCanvas.current || modalOpen) {
       setGhost(null);
       return;
     }
@@ -183,6 +184,7 @@ export function PlacementSystem() {
         Math.hypot(e.clientX - dragState.current.x, e.clientY - dragState.current.y) > CLICK_SLOP_PX;
       if (wasRotateDrag) return;
       e.preventDefault();
+      if (usePlacementStore.getState().modalOpen) return;
       const s = usePlacementStore.getState();
       const spot = groundAt(e);
       if (!spot) return;
@@ -219,6 +221,7 @@ export function PlacementSystem() {
      *  notebook click handlers can no longer swallow the planting click. */
     const onClick = (e: MouseEvent) => {
       if (e.button !== 0 || !wasClick(e)) return;
+      if (usePlacementStore.getState().modalOpen) return;
       const s = usePlacementStore.getState();
       if (!s.selectedPlantId && !s.selectedStructureId) return;
       const spot = resolvePlacement();

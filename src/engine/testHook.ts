@@ -19,6 +19,7 @@ declare global {
       setSeason: (season: 'spring' | 'summer' | 'autumn' | 'winter') => void;
       milestones: () => string[];
       beeCount: () => number;
+      resetWorld: () => void;
       openNotebookPlant: (itemId: string) => void;
       __three?: {
         camera: PerspectiveCamera;
@@ -62,6 +63,7 @@ export function installTestHook() {
     setSeason: (season) => usePlacementStore.getState().setSeason(season),
     milestones: () => usePlacementStore.getState().milestones,
     beeCount: () => beeDebug.count,
+    resetWorld: () => usePlacementStore.getState().resetWorld(),
     openNotebookPlant: (itemId) =>
       usePlacementStore.getState().openNotebook({ kind: 'plant', id: itemId }),
   };
