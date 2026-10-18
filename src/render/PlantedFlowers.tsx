@@ -4,8 +4,10 @@ import * as THREE from 'three';
 import { PLANTS } from '../data/plants';
 import { usePlacementStore } from './placementStore';
 import { noVariation } from '../engine/variation';
+import { inBloom } from '../engine/pollinator';
 
 const tmpColor = new THREE.Color();
+const dullColor = new THREE.Color();
 const tmpMat = new THREE.Matrix4();
 const rotYMat = new THREE.Matrix4();
 const swayXMat = new THREE.Matrix4();
@@ -18,8 +20,13 @@ const scaleMat = new THREE.Matrix4();
 /** generous fixed capacity per species — meshes are never recreated on plant/remove */
 const CAPACITY_PER_SPECIES = 400;
 
+/** out-of-season petals shrink + dull (visible bloom succession) */
+const OFF_BLOOM_SCALE = 0.25;
+const OFF_BLOOM_LIGHTEN = 0.35;
+
 function FlowerInstances() {
   const items = usePlacementStore((s) => s.items);
+  const season = usePlacementStore((s) => s.season);
   const refs = useRef<{ meshes: Record<string, THREE.InstancedMesh | null> }>({
     meshes: {},
   });
@@ -29,6 +36,7 @@ function FlowerInstances() {
     for (const def of PLANTS) {
       const mesh = r.meshes[def.id];
       if (!mesh) continue;
+      const blooming = inBloom(def.id, season);
       let i = 0;
       for (const item of items) {
         if (item.plantId !== def.id) continue;
@@ -37,7 +45,9 @@ function FlowerInstances() {
         const swayX = Math.cos(t * 0.7 + item.phase * 1.3) * def.sway * 0.5;
         for (let pi = 0; pi < def.parts.length; pi++) {
           const part = def.parts[pi];
+          const petal = part.petal === true;
           const partSway = part.offset[1] / Math.max(def.height, 0.001);
+          const bloomScale = !petal || blooming ? 1 : OFF_BLOOM_SCALE;
           tmpMat.makeTranslation(
             item.position[0],
             item.position[1] + variation.heightJitter,
@@ -55,10 +65,20 @@ function FlowerInstances() {
           tmpMat.multiply(swayZMat);
           offsetMat.makeTranslation(part.offset[0], part.offset[1], part.offset[2]);
           tmpMat.multiply(offsetMat);
-          scaleMat.makeScale(part.size[0], part.size[1], part.size[2]);
+          scaleMat.makeScale(
+            part.size[0] * bloomScale,
+            part.size[1] * bloomScale,
+            part.size[2] * bloomScale,
+          );
           tmpMat.multiply(scaleMat);
           mesh.setMatrixAt(i, tmpMat);
-          mesh.setColorAt(i, tmpColor.set(part.color));
+          tmpColor.set(part.color);
+          if (petal && !blooming) {
+            dullColor.copy(tmpColor).lerp(new THREE.Color('#b9b39a'), OFF_BLOOM_LIGHTEN);
+            mesh.setColorAt(i, dullColor);
+          } else {
+            mesh.setColorAt(i, tmpColor);
+          }
           i++;
         }
       }

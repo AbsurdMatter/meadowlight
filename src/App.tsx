@@ -6,22 +6,33 @@ import { Sky } from './render/Sky';
 import { PlantedFlowers } from './render/PlantedFlowers';
 import { PlacedStructures } from './render/PlacedStructures';
 import { BeeSwarm } from './render/BeeSwarm';
-import { DebugBridge } from './render/DebugBridge';
 import { PlacementSystem } from './render/PlacementSystem';
+import { DebugBridge } from './render/DebugBridge';
 import { OrbitControlsLite } from './render/OrbitControlsLite';
 import { Palette } from './ui/Palette';
+import { SeasonDial } from './ui/SeasonDial';
 import { PerfOverlay } from './ui/PerfOverlay';
 import { usePlacementStore } from './render/placementStore';
+import { SEASON_INFO } from './data/seasons';
+
+const SEASON_LIGHT: Record<string, { sun: string; ambient: number; intensity: number }> = {
+  spring: { sun: '#ffe9c0', ambient: 0.36, intensity: 1.4 },
+  summer: { sun: '#ffd9a0', ambient: 0.32, intensity: 1.5 },
+  autumn: { sun: '#ffc98a', ambient: 0.3, intensity: 1.35 },
+  winter: { sun: '#dfe8f5', ambient: 0.42, intensity: 1.1 },
+};
 
 function Scene() {
+  const season = usePlacementStore((s) => s.season);
+  const light = SEASON_LIGHT[season];
   return (
     <>
       <Sky />
       <hemisphereLight args={['#ffe6c7', '#5a7a4a', 0.6]} />
       <directionalLight
         position={[24, 16, 10]}
-        intensity={1.5}
-        color="#ffd9a0"
+        intensity={light.intensity}
+        color={light.sun}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-camera-left={-26}
@@ -34,7 +45,7 @@ function Scene() {
         shadow-normalBias={0.6}
         shadow-radius={6}
       />
-      <ambientLight intensity={0.32} color="#fff3e0" />
+      <ambientLight intensity={light.ambient} color="#fff3e0" />
       <Meadow />
       <Background />
       <PlantedFlowers />
@@ -49,6 +60,7 @@ function Scene() {
 
 export default function App() {
   const selectedPlantId = usePlacementStore((s) => s.selectedPlantId);
+  const season = usePlacementStore((s) => s.season);
   const [loaded, setLoaded] = useState(false);
   const saveNow = useCallback(() => {
     usePlacementStore.getState().save();
@@ -74,6 +86,7 @@ export default function App() {
         <Scene />
       </Canvas>
       {loaded && <Palette />}
+      {loaded && <SeasonDial />}
       {PerfOverlay && <PerfOverlay />}
       <div
         style={{
@@ -88,7 +101,9 @@ export default function App() {
           pointerEvents: 'none',
         }}
       >
-🐝 Meadowlight — {placing ? 'click to place' : 'pick a flower below'} · right-drag rotates · R rotates · F natural placement
+        {'\u{1F41D}'} Meadowlight {SEASON_INFO[season].emoji} {SEASON_INFO[season].label} —{' '}
+        {placing ? 'click to place' : 'pick a flower below'} · right-drag rotates · R rotates ·{' '}
+        F natural placement
       </div>
     </div>
   );
