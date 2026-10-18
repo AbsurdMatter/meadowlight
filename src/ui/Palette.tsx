@@ -17,6 +17,20 @@ const chipStyle = (active: boolean, enabled: boolean): React.CSSProperties => ({
   opacity: enabled ? 1 : 0.45,
 });
 
+const sectionLabelStyle: React.CSSProperties = {
+  fontSize: 11,
+  letterSpacing: 0.6,
+  textTransform: 'uppercase',
+  color: '#9a7a45',
+  alignSelf: 'flex-start',
+};
+
+const sectionStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+};
+
 const buttonStyle = (active: boolean): React.CSSProperties => ({
   padding: '2px 10px',
   borderRadius: 8,
@@ -79,43 +93,57 @@ export function Palette() {
         </button>
         <span style={{ opacity: 0.65 }}>(F)</span>
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        {PLANTS.map((p) => {
-          const active = selectedPlantId === p.id;
-          return (
-            <button
-              key={p.id}
-              onClick={() => select(active ? null : p.id)}
-              style={chipStyle(active, true)}
-            >
-              <span
-                style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: 5,
-                  background: p.parts[p.parts.length - 1].color,
-                  border: '2px solid #7a9d54',
-                }}
-              />
-              <span style={{ fontSize: 12, color: '#7a5a2b' }}>{p.name}</span>
-            </button>
-          );
-        })}
-        {STRUCTURES.map((st) => {
-          const active = selectedStructureId === st.id;
-          const enabled = unlocked[st.id];
-          return (
-            <button
-              key={st.id}
-              onClick={() => (enabled ? selectStructure(active ? null : st.id) : null)}
-              style={chipStyle(active, enabled)}
-              title={enabled ? st.name : 'keep tending the meadow to unlock this'}
-            >
-              <span style={{ fontSize: 18, lineHeight: '22px' }}>{st.emoji}</span>
-              <span style={{ fontSize: 12, color: '#7a5a2b' }}>{st.name}</span>
-            </button>
-          );
-        })}
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+        <div style={sectionStyle}>
+          <span style={sectionLabelStyle} data-section="flowers">
+            🌷 Flowers
+          </span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {PLANTS.map((p) => {
+              const active = selectedPlantId === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => select(active ? null : p.id)}
+                  style={chipStyle(active, true)}
+                >
+                  <span
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: 5,
+                      background: p.parts[p.parts.length - 1].color,
+                      border: '2px solid #7a9d54',
+                    }}
+                  />
+                  <span style={{ fontSize: 12, color: '#7a5a2b' }}>{p.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div style={sectionStyle}>
+          <span style={sectionLabelStyle} data-section="structures">
+            🏗️ Structures
+          </span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {STRUCTURES.map((st) => {
+              const active = selectedStructureId === st.id;
+              const enabled = unlocked[st.id];
+              return (
+                <button
+                  key={st.id}
+                  onClick={() => (enabled ? selectStructure(active ? null : st.id) : null)}
+                  style={chipStyle(active, enabled)}
+                  title={enabled ? st.name : 'keep tending the meadow to unlock this'}
+                >
+                  <span style={{ fontSize: 18, lineHeight: '22px' }}>{st.emoji}</span>
+                  <span style={{ fontSize: 12, color: '#7a5a2b' }}>{st.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
