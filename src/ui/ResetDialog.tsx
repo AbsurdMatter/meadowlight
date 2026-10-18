@@ -17,15 +17,20 @@ class DialogBoundary extends Component<{ children: ReactNode }, { failed: boolea
 
 function ResetDialogInner() {
   const resetWorld = usePlacementStore((s) => s.resetWorld);
+  const setModalOpen = usePlacementStore((s) => s.setModalOpen);
   const [open, setOpen] = useState(false);
+  const show = (v: boolean) => {
+    setOpen(v);
+    setModalOpen(v);
+  };
   const onReset = () => {
     resetWorld();
-    setOpen(false);
+    show(false);
   };
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => show(true)}
         style={{
           padding: '4px 12px',
           borderRadius: 10,
@@ -43,7 +48,9 @@ function ResetDialogInner() {
       {open && (
         <div
           style={{
-            position: 'absolute',
+            // fixed to the viewport, not the button's corner wrapper — the
+            // backdrop must cover and center over the whole window
+            position: 'fixed',
             inset: 0,
             background: 'rgba(74, 53, 34, 0.45)',
             display: 'flex',
@@ -53,7 +60,7 @@ function ResetDialogInner() {
             pointerEvents: 'auto',
           }}
           onClick={(e) => {
-            if (e.target === e.currentTarget) setOpen(false);
+            if (e.target === e.currentTarget) show(false);
           }}
         >
           <div
@@ -76,7 +83,7 @@ function ResetDialogInner() {
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button
-                onClick={() => setOpen(false)}
+                onClick={() => show(false)}
                 style={{
                   padding: '6px 16px',
                   borderRadius: 10,
