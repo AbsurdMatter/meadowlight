@@ -42,6 +42,45 @@ declare global {
   }
 }
 
+/**
+ * Demo seed (dev-only): ?demo=1 plants a curated, varied meadow — flowers
+ * of all six species in drifts, hive, bee bath, bee hotel, hedge, and a
+ * wild corner — for instant demos. Runs only when the URL param is set AND
+ * the build is a dev build, wrapped in a try/catch so a bug here can never
+ * blank the app. Default play is untouched: without the param this function
+ * is never called (guarded at the single call site in App, which dev-gates
+ * it via the PerfOverlay-style lazy check).
+ */
+let demoSeeded = false;
+export function maybeSeedDemoWorld() {
+  if (demoSeeded) return;
+  if (typeof window === 'undefined') return;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('demo') !== '1') return;
+    const w = window.__meadowlight;
+    if (!w) return;
+    demoSeeded = true;
+    const species = ['lavender', 'clover', 'poppy', 'sunflower', 'thyme', 'forget-me-not'];
+    let i = 0;
+    for (const sp of species) {
+      for (let k = 0; k < 5; k++) {
+        const a = i * 2.399963;
+        const r = 4 + Math.sqrt((i + 1) / 30) * 12;
+        w.plant(sp, Math.cos(a) * r, Math.sin(a) * r);
+        i++;
+      }
+    }
+    w.placeStructure('hive', 0, 0);
+    w.placeStructure('bath', 2.5, 0.5);
+    w.placeStructure('hotel', -3, 3);
+    w.placeStructure('hedge', -6, -5);
+    w.placeStructure('wildcorner', -4.5, 5);
+  } catch {
+    // dev-only convenience: never break the app on failure
+  }
+}
+
 export function installTestHook() {
   if (typeof window === 'undefined') return;
   window.__meadowlight = {

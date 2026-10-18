@@ -23,6 +23,7 @@ import { Notebook } from './ui/Notebook';
 import { MilestoneWatcher } from './ui/MilestoneWatcher';
 import { PerfOverlay } from './ui/PerfOverlay';
 import { usePlacementStore } from './render/placementStore';
+import { maybeSeedDemoWorld } from './engine/testHook';
 import { SEASON_INFO } from './data/seasons';
 import { LIGHT_WARMTH, LONG_SHADOWS } from './data/polish';
 
@@ -120,6 +121,10 @@ export default function App() {
     };
   }, [saveNow]);
   useEffect(() => setLoaded(true), []);
+  // dev-only demo seed (?demo=1): lazy, error-bounded, no default-play effect
+  useEffect(() => {
+    if (loaded) maybeSeedDemoWorld();
+  }, [loaded]);
   const placing = selectedPlantId ?? selectedStructureId;
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
