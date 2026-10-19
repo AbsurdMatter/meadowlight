@@ -131,9 +131,20 @@ export function DistantRidge() {
       const rangeBoost = Math.max(0, Math.cos(a * 2 + 0.8)) * 1.1;
       const h = HILLS.boxHeight + 1.2 + rng() * 1.4 + rangeBoost;
       const w = 9 + rng() * 6;
-      // bottom clears the oracle (the #28 pattern)
-      mat.makeScale(w, h, 4);
-      mat.setPosition(x, ground + h * 0.35, z);
+      // PR #35 second-round fix (the point-anchor was not enough): a
+      // distant hill must read as land rising from the terrain — the box
+      // bottom must sit BELOW ground across its FULL footprint, with
+      // margin for reachable viewing angles. The center is placed so the
+      // box rises h above the LOCAL anchor ground and extends a fixed
+      // 4.5u skirt below it — deeper than the ~2u the terrain can rise
+      // across a 15u-wide box footprint, so no edge bottom clears the
+      // terrain behind it at any camera angle the orbit allows.
+      const skirt = 4.5;
+      const total = h + skirt;
+      mat.makeScale(w, total, 4);
+      // bottom = ground - skirt (sunk below terrain with margin); the
+      // visible hill crest still rises h above the anchor ground
+      mat.setPosition(x, ground - skirt + total / 2, z);
       mesh.setMatrixAt(i, mat);
       // the hills' own color logic: hill palette, fog-blended by distance
       // with the same curve the Hills renderer uses (fogBlendStrength 0.55)
