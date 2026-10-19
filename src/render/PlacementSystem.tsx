@@ -8,7 +8,7 @@ import { STRUCTURE_BY_ID } from '../data/structures';
 import { usePlacementStore } from './placementStore';
 import { variationFor, type PlacementVariation } from '../engine/variation';
 import { flowerBlocked, structureBlocked } from '../engine/collision';
-import { isBuildable } from '../engine/ground';
+import { isPlantableCell } from '../engine/ground';
 import type { StructureId } from '../data/structures';
 import { VoxelFlower } from './VoxelFlower';
 import { VoxelStructure } from './VoxelStructure';
@@ -148,6 +148,7 @@ export function PlacementSystem() {
         }
         const hx = ray.origin.x + ray.direction.x * hi;
         const hz = ray.origin.z + ray.direction.z * hi;
+        lastRawHit.current = [hx, hz];
         return clampToMeadow(hx, hz);
       }
       tPrev = t;
@@ -155,6 +156,7 @@ export function PlacementSystem() {
     // no terrain hit: fall back to the flat meadow plane (grazing rays)
     const target = ray.intersectPlane(groundPlane.current, hit.current);
     if (!target) return null;
+    lastRawHit.current = [target.x, target.z];
     return clampToMeadow(target.x, target.z);
   };
 
@@ -162,6 +164,17 @@ export function PlacementSystem() {
   const resolveFromNdc = (ndcX: number, ndcY: number): [number, number, number] | null => {
     return raycastTerrain(new THREE.Vector2(ndcX, ndcY));
   };
+
+  /**
+   * PR #35 corner overhang: the RAW terrain hit of the last resolve, before
+   * clampToMeadow relocated it. The clamp silently pulls any hit into the
+   * placement box, so a pointer over the scenic corner fold (terrain OUTSIDE
+   * the box) used to show a VALID ghost at the box edge — accepting placement
+   * while the player points at the overhang. The refusal path now asks the
+   * same isPlantableCell query the cell-map overlay classifies with, about
+   * the RAW cell: water, shore, and terrain-over-meadow all refuse.
+   */
+  const lastRawHit = useRef<[number, number] | null>(null);
 
 
   const clampToMeadow = (x: number, z: number): [number, number, number] | null => {
@@ -172,9 +185,17 @@ export function PlacementSystem() {
 
   /** Same occupancy + ground check for ghost preview and actual placement —
    *  the oracle answers "what's at this cell" for the click path too (#26):
-   *  water and the shore band are not buildable, ghost shows invalid there. */
+   *  water and the shore band are not buildable, ghost shows invalid there.
+   *  PR #35 corner overhang: isPlantableCell adds the placement-box AND the
+   *  cell-map overlay classifies with, so terrain-over-meadow corner cells
+   *  refuse exactly like water/shore (same red ghost, click no-ops). */
   const placementBlocked = (x: number, z: number): boolean => {
-    if (!isBuildable(x, z)) return true;
+    if (!isPlantableCell(x, z)) return true;
+    // the raw hit cell governs: pointing at the corner fold (terrain outside
+    // the box), water, or shore refuses even though the ghost renders at the
+    // clamped box edge — same red-invalid feedback as water/shore
+    const raw = lastRawHit.current;
+    if (raw && !isPlantableCell(raw[0], raw[1])) return true;
     const s = usePlacementStore.getState();
     if (s.selectedPlantId) return flowerBlocked(x, z, s.structures);
     if (s.selectedStructureId)

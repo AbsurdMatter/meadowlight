@@ -83,3 +83,18 @@ export function isGrassSpawnable(x: number, z: number): boolean {
 export function isBuildable(x: number, z: number): boolean {
   return groundAt(x, z).kind === 'meadow';
 }
+
+/**
+ * PR #35 corner-overhang fix: THE single plantable-cell query. A cell is
+ * plantable only when the ground oracle says meadow AND it lies inside the
+ * placement box (|x|,|z| <= MEADOW_SIZE/2 - 1) — the exact conjunction the
+ * cell-map overlay classifies with. The scenic terrain folds over the
+ * meadow square's corners (approved to keep); those overhang cells sit
+ * outside the box and must REFUSE placement exactly like water/shore.
+ * The overlay, the ghost's refusal path, and the click path all call
+ * this — one source, no divergence.
+ */
+export function isPlantableCell(x: number, z: number): boolean {
+  if (!isBuildable(x, z)) return false;
+  return Math.abs(x) <= MEADOW_SIZE / 2 - 1 && Math.abs(z) <= MEADOW_SIZE / 2 - 1;
+}
