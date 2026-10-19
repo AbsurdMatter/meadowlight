@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -78,7 +78,8 @@ const { LAKE, TERRAIN_SHAPE, shapedHeight, POND_FLAT_HEIGHT } = require(OUT + '/
 const { MEADOW_SIZE, terrainHeight } = require(OUT + '/engine/terrain.js');
 const { isRaining, setRaining } = require(OUT + '/engine/weather.js');
 const { skyPaletteAt, GOLDEN_HOUR, sunElevation, isDaylight, isDusk, DUSK_START, DUSK_END, DAY_CYCLE_SECONDS, dayPhase, setDayPhase, advanceDay, resumeDayCycle, dayCycleOverridden } = require(OUT + '/engine/dayCycle.js');
-const { SEASONS } = require(OUT + '/data/seasons.js');
+const { SEASONS, SEASON_SECONDS } = require(OUT + '/data/seasons.js');
+const { seasonProgress, advanceSeasons, forceSeason, resumeSeasonClock, seasonClockOverridden, setSeasonProgressForTest, nextSeason } = require(OUT + '/engine/seasonClock.js');
 const { checkMilestones } = require(OUT + '/engine/milestones.js');
 const { variationFor, rollVariation, noVariation, VARIATION_TUNING } = require(OUT + '/engine/variation.js');
 const { choosePlantFact, chooseStructureFact, chooseMeadowFact } = require(OUT + '/engine/factSelection.js');
@@ -370,6 +371,60 @@ test('dusk window: fireflies appear only in 0.79-0.92', () => {
   assert.ok(isDusk(0.79) && isDusk(0.92), 'window is inclusive');
   assert.ok(!isDusk(0.5), 'noon is not dusk');
   assert.ok(!isDusk(0.95) && !isDusk(0.78), 'night and late afternoon are not dusk');
+});
+
+// ---------- session 6 U1 (#11): auto-advancing season calendar ----------
+test('season clock: 12-minute season, rollover reports the crossed season', () => {
+  assert.strictEqual(SEASON_SECONDS, 720, 'season length per approved plan (10-15 min window)');
+  resumeSeasonClock();
+  setSeasonProgressForTest(0);
+  let crossed = advanceSeasons(360, 'summer');
+  assert.strictEqual(crossed.length, 0, 'half a season crosses nothing');
+  assert.ok(Math.abs(seasonProgress() - 0.5) < 1e-9, 'progress is half');
+  crossed = advanceSeasons(360, 'summer');
+  assert.deepStrictEqual(crossed, ['autumn'], 'a full season rolls into autumn');
+  assert.ok(Math.abs(seasonProgress() - 0) < 1e-9, 'rollover leaves progress at season start');
+});
+
+test('season clock: winter wraps to spring; huge deltas cross several seasons', () => {
+  resumeSeasonClock();
+  setSeasonProgressForTest(0.9);
+  const crossed = advanceSeasons(SEASON_SECONDS * 2.5, 'winter');
+  assert.deepStrictEqual(crossed, ['spring', 'summer', 'autumn'], 'wrap + multi-cross in order');
+  assert.ok(Math.abs(seasonProgress() - 0.4) < 1e-9, 'fractional remainder preserved');
+});
+
+test('season clock: forceSeason holds (manual dial = P panel = one override path)', () => {
+  forceSeason('spring');
+  assert.ok(seasonClockOverridden(), 'the dial/panel override must hold the calendar');
+  assert.strictEqual(seasonProgress(), 0, 'an override starts the forced season at its beginning');
+  assert.deepStrictEqual(advanceSeasons(9999, 'spring'), [], 'held clock never advances');
+  assert.strictEqual(seasonProgress(), 0, 'held clock position is stable');
+  resumeSeasonClock();
+  assert.ok(!seasonClockOverridden(), 'resume releases the override');
+});
+
+test('season clock: boundary interpretation — 0.999 saves resume the SAME season, never pre-roll', () => {
+  // the save->reload->resume path: a position < 1 is mid-season by
+  // definition; only advanceSeasons may cross a boundary, so a reload
+  // can never re-interpret a near-boundary save as the next season
+  resumeSeasonClock();
+  setSeasonProgressForTest(0.999);
+  assert.ok(seasonProgress() < 1, 'a saved 0.999 loads as the same season');
+  const crossed = advanceSeasons(10, 'summer');
+  assert.deepStrictEqual(crossed, ['autumn'], 'only real advancement crosses the boundary');
+  assert.ok(seasonProgress() < 0.02, 'crossing lands at the next season start (tiny residue from the crossing step is fine)');
+  // exact wrap: 1.0 units of time from 0 is the NEXT season's start, not a skip
+  setSeasonProgressForTest(0);
+  assert.deepStrictEqual(advanceSeasons(SEASON_SECONDS, 'spring'), ['summer'], 'exactly one season advances one step');
+  assert.ok(Math.abs(seasonProgress()) < 1e-9, 'exact wrap has zero residue');
+});
+
+test('season clock: nextSeason ordering', () => {
+  assert.strictEqual(nextSeason('spring'), 'summer');
+  assert.strictEqual(nextSeason('summer'), 'autumn');
+  assert.strictEqual(nextSeason('autumn'), 'winter');
+  assert.strictEqual(nextSeason('winter'), 'spring');
 });
 
 // ---------- session 5 U7 (#14): weather — cozy, no fail state ----------
