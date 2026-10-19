@@ -53,6 +53,15 @@ export interface PlacementState {
   closeNotebook: () => void;
   /** full reset: empty world + cleared save + default season/milestones */
   resetWorld: () => void;
+  /**
+   * #30: dev-only reload-from-save. Discards ALL in-memory state and
+   * rehydrates purely from the localStorage blob — the exact loadWorld()
+   * path a fresh page load takes (including the corrupt/unknown-version
+   * fallback: blob backed up, fresh world booted). Critically does NOT
+   * save() first, so a save round-trip test observes what was actually
+   * persisted, never the live objects it was saved from.
+   */
+  reloadFromSave: () => void;
   save: () => void;
 }
 
@@ -140,6 +149,24 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       onboardingDismissed: false,
     });
     get().save();
+  },
+  reloadFromSave: () => {
+    const w = loadWorld();
+    set({
+      items: w.items,
+      structures: w.structures,
+      milestones: w.milestones,
+      season: w.season,
+      selectedPlantId: null,
+      selectedStructureId: null,
+      notebook: null,
+      toasts: [],
+      modalOpen: false,
+      seenFacts: w.seenFacts ?? [],
+      wildSeasons: w.wildSeasons ?? [],
+      onboardingDismissed: w.onboardingDismissed ?? false,
+      placementVariation: w.placementVariation,
+    });
   },
   save: () => {
     const s = get();

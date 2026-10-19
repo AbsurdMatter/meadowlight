@@ -90,8 +90,8 @@ function SaveInspector() {
       </button>
       <button
         data-perf-reload-save
-        onClick={() => window.location.reload()}
-        title="Reload the page and load the current save from localStorage"
+        onClick={() => { usePlacementStore.getState().reloadFromSave(); refresh(); }}
+        title="Discard in-memory state and rebuild the world from the localStorage blob (the same load path as a fresh page load — no save first)"
         style={{ marginTop: 4, marginLeft: 6, padding: '4px 8px', borderRadius: 6, border: 'none', background: '#4a6a9a', color: '#fff', fontFamily: 'inherit', cursor: 'pointer' }}
       >
         reload current save
