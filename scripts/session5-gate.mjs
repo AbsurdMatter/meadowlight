@@ -295,14 +295,17 @@ async function checkBushes(browser) {
       let bushletCount = 0;
       let radii = [];
       scene.traverse((o) => {
-        if (!o.isInstancedMesh || !o.instanceMatrix || o.count === 0) return;
+        // the bushlet mesh is identifiable by capacity: 80 grass clumps x
+        // 4 parts = 320 (grass blades cap 560, structures 360)
+        if (!o.isInstancedMesh || !o.instanceMatrix || o.instanceMatrix.count !== 320) return;
         const m = o.instanceMatrix.array;
-        // count INSTANCES with part[0]'s exact 0.55 scale signature — one
-        // per bushlet (its other parts have different scales)
+        // count bushlet part[0] instances: 0.55 base x the seeded scale
+        // jitter 0.85..1.20 (rotation commit 7d1c1f1) => 0.47..0.66; the
+        // other parts (0.40/0.24/0.12 bases) stay below 0.48 even jittered
         for (let i = 0; i < o.count; i++) {
           const off = i * 16;
           const sx = Math.hypot(m[off], m[off + 1], m[off + 2]);
-          if (Math.abs(sx - 0.55) < 0.01) {
+          if (sx > 0.48 && sx < 0.67) {
             bushletCount++;
             const tx = m[off + 12], tz = m[off + 14];
             radii.push(Math.hypot(tx, tz));
