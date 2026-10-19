@@ -5,6 +5,7 @@ import { BEE_TUNING } from '../data/bees';
 import { PLANT_BY_ID } from '../data/plants';
 import { usePlacementStore } from './placementStore';
 import { computeAppeal, beesForHive, inBloom, FORAGE_RADIUS, type PollinatorWorld } from '../engine/pollinator';
+import { isRaining, RAIN_TUNING } from '../engine/weather';
 import { noVariation } from '../engine/variation';
 import type { PlacedStructure } from '../engine/persistence';
 
@@ -205,8 +206,12 @@ export function BeeSwarm() {
       }
 
       if (bee.restingUntil <= t && bee.targetFlowerId === null) {
-        // pick a new target: mostly flowers, sometimes home
-        if (blooming.length > 0 && Math.random() > 0.15) {
+        // #14: rain sends the colony home - cozy, never punished; a bee
+        // mid-trip finishes it, the next pick is the hive
+        if (RAIN_TUNING.beesHome && isRaining()) {
+          bee.headingHome = true;
+          bee.wanderTarget = null;
+        } else if (blooming.length > 0 && Math.random() > 0.15) {
           bee.targetFlowerId = blooming[Math.floor(Math.random() * blooming.length)];
           // re-resolve immediately: flowerInfo must match the new target this
           // same frame, or steering below would aim at the hive while the bee

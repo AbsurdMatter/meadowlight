@@ -10,6 +10,8 @@ import { beeDebug } from '../render/BeeSwarm';
 import { wildDebug } from '../render/WildPollinators';
 import { fireflyDebug } from '../render/Fireflies';
 import { setDayPhase } from './dayCycle';
+import { setRaining } from './weather';
+import { rainDebug } from '../render/Rain';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
 import { capturePostcardPng } from './postcard';
 import { audioDebugInfo, audioRunning } from './audio';
@@ -33,6 +35,8 @@ declare global {
     wildDebug: () => unknown;
     fireflyDebug: () => unknown;
     setDayPhase: (p: number) => void;
+    setRaining: (v: boolean) => void;
+    rainDebug: () => unknown;
     rareBeeCount: () => number;
     capturePostcard: () => string | null;
     audioDebug: () => unknown;
@@ -134,6 +138,8 @@ export function installTestHook() {
     wildDebug: () => ({ ...wildDebug }),
     fireflyDebug: () => ({ ...fireflyDebug }),
     setDayPhase,
+    setRaining,
+    rainDebug: () => ({ ...rainDebug }),
     rareBeeCount: () => rareBeeDebug.count,
     capturePostcard: () => capturePostcardPng(),
     audioDebug: () => audioDebugInfo(),

@@ -5,6 +5,7 @@ import { PLANTS } from '../data/plants';
 import { usePlacementStore } from './placementStore';
 import { noVariation } from '../engine/variation';
 import { inBloom } from '../engine/pollinator';
+import { isRaining, RAIN_TUNING } from '../engine/weather';
 
 const tmpColor = new THREE.Color();
 const dullColor = new THREE.Color();
@@ -61,13 +62,17 @@ function FlowerInstances() {
   useFrame(({ clock, camera }) => {
     const r = refs.current;
     const t = clock.elapsedTime;
+    // #14: rain makes blooming petals glisten (washes the colors brighter)
+    const glisten = RAIN_TUNING.glisten && isRaining();
+    let glistened = false;
     for (const def of PLANTS) {
       const mesh = r.meshes[def.id];
       if (!mesh) continue;
       const blooming = inBloom(def.id, season);
-      const thisColorKey = season + ':' + items.length;
+      const thisColorKey = season + ':' + items.length + (glisten ? ':rain:' + Math.floor(t * 8) : '');
       const colorsDirty = colorKey.current[def.id] !== thisColorKey;
       colorKey.current[def.id] = thisColorKey;
+      void glistened;
       const ids: string[] = [];
       let i = 0;
       for (const item of items) {
@@ -114,6 +119,13 @@ function FlowerInstances() {
             if (petal && !blooming) {
               dullColor.copy(tmpColor).lerp(new THREE.Color('#b9b39a'), OFF_BLOOM_LIGHTEN);
               mesh.setColorAt(i, dullColor);
+            } else if (petal && glisten) {
+              // #14: rain glisten — wet petals catch the light, a soft slow
+              // pulse per flower (phase offset) so the meadow shimmers gently
+              const g = 0.12 + 0.1 * Math.sin(t * 2.2 + item.phase * 3);
+              dullColor.copy(tmpColor).lerp(new THREE.Color('#ffffff'), g);
+              mesh.setColorAt(i, dullColor);
+              glistened = true;
             } else {
               mesh.setColorAt(i, tmpColor);
             }

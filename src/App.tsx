@@ -7,6 +7,7 @@ import { Sky, DistantRidge } from './render/Sky';
 import { dayPhase, skyPaletteAt } from './engine/dayCycle';
 import { WildPollinators } from './render/WildPollinators';
 import { Fireflies } from './render/Fireflies';
+import { Rain } from './render/Rain';
 import { PlantedFlowers } from './render/PlantedFlowers';
 import { PlacedStructures } from './render/PlacedStructures';
 import { BeeSwarm } from './render/BeeSwarm';
@@ -109,6 +110,7 @@ function Scene() {
       <SolitaryBees />
       <WildPollinators />
       <Fireflies />
+      <Rain />
       <BloomPipeline />
       {CellMapLayer && <CellMapLayer />}
       <PlacementSystem />

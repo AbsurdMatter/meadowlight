@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -76,6 +76,7 @@ const { PLANTS, PLANT_BY_ID } = require(OUT + '/data/plants.js');
 const { groundAt, waterSurfaceHeight, pondFloorHeight } = require(OUT + '/engine/ground.js');
 const { LAKE, TERRAIN_SHAPE, shapedHeight, POND_FLAT_HEIGHT } = require(OUT + '/data/environment.js');
 const { MEADOW_SIZE, terrainHeight } = require(OUT + '/engine/terrain.js');
+const { isRaining, setRaining } = require(OUT + '/engine/weather.js');
 const { skyPaletteAt, GOLDEN_HOUR, sunElevation, isDaylight, isDusk, DUSK_START, DUSK_END, DAY_CYCLE_SECONDS, dayPhase, setDayPhase, advanceDay } = require(OUT + '/engine/dayCycle.js');
 const { SEASONS } = require(OUT + '/data/seasons.js');
 const { checkMilestones } = require(OUT + '/engine/milestones.js');
@@ -345,6 +346,24 @@ test('dusk window: fireflies appear only in 0.79-0.92', () => {
   assert.ok(isDusk(0.79) && isDusk(0.92), 'window is inclusive');
   assert.ok(!isDusk(0.5), 'noon is not dusk');
   assert.ok(!isDusk(0.95) && !isDusk(0.78), 'night and late afternoon are not dusk');
+});
+
+// ---------- session 5 U7 (#14): weather — cozy, no fail state ----------
+
+test('rain never lowers appeal: the no-fail invariant', () => {
+  const w = {
+    flowers: [{ x: 1, z: 0, plantId: 'lavender' }, { x: 2, z: 1, plantId: 'clover' }],
+    water: [{ x: 2, z: 0 }],
+    shelter: [{ x: 1, z: 2 }],
+    bushes: [{ x: 0, z: 2 }],
+    season: 'summer',
+  };
+  const dry = computeAppeal({ x: 0, z: 0 }, w, FORAGE_RADIUS);
+  setRaining(true);
+  const wet = computeAppeal({ x: 0, z: 0 }, w, FORAGE_RADIUS);
+  setRaining(false);
+  assert.strictEqual(dry.score, wet.score, 'rain must not change appeal (no fail state)');
+  assert.strictEqual(isRaining(), false, 'rain toggles back off');
 });
 
 test('plantedSpecies dedupes and ignores unknown ids', () => {

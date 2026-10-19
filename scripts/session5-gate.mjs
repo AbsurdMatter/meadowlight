@@ -539,6 +539,49 @@ async function checkDayNight(browser) {
   rec.record('daynight.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
 }
 
+/** U7 (#14): rain renders, bees head home, glisten pulses; no fail state */
+async function checkWeather(browser) {
+  const { page, errors } = await newPage(browser, url);
+  await page.evaluate(() => {
+    const w = window.__meadowlight;
+    w.clear();
+    w.setSeason('summer');
+    for (let i = 0; i < 10; i++) w.plant('lavender', -7 + i * 1.5, 3);
+    w.placeStructure('hive', 0, 0);
+  });
+  await page.waitForTimeout(3500);
+  const dry = await page.evaluate(() => ({
+    rain: window.__meadowlight.rainDebug(),
+    bees: window.__meadowlight.beeDebug(),
+  }));
+  await page.evaluate(() => window.__meadowlight.setRaining(true));
+  await page.waitForTimeout(6000);
+  const wet = await page.evaluate(() => ({
+    rain: window.__meadowlight.rainDebug(),
+    bees: window.__meadowlight.beeDebug(),
+  }));
+  await page.evaluate(() => window.__meadowlight.setRaining(false));
+  await page.waitForTimeout(3500);
+  const after = await page.evaluate(() => ({
+    rain: window.__meadowlight.rainDebug(),
+    bees: window.__meadowlight.beeDebug(),
+  }));
+
+  rec.record('weather.rain-renders-when-toggled', dry.rain.count === 0 && wet.rain.count > 100 && after.rain.count === 0,
+    JSON.stringify({ dry: dry.rain.count, wet: wet.rain.count, after: after.rain.count }));
+  // bees head home: homing share rises while raining (they finish trips first)
+  const wetTotal = wet.bees.homing + wet.bees.foraging + wet.bees.wandering;
+  const dryTotal = dry.bees.homing + dry.bees.foraging + dry.bees.wandering || 1;
+  rec.record('weather.bees-head-home', wet.bees.homing >= dry.bees.homing && wet.bees.foraging < dry.bees.foraging,
+    JSON.stringify({ dryHoming: dry.bees.homing, wetHoming: wet.bees.homing, wetForaging: wet.bees.foraging, dryForaging: dry.bees.foraging, total: wetTotal }));
+  // no fail state: appeal (bee count) unchanged by rain
+  rec.record('weather.no-fail-state-bee-count-stable', Math.abs(wet.bees.count - dry.bees.count) <= 1,
+    JSON.stringify({ dry: dry.bees.count, wet: wet.bees.count }));
+  const re = realErrors(errors);
+  rec.record('weather.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
 const browser = await launchChromium(chromium, { libPath });
 for (const check of checks.split(',')) {
   if (check === 'roster') await checkRoster(browser);
@@ -547,6 +590,7 @@ for (const check of checks.split(',')) {
   else if (check === 'sky') await checkSky(browser);
   else if (check === 'wild') await checkWild(browser);
   else if (check === 'daynight') await checkDayNight(browser);
+  else if (check === 'weather') await checkWeather(browser);
   else rec.record(`unknown-check:${check}`, false, 'no such check');
 }
 await browser.close();
