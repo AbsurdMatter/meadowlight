@@ -87,7 +87,7 @@ Commit: "session 3: polish, audio, postcards — v0.1".
 
 Never de-scope: freeform placement, bee simulation, notebook facts, seasons.
 
-# Session 1 post-mortem:
+# v0.1 post-mortems (all three sessions):
 
 ### Session 1 — Voxel meadow (COMPLETE)
 Delivered: Vite + TS + React + three.js (@react-three/fiber) scaffold; freeform
