@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { FOG, HILLS, shapedHeight } from '../data/environment';
 import { skyPaletteAt, dayPhase, advanceDay } from '../engine/dayCycle';
+import { advanceSeasons, seasonClockOverridden } from '../engine/seasonClock';
+import { usePlacementStore } from './placementStore';
 
 /**
  * #6 (session 5): graded voxel sky. The flat linear gradient becomes a
@@ -57,7 +59,15 @@ export function Sky() {
   const lastKey = useRef('');
   const fogRef = useRef<THREE.Fog | null>(null);
   useFrame((_, delta) => {
+    // ONE time system: this is the single site that advances both clocks
+    // (day cycle + #11 season calendar). Nothing else may tick either —
+    // a second advance site is how two clocks drift apart.
     advanceDay(delta);
+    if (!seasonClockOverridden()) {
+      const store = usePlacementStore.getState();
+      const crossed = advanceSeasons(delta, store.season);
+      if (crossed.length > 0) store.arriveAtSeason(crossed[crossed.length - 1], true);
+    }
     const phase = dayPhase();
     const palette = skyPaletteAt(phase);
     const key = paletteKey(palette);

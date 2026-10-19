@@ -49,10 +49,10 @@ const LEGACY_KEY = 'meadowlight.world.v1';
 /** corrupt/unknown-version saves are preserved here before booting fresh */
 const BACKUP_KEY = 'meadowlight.world._backup';
 /** versions this build understands (anything else = unknown, backed up) */
-const KNOWN_VERSIONS = new Set([1, 2, 3, 4, 5]);
+const KNOWN_VERSIONS = new Set([1, 2, 3, 4, 5, 6]);
 
 export interface WorldData {
-  version: 4 | 5;
+  version: 4 | 5 | 6;
   items: PlacedItem[];
   structures: PlacedStructure[];
   milestones: MilestoneId[];
@@ -72,6 +72,15 @@ export interface WorldData {
    * ambience — old saves load untouched and simply resume at golden hour.
    */
   dayPhase?: number;
+  /**
+   * #11 (session 6, v6, additive): progress through the current season
+   * (0..1) when the save was written — the auto-advancing calendar's
+   * position, the exact counterpart of dayPhase. Absent = season start
+   * (old saves sit at the beginning of their saved season — never
+   * degraded). Time advances only while the page is open: a returning
+   * visitor resumes mid-season, no catch-up, no "you missed it".
+   */
+  seasonProgress?: number;
 }
 
 function parseItems(parsed: unknown): PlacedItem[] {
@@ -138,9 +147,14 @@ function parseDayPhase(parsed: unknown): number | undefined {
   return typeof parsed === 'number' && parsed >= 0 && parsed <= 1 ? parsed : undefined;
 }
 
+/** v6 additive: season-calendar position; absent = season start */
+function parseSeasonProgress(parsed: unknown): number | undefined {
+  return typeof parsed === 'number' && parsed >= 0 && parsed <= 1 ? parsed : undefined;
+}
+
 function freshWorld(): WorldData {
   return {
-    version: 5,
+    version: 6,
     items: [],
     structures: [],
     milestones: [],
@@ -196,7 +210,7 @@ export function loadWorld(): WorldData {
             ? data.randomRotation
             : DEFAULT_PLACEMENT_VARIATION;
       return {
-        version: 5,
+        version: 6,
         items: parseItems(data.items),
         structures: parseStructures(data.structures),
         milestones: parseMilestones(data.milestones),
@@ -207,6 +221,7 @@ export function loadWorld(): WorldData {
         wildSeasons: parseWildSeasons(data.wildSeasons),
         onboardingDismissed: parseOnboardingDismissed(data.onboardingDismissed),
         dayPhase: parseDayPhase(data.dayPhase),
+        seasonProgress: parseSeasonProgress(data.seasonProgress),
       };
     }
     // v1 shape: bare array of items
@@ -236,7 +251,7 @@ export function clearSavedWorld(): void {
 
 export function saveWorld(data: Omit<WorldData, 'version'>): void {
   try {
-    const payload: WorldData = { version: 5, ...data };
+    const payload: WorldData = { version: 6, ...data };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     localStorage.removeItem(LEGACY_KEY);
   } catch {

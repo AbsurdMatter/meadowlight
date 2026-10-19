@@ -12,6 +12,7 @@ import { fireflyDebug } from '../render/Fireflies';
 import { setDayPhase } from './dayCycle';
 import { setRaining } from './weather';
 import { dayPhase } from './dayCycle';
+import { seasonProgress, seasonClockOverridden } from './seasonClock';
 import { setFireflyForce } from '../render/Fireflies';
 import { rainDebug } from '../render/Rain';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
@@ -30,6 +31,14 @@ declare global {
       structures: () => PlacedStructure[];
       clear: () => void;
       setSeason: (season: 'spring' | 'summer' | 'autumn' | 'winter') => void;
+      /** #11: release the manual/P-panel season override */
+      resumeSeasonClock: () => void;
+      /** #11: 0..1 progress through the current season (readback) */
+      seasonProgressReadback: () => number;
+      /** #11: tests only — drive the calendar position directly */
+      setSeasonProgressForTest: (p: number) => void;
+      /** #11: true while the calendar is held by an override */
+      seasonClockOverridden: () => boolean;
       milestones: () => string[];
       beeCount: () => number;
       beeDebug: () => unknown;
@@ -135,6 +144,10 @@ export function installTestHook() {
     structures: () => usePlacementStore.getState().structures,
     clear: () => usePlacementStore.setState({ items: [], structures: [] }),
     setSeason: (season) => usePlacementStore.getState().setSeason(season),
+    resumeSeasonClock: () => usePlacementStore.getState().resumeSeasonClock(),
+    seasonProgressReadback: () => seasonProgress(),
+    setSeasonProgressForTest: (p) => usePlacementStore.getState().setSeasonProgressForTest(p),
+    seasonClockOverridden: () => seasonClockOverridden(),
     milestones: () => usePlacementStore.getState().milestones,
     beeCount: () => beeDebug.count,
     beeDebug: () => ({ ...beeDebug }),

@@ -8,6 +8,13 @@ import type { PlacedItem, PlacedStructure } from '../engine/persistence';
 import { variationFor, type PlacementVariation } from '../engine/variation';
 import type { Season } from '../data/seasons';
 import { setDayPhase, dayPhase } from '../engine/dayCycle';
+import {
+  forceSeason,
+  resumeSeasonClock,
+  seasonProgress,
+  setSeasonProgressForTest,
+} from '../engine/seasonClock';
+import { SEASON_ARRIVAL } from '../data/seasons';
 import type { MilestoneId } from '../data/milestones';
 
 export interface Toast {
@@ -48,6 +55,14 @@ export interface PlacementState {
   selectStructure: (structureId: string | null) => void;
   toggleVariation: () => void;
   setSeason: (season: Season) => void;
+  /** #11: natural season rollover — store label + gentle toast, one path */
+  arriveAtSeason: (season: Season, announce: boolean) => void;
+  /** #11: P panel / tests — release the manual override, calendar drifts */
+  resumeSeasonClock: () => void;
+  /** #11: readback for the P panel / test hook */
+  seasonProgress: () => number;
+  /** #11: tests only — drive the calendar boundary directly */
+  setSeasonProgressForTest: (p: number) => void;
   earnMilestone: (id: MilestoneId, label: string, detail: string) => void;
   dismissToast: (id: number) => void;
   openNotebook: (entry: PlacementState['notebook']) => void;
@@ -69,6 +84,12 @@ export interface PlacementState {
 const initial = loadWorld();
 // #13: resume the day cycle where the save left it (absent = golden hour)
 if (typeof initial.dayPhase === 'number') setDayPhase(initial.dayPhase);
+// #11: resume the season calendar where the save left it (absent = season
+// start). Boundary semantics live in ONE place: a loaded position < 1.0 is
+// mid-season by definition; the rollover math (advanceSeasons) is the only
+// code that ever crosses a season boundary, so save->reload->resume can
+// never re-interpret a boundary differently than live play did.
+setSeasonProgressForTest(initial.seasonProgress ?? 0);
 let toastSeq = 1;
 
 export const usePlacementStore = create<PlacementState>((set, get) => ({
@@ -116,6 +137,9 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       return { placementVariation: next };
     }),
   setSeason: (season) => {
+    // #11: the manual dial is the SAME override path the P panel uses —
+    // one trigger pattern (forceSeason holds the calendar; resume releases)
+    forceSeason(season);
     set((s) => {
       const hasWildCorner = s.structures.some((st) => st.structureId === 'wildcorner');
       if (!hasWildCorner || s.wildSeasons.includes(season)) return { season };
@@ -123,6 +147,26 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
     });
     get().save();
   },
+  arriveAtSeason: (season, announce) => {
+    set((s) => {
+      const hasWildCorner = s.structures.some((st) => st.structureId === 'wildcorner');
+      const wildSeasons =
+        hasWildCorner && !s.wildSeasons.includes(season)
+          ? [...s.wildSeasons, season]
+          : s.wildSeasons;
+      const toast = announce
+        ? { id: toastSeq++, title: 'A season drifts in', body: SEASON_ARRIVAL[season] }
+        : null;
+      return toast ? { season, wildSeasons, toasts: [...s.toasts, toast] } : { season, wildSeasons };
+    });
+    get().save();
+  },
+  resumeSeasonClock: () => {
+    resumeSeasonClock();
+    get().save();
+  },
+  seasonProgress: () => seasonProgress(),
+  setSeasonProgressForTest: (p) => setSeasonProgressForTest(p),
   earnMilestone: (id, label, detail) => {
     const s = get();
     if (s.milestones.includes(id)) return;
@@ -142,15 +186,16 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       structures: [],
       milestones: [],
       season: 'summer',
-      selectedPlantId: null,
-      selectedStructureId: null,
-      notebook: null,
+      // #11: reset returns the calendar to a fresh summer start, unheld
       toasts: [],
       modalOpen: false,
       seenFacts: [],
       wildSeasons: [],
       onboardingDismissed: false,
     });
+    forceSeason('summer');
+    resumeSeasonClock();
+    setSeasonProgressForTest(0);
     get().save();
   },
   reloadFromSave: () => {
@@ -180,6 +225,9 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       onboardingDismissed: w.onboardingDismissed ?? false,
       placementVariation: w.placementVariation,
     });
+    // #11: the reload must re-derive the calendar position from the blob —
+    // same semantics as a fresh page load, not the live clock
+    setSeasonProgressForTest(w.seasonProgress ?? 0);
   },
   save: () => {
     const s = get();
@@ -194,6 +242,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       wildSeasons: s.wildSeasons,
       onboardingDismissed: s.onboardingDismissed,
       dayPhase: dayPhase(),
+      seasonProgress: seasonProgress(),
     });
   },
 }));

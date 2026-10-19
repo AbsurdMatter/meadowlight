@@ -10,6 +10,11 @@ import { fireflyDebug, setFireflyForce, fireflyForced } from '../render/Fireflie
 import { setCellMapVisible, cellMapVisible } from '../render/CellMapOverlay';
 import { CELL_KINDS } from '../render/CellMapOverlay';
 import { MILESTONES } from '../data/milestones';
+import {
+  seasonProgress,
+  seasonClockOverridden,
+  setSeasonProgressForTest,
+} from '../engine/seasonClock';
 
 const MEASURE_SECONDS = 10;
 const STRESS_ITEMS = 200;
@@ -335,6 +340,7 @@ function PerfOverlayPanel() {
         {cellMapOn && <CellMapLegend />}
       </div>
       <Session5Triggers />
+      <Session6SeasonTriggers />
       <SaveInspector />
       <MilestoneChecklist />
     </div>
@@ -401,6 +407,57 @@ function Session5Triggers() {
         {btn('force off', () => setFireflyForce(false), fireflyForced() === false, 'ff-off')}
         {btn('natural', () => setFireflyForce(null), fireflyForced() === null, 'ff-natural')}
         <span style={{ fontSize: 11, opacity: 0.7 }}> {fireflyDebug.count} glowing</span>
+      </div>
+    </div>
+  );
+}
+
+/** session 6 trigger section: the season calendar (#11) — force seasons
+ *  (same override path as the manual dial), resume natural drift, and a
+ *  fast-forward for rollover/toast testing. Dev-only (prod-excluded). */
+function Session6SeasonTriggers() {
+  const [, forceRender] = useState(0);
+  const refresh = () => forceRender((n) => n + 1);
+  const season = usePlacementStore((s) => s.season);
+  const btn = (label: string, onClick: () => void, active: boolean, key?: string) => (
+    <button
+      key={key}
+      data-perf-s6={key}
+      onClick={() => {
+        onClick();
+        refresh();
+      }}
+      style={{
+        margin: '2px 4px 2px 0',
+        padding: '5px 9px',
+        borderRadius: 8,
+        border: 'none',
+        background: active ? '#7a9d54' : '#666',
+        color: '#fff',
+        fontFamily: 'inherit',
+        fontSize: 12,
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>season calendar (#11)</div>
+      <div>
+        {btn('force spring', () => usePlacementStore.getState().setSeason('spring'), season === 'spring', 'season-spring')}
+        {btn('force summer', () => usePlacementStore.getState().setSeason('summer'), season === 'summer', 'season-summer')}
+        {btn('force autumn', () => usePlacementStore.getState().setSeason('autumn'), season === 'autumn', 'season-autumn')}
+        {btn('force winter', () => usePlacementStore.getState().setSeason('winter'), season === 'winter', 'season-winter')}
+        {btn('resume natural', () => usePlacementStore.getState().resumeSeasonClock(), !seasonClockOverridden(), 'season-resume')}
+      </div>
+      <div>
+        {btn('progress → 0.95', () => { setSeasonProgressForTest(0.95); refresh(); }, false, 'season-near-end')}
+        {btn('progress → 0.999…', () => { setSeasonProgressForTest(0.999999); refresh(); }, false, 'season-boundary')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {' '}progress {seasonProgress().toFixed(3)} {seasonClockOverridden() ? '(held)' : '(drifting)'}
+        </span>
       </div>
     </div>
   );
