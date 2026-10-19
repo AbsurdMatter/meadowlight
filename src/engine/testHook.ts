@@ -25,6 +25,7 @@ declare global {
       setSeason: (season: 'spring' | 'summer' | 'autumn' | 'winter') => void;
       milestones: () => string[];
       beeCount: () => number;
+      beeDebug: () => unknown;
     solitaryBeeCount: () => number;
     rareBeeCount: () => number;
     capturePostcard: () => string | null;
@@ -122,6 +123,7 @@ export function installTestHook() {
     setSeason: (season) => usePlacementStore.getState().setSeason(season),
     milestones: () => usePlacementStore.getState().milestones,
     beeCount: () => beeDebug.count,
+    beeDebug: () => ({ ...beeDebug }),
     solitaryBeeCount: () => solitaryBeeDebug.count,
     rareBeeCount: () => rareBeeDebug.count,
     capturePostcard: () => capturePostcardPng(),
