@@ -110,6 +110,18 @@ npm run build
   frames narrower than ~700px (#33) — mobile/touch layout is parked until
   the world + chrome finalize.
 
+## Deploying (bare minimum this session)
+
+The repo ships a GitHub Pages workflow (`.github/workflows/deploy-pages.yml`):
+on every push to `main` it runs the smoke gate, builds `dist/`, and publishes
+it to GitHub Pages. Enable it once in **Settings → Pages → Source: GitHub
+Actions**; the site then serves at the default Pages URL.
+
+**Post-deploy step (documented, not done this session):** point the portfolio
+subdomain at the Pages URL (a `CNAME` file in `dist` + your DNS CNAME record),
+then swap the og:image placeholder origin in `index.html` and drop the
+real-GPU `/og-image.png` at the deploy origin.
+
 ## Credits
 
 Built with [three.js](https://threejs.org), React, and a fondness for bees.
