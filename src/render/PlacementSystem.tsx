@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { MEADOW_SIZE, terrainHeight } from '../engine/terrain';
+import { MEADOW_SIZE } from '../engine/terrain';
+import { groundAt } from '../engine/ground';
 import { PLANT_BY_ID } from '../data/plants';
 import { STRUCTURE_BY_ID } from '../data/structures';
 import { usePlacementStore } from './placementStore';
-import { variationFor } from '../engine/variation';
+import { variationFor, type PlacementVariation } from '../engine/variation';
 import { flowerBlocked, structureBlocked } from '../engine/collision';
+import { isBuildable } from '../engine/ground';
 import type { StructureId } from '../data/structures';
 import { VoxelFlower } from './VoxelFlower';
 import { VoxelStructure } from './VoxelStructure';
@@ -17,7 +19,13 @@ const CLICK_SLOP_PX = 6;
 
 /** live ghost ground position + validity, exposed for the test hook so
  *  automated checks can compare the ghost against actual placements */
-export const ghostDebug = { pos: null as [number, number, number] | null, valid: true };
+export const ghostDebug = {
+  pos: null as [number, number, number] | null,
+  valid: true,
+  /** the exact variation the next placement will receive (ghost preview and
+   *  click placement share it — the preview never lies) */
+  variation: null as { rotationY: number; heightJitter: number; tiltX: number; tiltZ: number } | null,
+};
 
 export function PlacementSystem() {
   const selectedPlantId = usePlacementStore((s) => s.selectedPlantId);
@@ -29,12 +37,26 @@ export function PlacementSystem() {
   const hit = useRef(new THREE.Vector3());
   const [ghost, setGhost] = useState<[number, number, number] | null>(null);
   const [ghostValid, setGhostValid] = useState(true);
+  /** bumped on every pending-variation re-roll so the ghost re-renders and
+   *  shows the exact new roll immediately (refs don't trigger renders) */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [variationEpoch, setVariationEpoch] = useState(0);
   const modalOpen = usePlacementStore((s) => s.modalOpen);
   /** pointer position in NDC, tracked from raw pointermove events on the whole
    *  window so the ghost keeps following the cursor even when it crosses UI
    *  overlays (which swallow R3F's shared `pointer` updates) */
   const pointerNdc = useRef(new THREE.Vector2(0, 0));
   const pointerInsideCanvas = useRef(false);
+  /**
+   * The variation the NEXT placement will receive. Rolled once per attempt
+   * (tool select, R, and after each placement re-roll it) and shared by the
+   * ghost preview and the click — so with variation ON the ghost shows the
+   * exact rotation/tilt/height the placed object will get. Hedge lines can
+   * finally be planned.
+   */
+  const pendingVariation = useRef<PlacementVariation>(variationFor(
+    usePlacementStore.getState().placementVariation,
+  ));
   const dragState = useRef({
     x: 0,
     y: 0,
@@ -45,6 +67,22 @@ export function PlacementSystem() {
     lastTravel: 0,
     lastButton: -1,
   });
+
+  useEffect(() => {
+    // re-roll the pending variation whenever the tool selection or the
+    // variation toggle changes, so each attempt previews its own exact roll
+    const unsub = usePlacementStore.subscribe((state, prev) => {
+      if (
+        state.selectedPlantId !== prev.selectedPlantId ||
+        state.selectedStructureId !== prev.selectedStructureId ||
+        state.placementVariation !== prev.placementVariation
+      ) {
+        pendingVariation.current = variationFor(state.placementVariation);
+        setVariationEpoch((n) => n + 1);
+      }
+    });
+    return unsub;
+  }, []);
 
   useEffect(() => {
     const canvas = gl.domElement;
@@ -86,7 +124,7 @@ export function PlacementSystem() {
     const MAX_T = 120;
     const STEP = 0.75;
     let tPrev = 0;
-    const distPrev = ray.origin.y - terrainHeight(ray.origin.x, ray.origin.z);
+    const distPrev = ray.origin.y - groundAt(ray.origin.x, ray.origin.z).height;
     if (distPrev <= 0) {
       // camera start below terrain (shouldn't happen, but stay safe)
       return clampToMeadow(ray.origin.x, ray.origin.z);
@@ -95,7 +133,7 @@ export function PlacementSystem() {
       const x = ray.origin.x + ray.direction.x * t;
       const y = ray.origin.y + ray.direction.y * t;
       const z = ray.origin.z + ray.direction.z * t;
-      const dist = y - terrainHeight(x, z);
+      const dist = y - groundAt(x, z).height;
       if (dist <= 0) {
         // bisect between tPrev and t for a precise surface hit
         let lo = tPrev;
@@ -105,7 +143,7 @@ export function PlacementSystem() {
           const mx = ray.origin.x + ray.direction.x * mid;
           const my = ray.origin.y + ray.direction.y * mid;
           const mz = ray.origin.z + ray.direction.z * mid;
-          if (my - terrainHeight(mx, mz) > 0) lo = mid;
+          if (my - groundAt(mx, mz).height > 0) lo = mid;
           else hi = mid;
         }
         const hx = ray.origin.x + ray.direction.x * hi;
@@ -129,11 +167,14 @@ export function PlacementSystem() {
   const clampToMeadow = (x: number, z: number): [number, number, number] | null => {
     const cx = THREE.MathUtils.clamp(x, -HALF + 1, HALF - 1);
     const cz = THREE.MathUtils.clamp(z, -HALF + 1, HALF - 1);
-    return [cx, terrainHeight(cx, cz), cz];
+    return [cx, groundAt(cx, cz).height, cz];
   };
 
-  /** Same occupancy check for ghost preview and actual placement. */
+  /** Same occupancy + ground check for ghost preview and actual placement —
+   *  the oracle answers "what's at this cell" for the click path too (#26):
+   *  water and the shore band are not buildable, ghost shows invalid there. */
   const placementBlocked = (x: number, z: number): boolean => {
+    if (!isBuildable(x, z)) return true;
     const s = usePlacementStore.getState();
     if (s.selectedPlantId) return flowerBlocked(x, z, s.structures);
     if (s.selectedStructureId)
@@ -217,9 +258,20 @@ export function PlacementSystem() {
       ) {
         return;
       }
-      if (e.key === 'r' || e.key === 'R') rotateGhost();
-      if (e.key === 'f' || e.key === 'F')
+      const st = usePlacementStore.getState();
+      const reroll = () => {
+        pendingVariation.current = variationFor(st.placementVariation);
+        setVariationEpoch((n) => n + 1);
+      };
+      if (e.key === 'r' || e.key === 'R') {
+        rotateGhost();
+        reroll();
+      }
+      if (e.key === 'f' || e.key === 'F') {
         usePlacementStore.getState().toggleVariation();
+        pendingVariation.current = variationFor(!st.placementVariation);
+        setVariationEpoch((n) => n + 1);
+      }
     };
     /** the actual right-click action: deselect-first, then remove (shared by
      *  the immediate path and the pending-contextmenu path) */
@@ -300,7 +352,7 @@ export function PlacementSystem() {
       const spot = resolvePlacement();
       if (!spot) return;
       if (placementBlocked(spot[0], spot[2])) return;
-      const variationOn = s.placementVariation;
+      const variation = pendingVariation.current;
       if (s.selectedPlantId) {
         s.plant({
           id: crypto.randomUUID(),
@@ -308,7 +360,7 @@ export function PlacementSystem() {
           position: spot,
           rotationY: s.ghostRotationY,
           phase: Math.random() * Math.PI * 2,
-          variation: variationFor(variationOn),
+          variation,
         });
       } else if (s.selectedStructureId) {
         s.placeStructure({
@@ -316,9 +368,12 @@ export function PlacementSystem() {
           structureId: s.selectedStructureId as StructureId,
           position: spot,
           rotationY: s.ghostRotationY,
-          variation: variationFor(variationOn),
+          variation,
         });
       }
+      // fresh roll for the next placement (and its ghost preview)
+      pendingVariation.current = variationFor(s.placementVariation);
+      setVariationEpoch((n) => n + 1);
     };
     gl.domElement.addEventListener('pointerdown', onPointerDown);
     window.addEventListener('pointermove', onPointerMove);
@@ -341,13 +396,30 @@ export function PlacementSystem() {
     ? STRUCTURE_BY_ID[selectedStructureId as StructureId]
     : null;
 
+  void variationEpoch;
+  const pv = pendingVariation.current;
+  ghostDebug.variation = pv;
   return (
     <group>
       {ghost && def && (
-        <VoxelFlower def={def} position={ghost} rotationY={ghostRotationY} ghost invalid={!ghostValid} />
+        <VoxelFlower
+          def={def}
+          position={[ghost[0], ghost[1] + pv.heightJitter, ghost[2]]}
+          rotationY={ghostRotationY + pv.rotationY}
+          tilt={[pv.tiltX, pv.tiltZ]}
+          ghost
+          invalid={!ghostValid}
+        />
       )}
       {ghost && structureDef && (
-        <VoxelStructure def={structureDef} position={ghost} rotationY={ghostRotationY} ghost invalid={!ghostValid} />
+        <VoxelStructure
+          def={structureDef}
+          position={[ghost[0], ghost[1] + pv.heightJitter, ghost[2]]}
+          rotationY={ghostRotationY + pv.rotationY}
+          tilt={[pv.tiltX, pv.tiltZ]}
+          ghost
+          invalid={!ghostValid}
+        />
       )}
     </group>
   );

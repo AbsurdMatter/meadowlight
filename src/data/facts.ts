@@ -61,6 +61,10 @@ export const STRUCTURE_FACTS: Record<string, FactEntry> = {
     id: 'structure:hedge',
     text: 'Bees waste energy flying in wind — a hedge gives them a sheltered lane to forage along.',
   },
+  wildcorner: {
+    id: 'structure:wildcorner',
+    text: 'Leaving a corner of the meadow unmown gives wild bees nesting sites and butterflies a place to overwinter.',
+  },
 };
 
 /** season variants — shown (preferred) when the meadow is in that season */
@@ -124,6 +128,10 @@ export const CONTEXT_FACTS: Record<string, FactEntry> = {
   'context:shelter-near': {
     id: 'context:shelter-near',
     text: 'Bees waste energy flying in wind — this sheltered spot lets bees spend their energy on flowers instead of fighting the breeze.',
+  },
+  'context:wild-near': {
+    id: 'context:wild-near',
+    text: 'A single mason bee can pollinate as many flowers as roughly 100 honeybees — wild bees often outperform hives at pollination.',
   },
 };
 

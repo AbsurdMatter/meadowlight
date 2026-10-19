@@ -6,7 +6,10 @@ export type MilestoneId =
   | 'firstHive'
   | 'beeBath'
   | 'hedgesUnlocked'
-  | 'yearRoundBloom';
+  | 'yearRoundBloom'
+  | 'hotelGuests'
+  | 'rarePollinator'
+  | 'wildYearSurvived';
 
 export interface MilestoneDef {
   id: MilestoneId;
@@ -15,7 +18,7 @@ export interface MilestoneDef {
   /** warm toast body (from EDUCATION.md facts or plain cozy copy) */
   detail: string;
   /** structure this unlock makes placeable, if any */
-  unlocks?: 'bath' | 'hotel' | 'hedge';
+  unlocks?: 'bath' | 'hotel' | 'hedge' | 'wildcorner';
 }
 
 export const MILESTONES: MilestoneDef[] = [
@@ -61,6 +64,22 @@ export const MILESTONES: MilestoneDef[] = [
     id: 'yearRoundBloom',
     label: 'No feast, no famine',
     detail: 'Blooms in every season \u2014 your meadow never goes hungry.',
+  },
+  {
+    id: 'hotelGuests',
+    label: 'Room 1 is occupied',
+    detail: 'Solitary bees have checked into your bee hotel \u2014 more than 70% of bee species live alone, not in hives.',
+    unlocks: 'wildcorner',
+  },
+  {
+    id: 'rarePollinator',
+    label: 'A rare visitor',
+    detail: 'A wool carder bee patrols your wild corner \u2014 unmown corners are the best habitat for wild pollinators.',
+  },
+  {
+    id: 'wildYearSurvived',
+    label: 'The corner lived a full year',
+    detail: 'Your wild corner has seen every season \u2014 butterflies now have a place to overwinter here.',
   },
 ];
 

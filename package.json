@@ -7,8 +7,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test:smoke": "node scripts/build-health.mjs",
-    "test:perf": "echo \"[perf] start the dev server (npm run dev), open the game, press F3 or P, then click the stress button — results log to the browser console\""
+    "test:smoke": "node scripts/unit-tests.mjs && node scripts/build-health.mjs",
+    "test:perf": "echo \"[perf] start the dev server (npm run dev), open the game, press F3 or P, then click the stress button \u2014 results log to the browser console\"",
+    "test:unit": "node scripts/unit-tests.mjs"
   },
   "dependencies": {
     "@react-three/fiber": "^8.17.10",

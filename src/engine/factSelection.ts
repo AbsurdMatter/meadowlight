@@ -57,10 +57,12 @@ export function choosePlantFact(
   const hasBath = near(structures).some((s) => (s as PlacedStructure).structureId === 'bath');
   const hasHotel = near(structures).some((s) => (s as PlacedStructure).structureId === 'hotel');
   const hasHedge = near(structures).some((s) => (s as PlacedStructure).structureId === 'hedge');
+  const hasWild = near(structures).some((s) => (s as PlacedStructure).structureId === 'wildcorner');
   if (hasBath) candidates.push(CONTEXT_FACTS['context:water-near']);
   if (nearbySameSpecies >= CLUSTER_BIG) candidates.push(CONTEXT_FACTS['context:cluster-big']);
   if (hasHotel) candidates.push(CONTEXT_FACTS['context:solitary-near']);
   if (hasHedge) candidates.push(CONTEXT_FACTS['context:shelter-near']);
+  if (hasWild) candidates.push(CONTEXT_FACTS['context:wild-near']);
 
   return pick(candidates, seenFacts);
 }

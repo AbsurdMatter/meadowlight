@@ -126,7 +126,7 @@ function HubInner() {
           <h4 style={{ margin: '14px 0 6px', fontSize: 13, letterSpacing: 0.4 }}>LEARNED FACTS</h4>
           {learnedByGroup.length === 0 && miscSeen.length === 0 && (
             <div style={{ fontSize: 13, opacity: 0.75 }}>
-              Nothing yet — click any flower, hive, or the meadow itself to learn something new.
+              Nothing yet — every flower, hive, and quiet corner of the meadow has a story. Click one with an empty hand and it will land here. 🐝
             </div>
           )}
           {learnedByGroup.map((g) => (

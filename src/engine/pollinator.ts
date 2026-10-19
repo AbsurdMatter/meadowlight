@@ -123,8 +123,10 @@ export function computeAppeal(
  * "fails" \u2014 a lonely hive just keeps a small, quiet cluster.
  */
 export function beesForHive(appeal: number, base: number, max: number): number {
-  const desired = base * (0.3 + appeal);
+  // scale from the quiet floor (base * 0.3) at appeal 0 up to `max` at
+  // appeal 1 — a perfect meadow fills the hive; before, the old formula
+  // (base * (0.3 + appeal)) could never reach `max`
   const lo = base * 0.3;
-  const v = desired < lo ? lo : desired > max ? max : desired;
+  const v = lo + (max - lo) * Math.max(0, Math.min(1, appeal));
   return Math.round(v);
 }

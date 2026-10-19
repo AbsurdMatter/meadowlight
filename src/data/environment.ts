@@ -37,19 +37,70 @@ export const HILLS = {
   fogBlendStrength: 0.55,
 };
 
+/**
+ * #29 pass 4: the meadow is the LOW BOWL of the terrain — not a layer
+ * laid on top. The green surface sits this far below the natural
+ * heightfield; the hills rise around it (their tops stay at the natural
+ * height + distance lift), so the meadow edge reads as terrain rising
+ * from a depression, with no seam and no floating layer.
+ */
+export const MEADOW_BOWL = {
+  /**
+   * Deep enough to read as THE low bowl: the natural heightfield undulates
+   * ~±1.2 around the meadow's rim, so a shallow dip gets swamped — at some
+   * spots the meadow edge would still sit above adjacent hills. 1.5 puts
+   * the entire meadow surface below the terrain everywhere on the rim.
+   */
+  depth: 1.5,
+} as const;
+
 export const LAKE = {
-  center: [26, -24] as [number, number],
+  /**
+   * #29 pass 4: relocated. The old center (26,-24) sat only 4.47u from the
+   * meadow SQUARE's corner (22,-22) — inside the pond disc, meadow layer
+   * boxes floated over the pond and the corner was unplantable. The new
+   * center clears the square by 16.1u (nearest point (22,-14)): >5u of
+   * hills between the band edge and any meadow cell, no adjacency, no
+   * feathering needed. Band outer edge at 49.2 stays inside the hills
+   * zone (outer 50). The pond is now a background terrain feature.
+   */
+  center: [36, -14] as [number, number],
   radius: 8,
-  level: -0.3,
-  colorA: '#8fc1dd',
-  colorB: '#a9d6e8',
-  opacity: 0.88,
-  bedColor: '#d8c49a',
-  shoreColor: '#cbb98a',
+  /**
+   * Pond-as-terrain (final geometry): the pond is carved INTO the terrain
+   * grid (the Hills 1.6 step at this radius) — a depression like any
+   * terrain feature. Saves are untouched: the pond is world decoration,
+   * generated deterministically every load, so v1-v4 worlds, fresh worlds,
+   * and ?demo=1 all get the identical carved pond with zero migration.
+   */
+  /** grid step = the terrain's own step here (HILLS.step) — one grid */
+  voxelStep: 1.6,
+  /** carve depth: pond floor sits this far below the surrounding terrain */
+  carveDepth: 1.5,
+  /**
+   * #29: reduced to a third of the old 0.8 drop — a subtle step down to
+   * the water, not a cube-well. The blue-green floor still reads through
+   * the translucency at this level (verified by pixel readback).
+   */
+  surfaceDrop: 0.27,
+  /**
+   * #29: the sandy band granulates into finer sub-pieces (a 2x2
+   * subdivision of the terrain cell) so the ring reads as gravelly detail
+   * rather than chunky slabs. Sub-pieces snap to the parent lattice —
+   * the subdivision is exact, so no offsets or new gaps are possible.
+   */
+  bandSubdivision: 2,
+  /** width of the sandy shoreline band around the carved area */
   shoreWidth: 2.6,
-  bobAmplitude: 0.03,
-  tintCycleSeconds: 9,
+  /** floor tint: solid, blue-green, visible through the translucent water */
+  bottomColor: '#6b8f7a',
+  /** sandy band tint */
+  shoreColor: '#cbb98a',
+  /** water body color (the working #22 fix: light reflective pond blue) */
+  colorA: '#9ed2ec',
+  opacity: 0.9,
 };
+
 
 export const TREES = {
   trunkColors: ['#8a5a2b', '#7a4c24', '#96683a'],
