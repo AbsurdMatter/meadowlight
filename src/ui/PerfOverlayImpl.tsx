@@ -221,6 +221,12 @@ function PerfOverlayPanel() {
     const startedAt = performance.now();
     const report = () => {
       const times = frameTimes.current.filter((_, i) => i >= 60);
+      if (times.length === 0) {
+        console.log('[perf] stress test result: no frame samples collected (rAF never ticked?)');
+        usePlacementStore.setState({ items: before });
+        setRunning(false);
+        return;
+      }
       const avg = times.reduce((a, b) => a + b, 0) / times.length;
       const sorted = [...times].sort((a, b) => a - b);
       const p95 = sorted[Math.floor(sorted.length * 0.95)];
