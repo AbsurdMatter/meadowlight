@@ -23,6 +23,12 @@ const tiltZMat = new THREE.Matrix4();
 const offsetMat = new THREE.Matrix4();
 const scaleMat = new THREE.Matrix4();
 const tmpColor = new THREE.Color();
+/** #10: a DEDICATED color object — combColor must never alias tmpColor.
+ * The original honey-glow bug: combColor aliased tmpColor, so each part's
+ * `tmpColor.set(part.color)` overwrite (STRAW, DARK_WOOD…) replaced the
+ * lerp result before the honey parts' setColorAt read it — the glow wrote
+ * the previous part's color and NOTHING changed with fill. */
+const combColor = new THREE.Color();
 const combFloor = new THREE.Color(HONEY_TUNING.combColorFloor);
 const combFull = new THREE.Color(HONEY_TUNING.combColorFull);
 
@@ -98,7 +104,7 @@ export function PlacedStructures() {
         // floor tint keeps even an empty comb warm ("settling in"); full
         // reads as deep honey gold. Never dim, never sad.
         const combFill = s.structureId === 'hive' ? store.hiveCombs[s.id] ?? 0 : 0;
-        const combColor = tmpColor.copy(combFloor).lerp(combFull, combFill);
+        combColor.copy(combFloor).lerp(combFull, combFill);
         for (let pi = 0; pi < def.parts.length; pi++) {
           const part = def.parts[pi];
           const isHoneyPart =

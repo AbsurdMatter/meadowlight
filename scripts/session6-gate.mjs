@@ -403,6 +403,49 @@ async function checkHoney() {
     );
     const re = realErrors(errors);
     rec.record('honey.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+
+    // 4b. THE VISIBLE property: the hive mesh's honey-part instance colors
+    // must change monotonically with forced fill (0 -> 0.5 -> 1) — asserting
+    // the render binding, not the state. The original bug: fill tracked
+    // correctly, comb color computed… onto an aliased tmpColor, so the
+    // visible glow never changed. Also assert the EMPTY end stays warm
+    // (floor tint, never dim/sad).
+    const glow = await page.evaluate(async (id) => {
+      const w = window.__meadowlight;
+      const th = w.__three;
+      const sampleHoney = () => {
+        let colors = null;
+        th.scene.traverse((o) => {
+          if (colors || !o.isInstancedMesh || !o.instanceColor || !o.instanceMatrix) return;
+          if (o.instanceMatrix.count !== 8 * 60) return; // hive parts x capacity
+          const arr = o.instanceColor.array;
+          // honey parts are slots 2 and 4 of the FIRST placed hive
+          colors = [arr[6], arr[7], arr[8], arr[12], arr[13], arr[14]].map((v) => +v.toFixed(3));
+        });
+        return colors;
+      };
+      const readAt = async (fill) => {
+        w.setComb(id, fill);
+        await new Promise((res) => setTimeout(res, 350));
+        return sampleHoney();
+      };
+      const at0 = await readAt(0);
+      const at05 = await readAt(0.5);
+      const at1 = await readAt(1);
+      return { at0, at05, at1 };
+    }, hiveId);
+    // monotonic toward gold: red and green both RISE floor->gold, and every
+    // fill step must move the color (the bug this guards against: a fixed
+    // color at every fill — the aliased-tmpColor write)
+    const r0 = glow.at0[0], r05 = glow.at05[0], r1 = glow.at1[0];
+    const g0 = glow.at0[1], g05 = glow.at05[1], g1 = glow.at1[1];
+    const monotonic = r0 < r05 && r05 < r1 && g0 < g05 && g05 < g1;
+    const emptyWarm = glow.at0[0] > 0.6 && glow.at0[1] > 0.35; // floor is warm gold-tan, never dim
+    rec.record(
+      'honey.glow-visible-monotonic-with-fill',
+      glow.at0 && glow.at05 && glow.at1 && monotonic && emptyWarm,
+      `honey-part colors 0:${JSON.stringify(glow.at0)} 0.5:${JSON.stringify(glow.at05)} 1:${JSON.stringify(glow.at1)}`,
+    );
     await page.close();
   }
 
