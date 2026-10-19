@@ -157,7 +157,6 @@ function Lake() {
     const mat = new THREE.Matrix4();
     const color = new THREE.Color();
     const colorA = new THREE.Color(LAKE.colorA);
-    const colorB = new THREE.Color(LAKE.colorB);
     const bed = new THREE.Color(LAKE.bedColor);
     const step = LAKE.voxelStep;
     const cx = LAKE.center[0];
@@ -174,16 +173,17 @@ function Lake() {
         const cover = THREE.MathUtils.clamp((LAKE.radius - d) / step + 0.5, 0, 1);
         if (cover <= 0.05) continue;
         const size = step * Math.max(0.35, cover);
-        const ground = backgroundHeight(x, z);
-        // cube extends from below the ground up to the waterline lip
-        const bottom = Math.min(ground - 0.4, topY - 1.6);
+        // #22: thin water cubes — the visible lip is the point; deep cube
+        // sides under a near-opaque material read black from low angles
+        const bottom = topY - LAKE.cubeDepth;
         const h = topY - bottom;
         mat.makeScale(size, h, size);
         mat.setPosition(x, bottom + h / 2, z);
         water.setMatrixAt(i, mat);
-        // depth tint: shallow (near the rim) shows more bed color through
+        // depth tint: full water blue at center, gentle warm bed tint at
+        // the rim so edges read shallow — never muddy, never dark
         const depth = THREE.MathUtils.clamp((LAKE.radius - d) / LAKE.radius, 0, 1);
-        color.copy(colorA).lerp(colorB, 0.4).lerp(bed, (1 - depth) * LAKE.shallowTint);
+        color.copy(colorA).lerp(bed, (1 - depth) * LAKE.rimTint);
         water.setColorAt(i, color);
         i++;
       }

@@ -41,9 +41,8 @@ export const LAKE = {
   center: [26, -24] as [number, number],
   radius: 8,
   level: -0.3,
-  colorA: '#8fc1dd',
-  colorB: '#a9d6e8',
-  opacity: 0.88,
+  /** light reflective pond blue (DESIGN.md sky-blue family) */
+  colorA: '#9ed2ec',
   bedColor: '#d8c49a',
   shoreColor: '#cbb98a',
   shoreWidth: 2.6,
@@ -58,8 +57,17 @@ export const LAKE = {
   voxelStep: 1.4,
   /** water cube top sits this far above LAKE.level (visible voxel lip) */
   surfaceHeight: 0.22,
-  /** shallower water = more bed color showing through */
-  shallowTint: 0.55,
+  /**
+   * #22 fix: the pond read nearly black. Causes: deep cube sides under a
+   * mostly-opaque material, plus 55% bed-brown tint at the rim. Now the
+   * cubes are shallow (just the lip), the palette is a light reflective
+   * pond blue matching DESIGN.md's sky-blue, and the shallow tint is a
+   * gentle 0.25 toward the sandy bed so edges read warm, not muddy.
+   */
+  rimTint: 0.25,
+  /** thin water: only the visible lip matters; deep sides read black */
+  cubeDepth: 0.34,
+  opacity: 0.9,
 };
 
 export const TREES = {
