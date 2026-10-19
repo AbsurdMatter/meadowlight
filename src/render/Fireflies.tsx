@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { dayPhase, isDusk } from '../engine/dayCycle';
@@ -46,6 +46,18 @@ export function Fireflies() {
   const flies = useRef<Firefly[]>([]);
   const lastKey = useRef('');
 
+  // park on mount (same class as the rain ghost-voxel fix): an unparked
+  // InstancedMesh renders `capacity` identity-matrix unit cubes at the
+  // origin until the first dusk — 12 ghost fireflies at meadow center
+  useEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    const park = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (let i = 0; i < FIREFLY_TUNING.max; i++) mesh.setMatrixAt(i, park);
+    mesh.count = 0;
+    mesh.instanceMatrix.needsUpdate = true;
+  }, []);
+
   useFrame(({ clock }, delta) => {
     const mesh = meshRef.current;
     if (!mesh) return;
@@ -83,6 +95,10 @@ export function Fireflies() {
 
     const t = clock.elapsedTime;
     let i = 0;
+    if (!dusk && mesh.count !== 0) {
+      mesh.count = 0;
+      mesh.instanceMatrix.needsUpdate = true;
+    }
     if (dusk) {
       for (const f of flies.current) {
         // slow looping drift around home, vertical bias
