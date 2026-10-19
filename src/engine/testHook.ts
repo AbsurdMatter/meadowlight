@@ -1,5 +1,6 @@
 import { usePlacementStore } from '../render/placementStore';
 import { variationFor } from './variation';
+import { terrainHeight } from './terrain';
 import type { PlacedItem, PlacedStructure } from './persistence';
 import type { StructureId } from '../data/structures';
 import type { PerspectiveCamera, WebGLRenderer } from 'three';
@@ -27,6 +28,7 @@ declare global {
     rareBeeCount: () => number;
     capturePostcard: () => string | null;
     audioDebug: () => unknown;
+    terrainHeightAt: (x: number, z: number) => number;
     audioIsRunning: () => boolean;
       ghostPosition: () => { pos: [number, number, number] | null; valid: boolean };
       ghostVariation: () => { rotationY: number; heightJitter: number; tiltX: number; tiltZ: number } | null;
@@ -89,7 +91,7 @@ export function installTestHook() {
       plant({
         id: crypto.randomUUID(),
         plantId,
-        position: [x, 0, z],
+        position: [x, terrainHeight(x, z), z],
         rotationY: ghostRotationY,
         phase: Math.random() * Math.PI * 2,
         variation: variationFor(placementVariation),
@@ -100,7 +102,7 @@ export function installTestHook() {
       placeStructure({
         id: crypto.randomUUID(),
         structureId,
-        position: [x, 0, z],
+        position: [x, terrainHeight(x, z), z],
         rotationY: ghostRotationY,
         variation: variationFor(placementVariation),
       });
@@ -117,6 +119,7 @@ export function installTestHook() {
     rareBeeCount: () => rareBeeDebug.count,
     capturePostcard: () => capturePostcardPng(),
     audioDebug: () => audioDebugInfo(),
+    terrainHeightAt: (x, z) => terrainHeight(x, z),
     audioIsRunning: () => audioRunning(),
     ghostPosition: () => ({ pos: ghostDebug.pos, valid: ghostDebug.valid }),
     ghostVariation: () => ghostDebug.variation,
