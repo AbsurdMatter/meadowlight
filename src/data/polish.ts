@@ -43,12 +43,27 @@ export const GRASS_TUFTS = {
    */
   enabled: true,
   count: 80,
-  /** blades per clump, fanned outward with varied tilt */
+  /** blades per clump — bases joined at the clump point, fanning upward */
   bladesPerClump: 5,
-  bladeSize: [0.16, 0.32, 0.05] as [number, number, number],
-  /** how far blades lean out from the clump center */
-  fanSpread: 0.45,
-  colors: ['#7d9f54', '#8fae5f', '#94b364'],
+  bladeSize: [0.17, 0.36, 0.06] as [number, number, number],
+  /**
+   * outward lean of each blade from vertical (base-pivoted fan). Wide
+   * enough that the fan READS at voxel scale (~45-60° from vertical) —
+   * the first pass at ~25° was indistinguishable from vertical sticks
+   */
+  fanSpread: 0.9,
+  /**
+   * #24: the exact Meadow.tsx floor palette — tufts must read as part of
+   * the lawn, not a different plant
+   */
+  colors: ['#94b364', '#8fae5f', '#87a75a', '#7d9f54'],
+  /**
+   * #24: clumps cluster into drifts with bare gaps between them (the
+   * ?demo=1 flower drifts are the reference) — N drift centers, clumps
+   * scattered around them
+   */
+  driftCount: 6,
+  driftRadius: 3.2,
   swaySpeed: 1.3,
   swayAmplitude: 0.16,
   /** only within the meadow radius (44/2 minus margin) */
