@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { capturePostcardPng, downloadPostcard } from '../engine/postcard';
 import { theme } from './theme';
+import { PostcardStats } from './PostcardStats';
 
 /**
  * Postcard button: one click saves the meadow as a PNG.
@@ -9,6 +10,7 @@ import { theme } from './theme';
  */
 export function PostcardButton() {
   const [saved, setSaved] = useState(false);
+  const [stats, setStats] = useState(false);
   const onClick = () => {
     try {
       const ok = downloadPostcard(capturePostcardPng());
@@ -19,11 +21,16 @@ export function PostcardButton() {
     }
   };
   return (
-    <button
-      onClick={onClick}
-      data-postcard-button
-      title="Save a postcard of your meadow"
-      style={{
+    <div
+      style={{ position: 'relative', display: 'inline-block' }}
+      onPointerEnter={() => setStats(true)}
+      onPointerLeave={() => setStats(false)}
+    >
+      <button
+        onClick={onClick}
+        data-postcard-button
+        title="Save a postcard of your meadow"
+        style={{
         padding: '8px 12px',
         borderRadius: theme.border.radius,
         border: `${theme.border.chunk}px solid ${saved ? theme.color.sage : theme.color.honey}`,
@@ -35,7 +42,9 @@ export function PostcardButton() {
         boxShadow: theme.border.shadow,
       }}
     >
-      {saved ? 'saved ✓' : '📸 Postcard'}
-    </button>
+        {saved ? 'saved ✓' : '📸 Postcard'}
+      </button>
+      {stats && <PostcardStats />}
+    </div>
   );
 }
