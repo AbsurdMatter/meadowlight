@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { GRASS_TUFTS } from '../data/polish';
-import { terrainHeight } from '../engine/terrain';
+import { groundAt, isGrassSpawnable } from '../engine/ground';
 
 /**
  * Leafy grass tufts with per-tuft variety (#25):
@@ -72,6 +72,9 @@ export function GrassTufts() {
       const x = drift.x + Math.cos(a + jitterA) * (rad + jitterR * 0.5);
       const z = drift.z + Math.sin(a + jitterA) * (rad + jitterR * 0.5);
       if (Math.hypot(x, z) > GRASS_TUFTS.radius) continue;
+      // #26: the ground oracle decides spawnability — never on or beside
+      // the waterline, keeping the shoreline a clean sand band
+      if (!isGrassSpawnable(x, z)) continue;
       // quantized seed = stable identity for this tuft
       const qx = Math.round(x * 20);
       const qz = Math.round(z * 20);
@@ -130,7 +133,7 @@ export function GrassTufts() {
     const t = clock.elapsedTime;
     let i = 0;
     for (const tuft of tufts) {
-      const h = terrainHeight(tuft.x, tuft.z);
+      const h = groundAt(tuft.x, tuft.z).height;
       for (const blade of tuft.blades) {
         const sway = Math.sin(t * GRASS_TUFTS.swaySpeed + blade.phase) * GRASS_TUFTS.swayAmplitude;
         const bladeH = GRASS_TUFTS.bladeSize[1] * blade.hScale;
