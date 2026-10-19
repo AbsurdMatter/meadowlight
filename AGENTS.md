@@ -155,6 +155,15 @@ DOM for the panel's text while it rendered 850px below the fold:
 position:absolute inside a small corner wrapper pushes children off-viewport —
 anchor full-screen UI with position:fixed and read back its viewport rect.)
 
+### Check enclosing headings when appending
+When appending content under an existing heading (post-mortem sections, rule
+lists, tables, docs of any kind), verify the heading still accurately names
+the accumulated content — update the heading if the scope outgrew it.
+Headings are load-bearing anchors (people link to them, agents navigate by
+them); an append must never silently leave a stale label above grown content.
+(A "Session 1 post-mortem" heading accumulated sessions 2 and 3 without anyone
+updating it — caught by the user, not the process.)
+
 ## Session 1 decisions (context for later sessions)
 - Rendering: one InstancedMesh per species-part; instance colors are written
   every frame (correctness over cleverness — perf headroom is ~3x the budget).
