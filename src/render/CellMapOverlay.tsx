@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
-import { groundAt } from '../engine/ground';
+import { groundAt, isPlantableCell } from '../engine/ground';
 import { MEADOW_SIZE } from '../engine/terrain';
 import { LAKE } from '../data/environment';
 
@@ -77,7 +77,7 @@ function classifyCells(): Cell[] {
       // clamps to it (clampToMeadow) BEFORE asking isBuildable — so a cell is
       // PLANTABLE only when both hold. Everything else that is dry land is
       // non-plantable terrain (the lifted hills).
-      const inPlacementBox = Math.abs(x) <= MEADOW_SIZE / 2 - 1 && Math.abs(z) <= MEADOW_SIZE / 2 - 1;
+      const inPlacementBox = isPlantableCell(x, z);
       const kind: CellKind = inPond
         ? 'pondBottom'
         : g.kind === 'water'

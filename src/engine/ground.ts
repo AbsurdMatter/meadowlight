@@ -1,5 +1,5 @@
 import { terrainHeight } from './terrain';
-import { LAKE, HILLS, MEADOW_BOWL } from '../data/environment';
+import { LAKE, MEADOW_BOWL, shapedHeight } from '../data/environment';
 import { MEADOW_SIZE } from './terrain';
 
 /**
@@ -36,10 +36,12 @@ export function groundAt(x: number, z: number): GroundInfo {
   // re-derive heights from here, so the bowl can never drift from what
   // renders.
   const inMeadow = Math.abs(x) <= MEADOW_SIZE / 2 && Math.abs(z) <= MEADOW_SIZE / 2;
+  // #31: outside the meadow square the ground is the shared shaped profile
+  // (damped calm ring, second outer rim, flat pond plateau). The hills
+  // renderer's backgroundHeight() uses the same function — one source.
   const height = inMeadow
     ? terrainHeight(x, z) - MEADOW_BOWL.depth
-    : terrainHeight(x, z) +
-      Math.max(0, Math.hypot(x, z) - HILLS.liftStartRadius) * HILLS.liftPerRadius;
+    : shapedHeight(x, z);
   return { kind: isWater ? 'water' : isShore ? 'shore' : 'meadow', height, lakeDistance, isWater, isShore };
 }
 
@@ -80,4 +82,19 @@ export function isGrassSpawnable(x: number, z: number): boolean {
  */
 export function isBuildable(x: number, z: number): boolean {
   return groundAt(x, z).kind === 'meadow';
+}
+
+/**
+ * PR #35 corner-overhang fix: THE single plantable-cell query. A cell is
+ * plantable only when the ground oracle says meadow AND it lies inside the
+ * placement box (|x|,|z| <= MEADOW_SIZE/2 - 1) — the exact conjunction the
+ * cell-map overlay classifies with. The scenic terrain folds over the
+ * meadow square's corners (approved to keep); those overhang cells sit
+ * outside the box and must REFUSE placement exactly like water/shore.
+ * The overlay, the ghost's refusal path, and the click path all call
+ * this — one source, no divergence.
+ */
+export function isPlantableCell(x: number, z: number): boolean {
+  if (!isBuildable(x, z)) return false;
+  return Math.abs(x) <= MEADOW_SIZE / 2 - 1 && Math.abs(z) <= MEADOW_SIZE / 2 - 1;
 }

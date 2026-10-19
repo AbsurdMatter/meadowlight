@@ -42,6 +42,27 @@ export const PLANT_FACTS: Record<string, FactEntry> = {
     id: 'plant:forget-me-not',
     text: 'One in three bites of food depends on pollinators — and this little blue flower opens early, when queens need it most.',
   },
+  'crocus': {
+    id: 'plant:crocus',
+    text: 'A queen bumblebee starts the colony alone in spring, incubating her first eggs like a tiny bird — a crocus that opens in the cold is her first warm meal.',
+  },
+  'borage': {
+    id: 'plant:borage',
+    // verified before adding (AGENTS.md rule): borage refills its nectar within
+    // minutes of a visit, unlike most flowers — RHS Plants for Pollinators lists
+    // it; quantified by Stawiarz et al. 2020 (5.2g nectar sugar per m²).
+    text: 'Borage refills its nectar within minutes of a visit, where most flowers take a day — a patch of these true-blue stars is a busy canteen all afternoon.',
+  },
+  'cosmos': {
+    id: 'plant:cosmos',
+    text: 'A meadow of one flower species is a feast-then-famine buffet — cosmos keeps the table set from midsummer deep into autumn.',
+  },
+  'aster': {
+    id: 'plant:aster',
+    // verified before adding: asters/michaelmas daisies are a noted late-season
+    // nectar source for bees and butterflies (RHS Plants for Pollinators).
+    text: 'Bees need blooms from early spring to late autumn — the aster is one of the last canteens open, feeding queens fuelling up before the cold.',
+  },
 };
 
 export const STRUCTURE_FACTS: Record<string, FactEntry> = {
@@ -60,6 +81,10 @@ export const STRUCTURE_FACTS: Record<string, FactEntry> = {
   hedge: {
     id: 'structure:hedge',
     text: 'Bees waste energy flying in wind — a hedge gives them a sheltered lane to forage along.',
+  },
+  bush: {
+    id: 'structure:bush',
+    text: 'Leaving a corner of the meadow unmown gives wild bees nesting sites and butterflies a place to overwinter — a low bush is a cozy shelter.',
   },
   wildcorner: {
     id: 'structure:wildcorner',
@@ -90,6 +115,14 @@ export const SEASON_VARIANT_FACTS: Record<Season, Record<string, FactEntry>> = {
     },
   },
   autumn: {
+    'plant:cosmos': {
+      id: 'variant:cosmos-autumn',
+      text: 'Honeybee workers visit 50–100 flowers per foraging trip — a cosmos drift keeps them fed on the way to the last asters.',
+    },
+    'plant:aster': {
+      id: 'variant:aster-autumn',
+      text: 'A meadow of one flower species is a feast-then-famine buffet — asters are the bridge that carries the meadow into winter.',
+    },
     'plant:poppy': {
       id: 'variant:poppy-autumn',
       text: 'A meadow of one flower species is a feast-then-famine buffet — late poppies help bridge the meadow into autumn.',
@@ -100,6 +133,10 @@ export const SEASON_VARIANT_FACTS: Record<Season, Record<string, FactEntry>> = {
     },
   },
   winter: {
+    'plant:crocus': {
+      id: 'variant:crocus-winter',
+      text: 'In winter, the honeybee colony clusters around the queen and shivers to keep her at a cozy ~21°C — on a mild day, crocuses open for the first brave foragers.',
+    },
     'structure:hive': {
       id: 'variant:hive-winter',
       text: 'The colony clusters around the queen right now, shivering to keep her at a cozy ~21\u00b0C — listen, the meadow is quiet but never empty.',
@@ -132,6 +169,21 @@ export const CONTEXT_FACTS: Record<string, FactEntry> = {
   'context:wild-near': {
     id: 'context:wild-near',
     text: 'A single mason bee can pollinate as many flowers as roughly 100 honeybees — wild bees often outperform hives at pollination.',
+  },
+};
+
+/** #15 (session 5): wild visitor facts — hoverfly mimicry verified against
+ *  reliable sources before adding (Batesian mimicry: harmless hoverflies
+ *  mimic stinging bees/wasps; NC State Extension, Wikipedia Syrphidae);
+ *  butterfly fact reuses EDUCATION.md's overwintering line. */
+export const WILD_VISITOR_FACTS: Record<string, FactEntry> = {
+  butterfly: {
+    id: 'wild:butterfly',
+    text: 'Leaving a corner of the meadow unmown gives butterflies a place to overwinter — this visitor will be back next spring.',
+  },
+  hoverfly: {
+    id: 'wild:hoverfly',
+    text: 'This little "bee" is a hoverfly — a harmless mimic with no stinger at all; its disguise fools hungry birds while it sips nectar.',
   },
 };
 

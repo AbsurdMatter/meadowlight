@@ -4,6 +4,9 @@ import { MEADOW_SIZE } from '../engine/terrain';
 import { groundAt } from '../engine/ground';
 import { usePlacementStore } from '../render/placementStore';
 import { beeDebug } from '../render/BeeSwarm';
+import { isRaining, setRaining } from '../engine/weather';
+import { dayPhase, setDayPhase, resumeDayCycle, dayCycleOverridden } from '../engine/dayCycle';
+import { fireflyDebug, setFireflyForce, fireflyForced } from '../render/Fireflies';
 import { setCellMapVisible, cellMapVisible } from '../render/CellMapOverlay';
 import { CELL_KINDS } from '../render/CellMapOverlay';
 import { MILESTONES } from '../data/milestones';
@@ -331,8 +334,74 @@ function PerfOverlayPanel() {
         </button>
         {cellMapOn && <CellMapLegend />}
       </div>
+      <Session5Triggers />
       <SaveInspector />
       <MilestoneChecklist />
+    </div>
+  );
+}
+
+/** session-5 trigger section: everything the living world introduced,
+ *  on demand — the P panel is the verification instrument. Dev-only
+ *  (the whole overlay is prod-excluded via PerfOverlay.tsx). */
+function Session5Triggers() {
+  const [, forceRender] = useState(0);
+  const refresh = () => forceRender((n) => n + 1);
+  const btn = (label: string, onClick: () => void, active: boolean, key?: string) => (
+    <button
+      key={key}
+      data-perf-s5={key}
+      onClick={() => {
+        onClick();
+        refresh();
+      }}
+      style={{
+        margin: '2px 4px 2px 0',
+        padding: '5px 9px',
+        borderRadius: 8,
+        border: 'none',
+        background: active ? '#7a9d54' : '#666',
+        color: '#fff',
+        fontFamily: 'inherit',
+        fontSize: 12,
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>session 5 triggers</div>
+      <div style={{ fontSize: 12, marginTop: 4 }}>weather</div>
+      <div>
+        {btn('rain ON', () => setRaining(true), isRaining(), 'rain-on')}
+        {btn('rain OFF', () => setRaining(false), !isRaining(), 'rain-off')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {' '}toggle only — no natural rain trigger exists yet (noted in commit)
+        </span>
+      </div>
+      <div style={{ fontSize: 12, marginTop: 4 }}>time of day (override; natural clock pauses)</div>
+      <div>
+        {btn('morning', () => setDayPhase(0.3), Math.abs(dayPhase() - 0.3) < 0.01, 'tod-morning')}
+        {btn('day', () => setDayPhase(0.5), Math.abs(dayPhase() - 0.5) < 0.01, 'tod-day')}
+        {btn('evening', () => setDayPhase(0.82), Math.abs(dayPhase() - 0.82) < 0.01, 'tod-evening')}
+        {btn('night', () => setDayPhase(0.97), Math.abs(dayPhase() - 0.97) < 0.01, 'tod-night')}
+        {btn('resume natural', () => {
+          resumeDayCycle();
+          refresh();
+        }, !dayCycleOverridden(), 'tod-resume')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {' '}phase {dayPhase().toFixed(2)} {dayCycleOverridden() ? '(held)' : '(drifting)'}
+        </span>
+      </div>
+      <div style={{ fontSize: 12, marginTop: 4 }}>fireflies (independent of dusk)</div>
+      <div>
+        {btn('force on', () => setFireflyForce(true), fireflyForced() === true, 'ff-on')}
+        {btn('force off', () => setFireflyForce(false), fireflyForced() === false, 'ff-off')}
+        {btn('natural', () => setFireflyForce(null), fireflyForced() === null, 'ff-natural')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}> {fireflyDebug.count} glowing</span>
+      </div>
     </div>
   );
 }

@@ -51,13 +51,13 @@ export function checkMilestones(
   // meadow blooms in all four seasons plus every species planted.
   if (species.length >= 6 && !has('tenSpecies')) fire('tenSpecies');
 
-  // yearRoundBloom: no famine across the GROWING seasons (early spring to
-  // late autumn — EDUCATION.md). Winter is intentionally quiet (the colony
-  // clusters), so the old all-four-seasons check was unreachable with any
-  // palette — a milestone nobody could ever earn (reachability rule).
-  const growing = SEASONS.filter((se) => se !== 'winter');
+  // yearRoundBloom: no famine in ANY season, including winter. Session 5
+  // adds the crocus (winter + spring bloom), so the all-four-seasons meadow
+  // is finally reachable — the original intent of this milestone. Note the
+  // species gate below: the winter bloom alone isn't enough, the player also
+  // needs the growing-season succession.
   if (
-    yearRoundBloom(items.map((i) => i.plantId), growing) &&
+    yearRoundBloom(items.map((i) => i.plantId), SEASONS) &&
     !has('yearRoundBloom')
   ) {
     fire('yearRoundBloom');

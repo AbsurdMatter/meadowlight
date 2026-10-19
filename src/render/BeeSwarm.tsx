@@ -5,6 +5,8 @@ import { BEE_TUNING } from '../data/bees';
 import { PLANT_BY_ID } from '../data/plants';
 import { usePlacementStore } from './placementStore';
 import { computeAppeal, beesForHive, inBloom, FORAGE_RADIUS, type PollinatorWorld } from '../engine/pollinator';
+import { isRaining, RAIN_TUNING } from '../engine/weather';
+import { dayPhase, isDaylight } from '../engine/dayCycle';
 import { noVariation } from '../engine/variation';
 import type { PlacedStructure } from '../engine/persistence';
 
@@ -50,7 +52,7 @@ const tmpMat = new THREE.Matrix4();
 const lookMat = new THREE.Matrix4();
 const scaleMat = new THREE.Matrix4();
 const up = new THREE.Vector3(0, 1, 0);
-const world: PollinatorWorld = { flowers: [], water: [], shelter: [], season: 'summer' };
+const world: PollinatorWorld = { flowers: [], water: [], shelter: [], bushes: [], season: 'summer' };
 /** flower id -> world position (+bloom info), rebuilt from the store each frame */
 const flowerById = new Map<string, { x: number; y: number; z: number; plantId: string }>();
 let crashLogged = false;
@@ -80,6 +82,10 @@ function syncWorld() {
     .map((st) => ({ x: st.position[0], z: st.position[2] }));
   world.shelter = s.structures
     .filter((st) => st.structureId === 'hedge')
+    .map((st) => ({ x: st.position[0], z: st.position[2] }));
+  // #7: placeable bushes join the shelter view at their own strength
+  world.bushes = s.structures
+    .filter((st) => st.structureId === 'bush')
     .map((st) => ({ x: st.position[0], z: st.position[2] }));
 }
 
@@ -201,8 +207,14 @@ export function BeeSwarm() {
       }
 
       if (bee.restingUntil <= t && bee.targetFlowerId === null) {
-        // pick a new target: mostly flowers, sometimes home
-        if (blooming.length > 0 && Math.random() > 0.15) {
+        // #14: rain sends the colony home - cozy, never punished; a bee
+        // mid-trip finishes it, the next pick is the hive
+        // #13 (P-trigger verification found the gap): night too - real
+        // colonies stop foraging in the dark and cluster until morning
+        if ((RAIN_TUNING.beesHome && isRaining()) || !isDaylight(dayPhase())) {
+          bee.headingHome = true;
+          bee.wanderTarget = null;
+        } else if (blooming.length > 0 && Math.random() > 0.15) {
           bee.targetFlowerId = blooming[Math.floor(Math.random() * blooming.length)];
           // re-resolve immediately: flowerInfo must match the new target this
           // same frame, or steering below would aim at the hive while the bee

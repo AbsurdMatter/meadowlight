@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -73,6 +73,11 @@ const assert = require('node:assert');
 const OUT = require('node:path').join(__dirname, '..', 'out');
 const { computeAppeal, inBloom, plantedSpecies, hasBloom, yearRoundBloom, beesForHive, FORAGE_RADIUS } = require(OUT + '/engine/pollinator.js');
 const { PLANTS, PLANT_BY_ID } = require(OUT + '/data/plants.js');
+const { groundAt, waterSurfaceHeight, pondFloorHeight } = require(OUT + '/engine/ground.js');
+const { LAKE, TERRAIN_SHAPE, shapedHeight, POND_FLAT_HEIGHT } = require(OUT + '/data/environment.js');
+const { MEADOW_SIZE, terrainHeight } = require(OUT + '/engine/terrain.js');
+const { isRaining, setRaining } = require(OUT + '/engine/weather.js');
+const { skyPaletteAt, GOLDEN_HOUR, sunElevation, isDaylight, isDusk, DUSK_START, DUSK_END, DAY_CYCLE_SECONDS, dayPhase, setDayPhase, advanceDay, resumeDayCycle, dayCycleOverridden } = require(OUT + '/engine/dayCycle.js');
 const { SEASONS } = require(OUT + '/data/seasons.js');
 const { checkMilestones } = require(OUT + '/engine/milestones.js');
 const { variationFor, rollVariation, noVariation, VARIATION_TUNING } = require(OUT + '/engine/variation.js');
@@ -137,12 +142,252 @@ test('succession: single-species meadow has famine seasons', () => {
   // lavender is summer-only: a lavender-only meadow starves in 3 of 4 seasons
   assert.ok(!hasBloom(['lavender'], 'winter'));
   assert.ok(!yearRoundBloom(['lavender'], SEASONS));
-  // a full six-species planting covers every GROWING season (winter is the
-  // quiet season by design — the colony clusters; see milestones.ts)
+  // session 5: the crocus makes the ALL-four-seasons meadow reachable, so a
+  // full roster planting now covers every season including winter (the old
+  // "winter famine is by design" assertion was pre-crocus)
   const all = PLANTS.map((p) => p.id);
   const growing = SEASONS.filter((s) => s !== 'winter');
-  assert.ok(!yearRoundBloom(all, SEASONS), 'winter famine is by design');
-  assert.ok(yearRoundBloom(all, growing));
+  assert.ok(yearRoundBloom(all, growing), 'roster covers growing seasons');
+  assert.ok(yearRoundBloom(all, SEASONS), 'roster + crocus covers winter too');
+  // but the pre-session-5 six species alone still famish in winter
+  const six = ['lavender', 'clover', 'poppy', 'sunflower', 'thyme', 'forget-me-not'];
+  assert.ok(!yearRoundBloom(six, SEASONS), 'six originals still famish in winter');
+});
+
+test('reachability: every species is plantable and blooms in a traceable session', () => {
+  // yearRoundBloom lesson: a flower that can never be seen blooming is broken.
+  // For each species, trace a realistic session: plant the whole roster, dial
+  // every season, and confirm each species is in bloom in at least one season
+  // AND out of bloom in at least one season (succession must be visible).
+  const all = PLANTS.map((p) => p.id);
+  for (const p of PLANTS) {
+    const bloomingSeasons = SEASONS.filter((s) => inBloom(p.id, s));
+    assert.ok(bloomingSeasons.length >= 1, p.id + ' never blooms (unreachable)');
+    assert.ok(
+      bloomingSeasons.length < SEASONS.length,
+      p.id + ' blooms year-round (succession invisible)',
+    );
+  }
+  // each season has at least one blooming roster species (no dead season)
+  for (const s of SEASONS) {
+    assert.ok(hasBloom(all, s), 'no roster species blooms in ' + s);
+  }
+});
+
+// ---------- session 5 U2 (#31): terrain shaping surveys ----------
+
+test('pond plateau: water sits below its banks everywhere on the flat zone', () => {
+  // bank margin: bank height minus water surface, sampled densely over the
+  // full 360° ring between the pond edge and the flat radius
+  const waterY = POND_FLAT_HEIGHT - LAKE.surfaceDrop;
+  let minMargin = Infinity;
+  let worst = null;
+  for (let a = 0; a < 360; a += 2) {
+    const rad = (a * Math.PI) / 180;
+    for (let d = LAKE.radius; d <= TERRAIN_SHAPE.pondFlatRadius; d += 0.5) {
+      const x = LAKE.center[0] + Math.cos(rad) * d;
+      const z = LAKE.center[1] + Math.sin(rad) * d;
+      const bank = groundAt(x, z).height;
+      const margin = bank - waterY;
+      if (margin < minMargin) { minMargin = margin; worst = { a, d: +d.toFixed(1), margin: +margin.toFixed(3) }; }
+    }
+  }
+  // #28: the bank must be above the water everywhere; on the plateau it is
+  // the constant surfaceDrop by construction
+  assert.ok(minMargin > 0, 'bank below water somewhere: ' + JSON.stringify(worst));
+  // and essentially the designed constant inside the flat zone
+  assert.ok(
+    Math.abs(minMargin - LAKE.surfaceDrop) < 0.05,
+    'flat-zone bank margin should equal surfaceDrop, got min ' + minMargin.toFixed(3),
+  );
+});
+
+test('pond plateau is actually flat: heights constant within the flat radius', () => {
+  let min = Infinity;
+  let max = -Infinity;
+  for (let a = 0; a < 360; a += 2) {
+    const rad = (a * Math.PI) / 180;
+    for (let d = 0; d <= TERRAIN_SHAPE.pondFlatRadius - 0.5; d += 0.5) {
+      const x = LAKE.center[0] + Math.cos(rad) * d;
+      const z = LAKE.center[1] + Math.sin(rad) * d;
+      const h = shapedHeight(x, z);
+      if (h < min) min = h;
+      if (h > max) max = h;
+    }
+  }
+  assert.ok(max - min < 1e-9, 'plateau varies ' + (max - min).toFixed(6));
+  assert.ok(Math.abs(max - POND_FLAT_HEIGHT) < 1e-9, 'plateau not at pond-center height');
+});
+
+test('meadow rim is gentler: max rim step down from terrain to meadow shrinks', () => {
+  // the #29 rim survey measured every meadow-square edge cell against the
+  // nearest terrain cell; the meadow must stay BELOW terrain everywhere
+  // (no floating meadow), and the rim rise (terrain - meadow) should now be
+  // smaller with the halved lift rate inside the calm ring
+  const half = MEADOW_SIZE / 2;
+  let rimMax = -Infinity;
+  let count = 0;
+  for (let x = -half; x <= half; x += 1.6) {
+    for (const edge of [-half, half]) {
+      const m = groundAt(x, edge).height;
+      const t = shapedHeight(x, edge + (edge < 0 ? -1.6 : 1.6));
+      const rise = t - m;
+      if (rise > rimMax) rimMax = rise;
+      count++;
+      assert.ok(rise > 0, 'meadow above terrain at ' + x + ',' + edge);
+    }
+  }
+  // pre-#31 the rim rose up to ~4.7 at the corners (lift 0.045 x ~105 +
+  // wave); with calmLiftPerRadius 0.02 the max rise is materially smaller
+  assert.ok(rimMax < 3.2, 'rim still steep: max rise ' + rimMax.toFixed(2));
+});
+
+test('second outer rim: terrain rises steeply beyond the calm ring', () => {
+  // the hills zone ends at r=50, so the second rim has ~15 units to rise
+  // (outerRimStartRadius 34 -> 50 at 0.12/unit = +1.8 lift over the old
+  // profile's tail). Invariants that matter:
+  // 1. the rim is clearly ABOVE the old profile at the horizon edge
+  const h = shapedHeight(49, 0);
+  const oldProfile = terrainHeight(49, 0) + Math.max(0, 49 - 22) * 0.045;
+  assert.ok(h > oldProfile, 'outer rim below old profile at r=49: ' + h.toFixed(2) + ' vs ' + oldProfile.toFixed(2));
+  // 2. it rises faster than the old profile per unit radius (a real shoulder)
+  const riseNew = shapedHeight(49, 0) - shapedHeight(35, 0);
+  const riseOld =
+    terrainHeight(49, 0) + 27 * 0.045 - (terrainHeight(35, 0) + 13 * 0.045);
+  assert.ok(
+    riseNew > riseOld + 0.8,
+    'second rim not steeper than old profile: ' + riseNew.toFixed(2) + ' vs ' + riseOld.toFixed(2),
+  );
+  // 3. the calm middle stays LOW: at r=30 the new profile sits below the old
+  assert.ok(
+    shapedHeight(30, 0) < terrainHeight(30, 0) + 8 * 0.045,
+    'calm middle not gentler than old profile',
+  );
+});
+
+// ---------- session 5 U3 (#7): bushes & shelter mechanics ----------
+
+test('bushes contribute shelter at half strength, hedge always dominates', () => {
+  const base = { flowers: [], water: [], shelter: [], bushes: [], season: 'summer' };
+  // a bush at distance d scores half the hedge term at the same distance
+  const mk = (over) => computeAppeal({ x: 0, z: 0 }, { ...base, ...over }, FORAGE_RADIUS);
+  const none = mk({});
+  const bushNear = mk({ bushes: [{ x: 2, z: 0 }] });
+  const hedgeNear = mk({ shelter: [{ x: 2, z: 0 }] });
+  assert.ok(bushNear.shelter > none.shelter, 'bush must raise shelter score');
+  assert.ok(
+    Math.abs(bushNear.shelter - hedgeNear.shelter * 0.5) < 1e-9,
+    'bush shelter should be half the hedge term at equal distance',
+  );
+  // hedge beats bush at equal distance
+  assert.ok(hedgeNear.shelter > bushNear.shelter, 'hedge must dominate bush');
+  // a bush beyond the radius does not count
+  const far = mk({ bushes: [{ x: 100, z: 100 }] });
+  assert.strictEqual(far.shelter, 0, 'bush beyond forage radius must not count');
+  // no stacking: bush + hedge at the same spot = hedge alone (max, not sum)
+  const both = mk({ shelter: [{ x: 2, z: 0 }], bushes: [{ x: 2, z: 0 }] });
+  assert.ok(Math.abs(both.shelter - hedgeNear.shelter) < 1e-9, 'shelter must not stack');
+  // and appeal itself rises with a bush present (the meadow gets better)
+  const w1 = { flowers: [{ x: 1, z: 0, plantId: 'lavender' }], water: [], shelter: [], bushes: [], season: 'summer' };
+  const appealNo = computeAppeal({ x: 0, z: 0 }, w1, FORAGE_RADIUS).score;
+  const appealBush = computeAppeal({ x: 0, z: 0 }, { ...w1, bushes: [{ x: 2, z: 0 }] }, FORAGE_RADIUS).score;
+  assert.ok(appealBush > appealNo, 'bush must raise appeal');
+});
+
+// ---------- session 5 U4 (#6): sky palette / day model ----------
+
+test('sky palette: golden hour matches the classic meadow look', () => {
+  const p = skyPaletteAt(GOLDEN_HOUR);
+  // the pre-session-5 sky constants: #6fa8dc top, #a8cdf0 mid, #ffd9a0 horizon
+  assert.ok(Math.abs(parseInt(p.horizon.slice(1), 16) - parseInt('ffd9a0', 16)) < 0x0c0c0c, 'horizon drift: ' + p.horizon);
+  // golden hour is warm: horizon clearly warmer (more red) than the day blue
+  const day = skyPaletteAt(0.5);
+  const warm = (x) => parseInt(x.slice(1), 16);
+  assert.ok((warm(p.horizon) >> 16) > (warm(day.top) >> 16), 'golden hour must be warm');
+});
+
+test('sky palette wraps cleanly and never throws at any phase', () => {
+  for (let i = 0; i <= 100; i++) {
+    const p = skyPaletteAt(i / 100);
+    assert.ok(typeof p.top === 'string' && p.top.startsWith('#'), 'bad palette at ' + i / 100);
+    assert.ok(p.ambient >= 0 && p.ambient <= 1, 'ambient out of range');
+  }
+  // wrapping out-of-range phases must not throw either
+  for (const phase of [-0.2, 1.3, 7.7]) {
+    const p = skyPaletteAt(phase);
+    assert.ok(!!p.top, 'wrap failed at ' + phase);
+  }
+});
+
+test('sun model: elevation peaks at noon, night is dark', () => {
+  assert.ok(sunElevation(0.5) > 0.85, 'noon should be high: ' + sunElevation(0.5).toFixed(2));
+  assert.ok(sunElevation(0.0) < -0.7, 'midnight should be low: ' + sunElevation(0.0).toFixed(2));
+  assert.ok(isDaylight(0.5), 'noon is daylight');
+  assert.ok(!isDaylight(0.0), 'midnight is not daylight');
+});
+
+test('daylight window matches the sky (PR #35 blocker regression test)', () => {
+  // the lit sky window per the palette keyframes: 0.22 dawn .. 0.88 dusk.
+  // The old elevation>0.05 test read golden hour (0.82) as NIGHT — that
+  // parked the whole swarm at the hive from the default boot phase.
+  assert.ok(isDaylight(0.82), 'golden hour DEFAULT must be daylight (bees forage)');
+  assert.ok(isDaylight(GOLDEN_HOUR), 'the boot phase must be daylight');
+  assert.ok(isDaylight(0.3) && isDaylight(0.5) && isDaylight(0.65), 'the day window is lit');
+  assert.ok(isDaylight(0.22) && isDaylight(0.88), 'window boundaries inclusive');
+  assert.ok(!isDaylight(0.21) && !isDaylight(0.89), 'outside the window reads night');
+  assert.ok(!isDaylight(0.95) && !isDaylight(0.0) && !isDaylight(0.1), 'deep night is night');
+  // the panel's day/evening buttons must land in daylight, night must not
+  assert.ok(isDaylight(0.3) && isDaylight(0.5) && isDaylight(0.82), 'panel day phases are lit');
+  assert.ok(!isDaylight(0.97), 'panel night phase is dark');
+});
+
+// ---------- session 5 U6 (#13): day/night clock ----------
+
+test('day clock: 12-minute cycle, overrides hold, resume drifts again', () => {
+  assert.strictEqual(DAY_CYCLE_SECONDS, 720, 'cycle length per approved plan');
+  // override semantics (P panel): setDayPhase holds the clock still
+  resumeDayCycle();
+  setDayPhase(0.5);
+  assert.strictEqual(dayPhase(), 0.5);
+  assert.ok(dayCycleOverridden(), 'override must hold the clock');
+  advanceDay(720);
+  assert.ok(Math.abs(dayPhase() - 0.5) < 1e-9, 'override: clock does not drift');
+  // resume: natural drift returns
+  resumeDayCycle();
+  assert.ok(!dayCycleOverridden(), 'resume releases the override');
+  advanceDay(360);
+  assert.ok(Math.abs(dayPhase() - 0.0) < 1e-9, 'half cycle wraps to midnight');
+  advanceDay(720);
+  assert.ok(Math.abs(dayPhase() - 0.0) < 1e-9, 'one full cycle returns to start');
+  // negative phases wrap
+  setDayPhase(-0.25);
+  assert.ok(Math.abs(dayPhase() - 0.75) < 1e-9, 'negative phase wraps');
+  resumeDayCycle();
+});
+
+test('dusk window: fireflies appear only in 0.79-0.92', () => {
+  assert.ok(isDusk(0.82), 'golden hour is in dusk');
+  assert.ok(isDusk(0.79) && isDusk(0.92), 'window is inclusive');
+  assert.ok(!isDusk(0.5), 'noon is not dusk');
+  assert.ok(!isDusk(0.95) && !isDusk(0.78), 'night and late afternoon are not dusk');
+});
+
+// ---------- session 5 U7 (#14): weather — cozy, no fail state ----------
+
+test('rain never lowers appeal: the no-fail invariant', () => {
+  const w = {
+    flowers: [{ x: 1, z: 0, plantId: 'lavender' }, { x: 2, z: 1, plantId: 'clover' }],
+    water: [{ x: 2, z: 0 }],
+    shelter: [{ x: 1, z: 2 }],
+    bushes: [{ x: 0, z: 2 }],
+    season: 'summer',
+  };
+  const dry = computeAppeal({ x: 0, z: 0 }, w, FORAGE_RADIUS);
+  setRaining(true);
+  const wet = computeAppeal({ x: 0, z: 0 }, w, FORAGE_RADIUS);
+  setRaining(false);
+  assert.strictEqual(dry.score, wet.score, 'rain must not change appeal (no fail state)');
+  assert.strictEqual(isRaining(), false, 'rain toggles back off');
 });
 
 test('plantedSpecies dedupes and ignores unknown ids', () => {

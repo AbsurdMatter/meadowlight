@@ -49,10 +49,10 @@ const LEGACY_KEY = 'meadowlight.world.v1';
 /** corrupt/unknown-version saves are preserved here before booting fresh */
 const BACKUP_KEY = 'meadowlight.world._backup';
 /** versions this build understands (anything else = unknown, backed up) */
-const KNOWN_VERSIONS = new Set([1, 2, 3, 4]);
+const KNOWN_VERSIONS = new Set([1, 2, 3, 4, 5]);
 
 export interface WorldData {
-  version: 4;
+  version: 4 | 5;
   items: PlacedItem[];
   structures: PlacedStructure[];
   milestones: MilestoneId[];
@@ -66,6 +66,12 @@ export interface WorldData {
   wildSeasons?: string[];
   /** true once the player has dismissed the onboarding (v4, additive) */
   onboardingDismissed?: boolean;
+  /**
+   * #13 (session 5, v5, additive): where the day/night cycle sits when the
+   * save was written (0..1, golden hour default when absent). The cycle is
+   * ambience — old saves load untouched and simply resume at golden hour.
+   */
+  dayPhase?: number;
 }
 
 function parseItems(parsed: unknown): PlacedItem[] {
@@ -127,9 +133,14 @@ function parseOnboardingDismissed(parsed: unknown): boolean {
   return parsed === true;
 }
 
+/** v5 additive: day-cycle position; absent = golden hour (never breaks) */
+function parseDayPhase(parsed: unknown): number | undefined {
+  return typeof parsed === 'number' && parsed >= 0 && parsed <= 1 ? parsed : undefined;
+}
+
 function freshWorld(): WorldData {
   return {
-    version: 4,
+    version: 5,
     items: [],
     structures: [],
     milestones: [],
@@ -185,7 +196,7 @@ export function loadWorld(): WorldData {
             ? data.randomRotation
             : DEFAULT_PLACEMENT_VARIATION;
       return {
-        version: 4,
+        version: 5,
         items: parseItems(data.items),
         structures: parseStructures(data.structures),
         milestones: parseMilestones(data.milestones),
@@ -195,6 +206,7 @@ export function loadWorld(): WorldData {
         seenFacts: parseSeenFacts(data.seenFacts),
         wildSeasons: parseWildSeasons(data.wildSeasons),
         onboardingDismissed: parseOnboardingDismissed(data.onboardingDismissed),
+        dayPhase: parseDayPhase(data.dayPhase),
       };
     }
     // v1 shape: bare array of items
@@ -224,7 +236,7 @@ export function clearSavedWorld(): void {
 
 export function saveWorld(data: Omit<WorldData, 'version'>): void {
   try {
-    const payload: WorldData = { version: 4, ...data };
+    const payload: WorldData = { version: 5, ...data };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     localStorage.removeItem(LEGACY_KEY);
   } catch {

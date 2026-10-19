@@ -366,19 +366,21 @@ function Clouds() {
 
   const clusters = useMemo(() => {
     const rng = makeRng(31415);
+    // #6: composed clouds — the template's wind-swept silhouette with small
+    // seeded variation so clusters are siblings, not clones
     return CLOUDS.clusters.map((c, ci) => ({
       ...c,
       x: (rng() * 2 - 1) * CLOUDS.wrapHalfWidth,
-      puffs: Array.from({ length: CLOUDS.puffsPerCloud }, (_, pi) => ({
+      puffs: CLOUDS.puffTemplate.map((p, pi) => ({
         offset: [
-          (rng() * 2 - 1) * 5.5,
-          (rng() * 2 - 1) * 1.2,
-          (rng() * 2 - 1) * 2.5,
+          p.offset[0] + (rng() - 0.5) * 1.2,
+          p.offset[1] + (rng() - 0.5) * 0.4,
+          p.offset[2] + (rng() - 0.5) * 1.2,
         ] as [number, number, number],
         size: [
-          3 + rng() * 4.5,
-          1.2 + rng() * 1.4,
-          2.5 + rng() * 3,
+          p.size[0] * (0.85 + rng() * 0.3),
+          p.size[1] * (0.85 + rng() * 0.3),
+          p.size[2] * (0.85 + rng() * 0.3),
         ] as [number, number, number],
         seed: ci * 10 + pi,
       })),

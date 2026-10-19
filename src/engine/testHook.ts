@@ -7,6 +7,13 @@ import type { StructureId } from '../data/structures';
 import type { PerspectiveCamera, WebGLRenderer } from 'three';
 import type { Size } from '@react-three/fiber';
 import { beeDebug } from '../render/BeeSwarm';
+import { wildDebug } from '../render/WildPollinators';
+import { fireflyDebug } from '../render/Fireflies';
+import { setDayPhase } from './dayCycle';
+import { setRaining } from './weather';
+import { dayPhase } from './dayCycle';
+import { setFireflyForce } from '../render/Fireflies';
+import { rainDebug } from '../render/Rain';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
 import { capturePostcardPng } from './postcard';
 import { audioDebugInfo, audioRunning } from './audio';
@@ -27,6 +34,13 @@ declare global {
       beeCount: () => number;
       beeDebug: () => unknown;
     solitaryBeeCount: () => number;
+    wildDebug: () => unknown;
+    fireflyDebug: () => unknown;
+    setDayPhase: (p: number) => void;
+    setRaining: (v: boolean) => void;
+    setFireflyForce: (v: boolean | null) => void;
+    dayPhaseReadback: () => number;
+    rainDebug: () => unknown;
     rareBeeCount: () => number;
     capturePostcard: () => string | null;
     audioDebug: () => unknown;
@@ -125,6 +139,13 @@ export function installTestHook() {
     beeCount: () => beeDebug.count,
     beeDebug: () => ({ ...beeDebug }),
     solitaryBeeCount: () => solitaryBeeDebug.count,
+    wildDebug: () => ({ ...wildDebug }),
+    fireflyDebug: () => ({ ...fireflyDebug }),
+    setDayPhase,
+    setRaining,
+    setFireflyForce,
+    dayPhaseReadback: () => dayPhase(),
+    rainDebug: () => ({ ...rainDebug }),
     rareBeeCount: () => rareBeeDebug.count,
     capturePostcard: () => capturePostcardPng(),
     audioDebug: () => audioDebugInfo(),

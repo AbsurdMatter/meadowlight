@@ -1,4 +1,5 @@
 import { AMBIENT_AUDIO } from '../data/audio';
+import { isRaining, RAIN_TUNING } from './weather';
 
 /**
  * Ambient audio: soft generated wind + gentle bee buzz via WebAudio.
@@ -152,8 +153,10 @@ export function startAmbientAudio(): boolean {
         audio.beeCountAtLastTick = count;
         if (!audio.buzzGain || !audio.ctx) return;
         const t = audio.ctx.currentTime;
-        const level =
+        let level =
           Math.min(1, count / AMBIENT_AUDIO.buzz.fullAtBees) * AMBIENT_AUDIO.buzz.maxGain;
+        // #14: rain hushes the meadow - a gentle damp, never silence
+        if (isRaining()) level *= RAIN_TUNING.audioDamp;
         audio.buzzGain.gain.setTargetAtTime(level, t, 0.4);
       } catch {
         // never let the audio tick throw

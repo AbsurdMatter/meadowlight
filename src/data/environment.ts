@@ -46,12 +46,44 @@ export const HILLS = {
  */
 export const MEADOW_BOWL = {
   /**
-   * Deep enough to read as THE low bowl: the natural heightfield undulates
-   * ~±1.2 around the meadow's rim, so a shallow dip gets swamped — at some
-   * spots the meadow edge would still sit above adjacent hills. 1.5 puts
-   * the entire meadow surface below the terrain everywhere on the rim.
+   * PR #35 terrain verdict (2): 1.5 read as a pit, not a gentle dip — the
+   * user's eye is the acceptance criterion. Lifted to 0.9: still a clear
+   * depression (the rim keeps the meadow surface below the terrain
+   * everywhere — verified by the rim survey), but reads as a dip.
+   * Pond plateau is untouched (approved); water-below-banks is checked by
+   * the bank-margin survey after this change.
    */
-  depth: 1.5,
+  depth: 0.9,
+} as const;
+
+/**
+ * #31 terrain shaping (session 5): the world gets a radius profile.
+ *  - POND_FLAT: a plateau around the pond so single-level water sits safely
+ *    below its banks EVERYWHERE (the #29 banks varied with the wave field;
+ *    the flat-water survey demanded a constant bank margin).
+ *  - CALM_MIDDLE: the ring holding trees/pond/future shrubs is damped and
+ *    the inner rim lift is halved — much gentler than pre-#31, which rose at
+ *    0.045/unit right from the meadow edge and waved at full amplitude.
+ *  - SECOND_RIM: real hills out beyond the calm ring (the user's structural
+ *    idea: hills out there, calm middle) — they rise steeply enough to read
+ *    as a second rim against the fog.
+ * All deterministic decoration derived from (x, z) — no save impact.
+ */
+export const TERRAIN_SHAPE = {
+  /** pond plateau: exact flat within flatRadius, feathered to full by featherEnd */
+  pondFlatRadius: 11,
+  pondFlatFeatherEnd: 15,
+  /** where the calm middle ring sits (meadow rim is ~22) */
+  calmInnerRadius: 22,
+  calmOuterRadius: 36,
+  /** wave amplitude multiplier inside the calm ring (feathered to 1.0 by calmOuterRadius + feather) */
+  calmAmplitude: 0.45,
+  calmFeather: 4,
+  /** inner rim lift rate inside the calm ring (was HILLS.liftPerRadius = 0.045) */
+  calmLiftPerRadius: 0.02,
+  /** the second outer rim: hills beyond this radius rise fast */
+  outerRimStartRadius: 34,
+  outerRimLiftPerRadius: 0.12,
 } as const;
 
 export const LAKE = {
@@ -142,6 +174,12 @@ export const CLOUDS = {
   color: '#fff4e0',
   opacity: 0.92,
   wrapHalfWidth: 62,
+  /**
+   * #6 (session 5): purposeful clouds — each cluster is a COMPOSITION, not
+   * a random blob: a flat wind-swept base puff, a smaller puff above-left,
+   * a bright cap. Shapes are wide-and-low (cumulus humilis at golden hour),
+   * spaced so the sky reads composed from the default camera.
+   */
   clusters: [
     { height: 17, speed: 0.5, z: -16, scale: 1.2 },
     { height: 21, speed: 0.32, z: 6, scale: 1.45 },
@@ -150,11 +188,68 @@ export const CLOUDS = {
     { height: 19, speed: 0.42, z: 28, scale: 1.0 },
   ],
   puffsPerCloud: 6,
+  /** composed puff template (offsets/sizes in cluster-local units, x-z spread
+   *  much wider than y — the wind-swept reading) */
+  puffTemplate: [
+    { offset: [0, 0, 0], size: [7.5, 1.3, 3.4] },
+    { offset: [-4.2, 0.5, 0.8], size: [4.5, 1.1, 2.6] },
+    { offset: [4.0, 0.4, -0.7], size: [4.0, 1.0, 2.4] },
+    { offset: [-1.6, 1.1, 0.3], size: [3.4, 1.0, 2.0] },
+    { offset: [2.2, 0.9, -0.4], size: [2.8, 0.9, 1.8] },
+    { offset: [0.4, 1.7, 0], size: [2.2, 0.8, 1.5] },
+  ],
 };
 
 /** Decorative background ground height: meadow terrain + gentle rise with distance. */
 export function backgroundHeight(x: number, z: number): number {
-  const r = Math.hypot(x, z);
-  const lift = Math.max(0, r - HILLS.liftStartRadius) * HILLS.liftPerRadius;
-  return terrainHeight(x, z) + lift;
+  return shapedHeight(x, z);
 }
+
+/**
+ * #31: the shared height profile used by backgroundHeight() and the ground
+ * oracle's outside-meadow branch. Bands (all radii from origin):
+ *   r <= pond flat zone -> plateau at the pond-center natural height
+ *   meadow rim band     -> damped waves, gentle lift (calmLiftPerRadius)
+ *   beyond calmOuter    -> second rim lift (outerRimLiftPerRadius)
+ */
+export function shapedHeight(x: number, z: number): number {
+  const r = Math.hypot(x, z);
+  const t = TERRAIN_SHAPE;
+
+  // wave amplitude: damped inside the calm ring, feathered back to full
+  // between calmOuterRadius and calmOuterRadius + calmFeather
+  const overCalm = Math.max(0, r - t.calmOuterRadius);
+  const ampT = Math.min(1, overCalm / t.calmFeather);
+  const amp = t.calmAmplitude + (1 - t.calmAmplitude) * ampT;
+  const wave = (terrainHeight(x, z) / 0.55) * amp; // undamped wave sum (pre-0.55)
+
+  // lift: gentle rate through the calm ring, then the steep second-rim rate
+  // for the whole span beyond outerRimStart (shoulder, not a kink)
+  const calmLift = Math.max(0, r - t.calmInnerRadius) * t.calmLiftPerRadius;
+  const outerLift =
+    Math.max(0, r - t.outerRimStartRadius) * t.outerRimLiftPerRadius;
+  const liftFinal =
+    r <= t.outerRimStartRadius
+      ? calmLift
+      : (t.outerRimStartRadius - t.calmInnerRadius) * t.calmLiftPerRadius +
+        outerLift;
+
+  // pond plateau: blend to the pond-center natural height near the pond
+  const pd = Math.hypot(x - LAKE.center[0], z - LAKE.center[1]);
+  if (pd <= t.pondFlatRadius) {
+    return POND_FLAT_HEIGHT;
+  }
+  if (pd < t.pondFlatFeatherEnd) {
+    const f = (pd - t.pondFlatRadius) / (t.pondFlatFeatherEnd - t.pondFlatRadius);
+    const natural = wave * 0.55 + liftFinal;
+    return POND_FLAT_HEIGHT * (1 - f) + natural * f;
+  }
+  return wave * 0.55 + liftFinal;
+}
+
+/**
+ * The pond plateau height: the natural (undamped, unlifted) terrain height at
+ * the pond center — a constant, so water at surfaceDrop below it sits below
+ * its banks everywhere on the plateau.
+ */
+export const POND_FLAT_HEIGHT = terrainHeight(LAKE.center[0], LAKE.center[1]);
