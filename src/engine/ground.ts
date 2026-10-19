@@ -46,9 +46,15 @@ export function groundAt(x: number, z: number): GroundInfo {
   };
 }
 
-/** Water surface height (the voxel lip top). */
-export function waterSurfaceHeight(): number {
-  return LAKE.level + LAKE.surfaceHeight;
+/**
+ * Water surface height at a point: the voxel water now sits BELOW the
+ * surrounding terrain (#28) — half a voxel step under the ground oracle's
+ * height, so the brown shoreline ring reads above the waterline. The pond
+ * basin is carved out of the hills ground (Hills skips water cells), so
+ * sunken water stays visible instead of buried.
+ */
+export function waterSurfaceHeight(x: number, z: number): number {
+  return groundAt(x, z).height - LAKE.sinkDepth;
 }
 
 /**

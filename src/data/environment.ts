@@ -55,8 +55,14 @@ export const LAKE = {
    * waterline steps cleanly into the terrain instead of slicing it.
    */
   voxelStep: 1.4,
-  /** water cube top sits this far above LAKE.level (visible voxel lip) */
-  surfaceHeight: 0.22,
+  /**
+   * #28: the 0.22 voxel lip put water ABOVE the terrain. The surface now
+   * sits this far BELOW the ground height at each cell (about half a voxel
+   * step: 1.4/2 = 0.7 is too deep for the thin cubes, so a visible-but-
+   * sunken 0.35), with the pond basin carved out of the hills ground so
+   * sunken water stays visible.
+   */
+  sinkDepth: 0.35,
   /**
    * #22 fix: the pond read nearly black. Causes: deep cube sides under a
    * mostly-opaque material, plus 55% bed-brown tint at the rim. Now the

@@ -47,6 +47,10 @@ function Hills() {
       for (let z = -outer; z <= outer; z += step) {
         const r = Math.hypot(x, z);
         if (r < HILLS.innerRadius || r > outer) continue;
+        // #28: carve the pond basin — no hills ground inside the water
+        // disc, so the sunken water sits in a real depression with the
+        // brown shore ring reading above the waterline
+        if (Math.hypot(x - LAKE.center[0], z - LAKE.center[1]) <= LAKE.radius) continue;
         const jx = x + (rng() - 0.5) * step * HILLS.jitter;
         const jz = z + (rng() - 0.5) * step * HILLS.jitter;
         const h = backgroundHeight(jx, jz);
@@ -162,7 +166,6 @@ function Lake() {
     const step = LAKE.voxelStep;
     const cx = LAKE.center[0];
     const cz = LAKE.center[1];
-    const topY = LAKE.level + LAKE.surfaceHeight;
     let i = 0;
     for (let gx = -60; gx <= 60; gx += step) {
       for (let gz = -60; gz <= 60; gz += step) {
@@ -174,14 +177,12 @@ function Lake() {
         const cover = THREE.MathUtils.clamp((LAKE.radius - d) / step + 0.5, 0, 1);
         if (cover <= 0.05) continue;
         const size = step * Math.max(0.35, cover);
-        // #22 root cause: the pond sits in the background-lift band, where
-        // the VISIBLE surface is backgroundHeight — the old fixed
-        // level+surfaceHeight put the cube tops BELOW that ground, so the
-        // hills boxes covered the entire pond ("nearly black water" was the
-        // fog-tinted hills box tops). Each cube's top now clears the ground
-        // oracle's height at its own cell; the lip is relative to terrain.
-        const cellTop = Math.max(topY, groundAt(x, z).height + LAKE.surfaceHeight);
-        const bottom = cellTop - LAKE.cubeDepth;
+        // #28: the surface sinks BELOW the terrain (half a voxel step);
+        // the basin is carved from the hills ground, so these sunken cubes
+        // line the depression. Depth covers the sink plus wall overlap so
+        // no gaps show between water and carved basin sides.
+        const cellTop = groundAt(x, z).height - LAKE.sinkDepth;
+        const bottom = cellTop - LAKE.cubeDepth - LAKE.sinkDepth;
         const h = cellTop - bottom;
         mat.makeScale(size, h, size);
         mat.setPosition(x, bottom + h / 2, z);
