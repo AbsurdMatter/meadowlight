@@ -207,9 +207,25 @@ export function GrassTufts() {
     let i = 0;
     for (const b of bushlets) {
       const h = groundAt(b.x, b.z).height;
+      // PR #35 polish: per-bushlet deterministic rotation + scale jitter
+      // (the grass quantized-hash pattern — objects, not terrain: this is
+      // NOT the reverted #29 terrain-boundary jitter). Stable across loads.
+      const qx = Math.round(b.x * 20);
+      const qz = Math.round(b.z * 20);
+      const rotY = hash2(qx, qz, 903) * Math.PI * 2;
+      const scaleJitter = 0.85 + hash2(qx, qz, 904) * 0.35;
+      const cosR = Math.cos(rotY);
+      const sinR = Math.sin(rotY);
       for (const part of BUSHLETS.parts) {
-        mat.makeScale(part.size[0], part.size[1], part.size[2]);
-        mat.setPosition(b.x + part.offset[0], h + part.offset[1], b.z + part.offset[2]);
+        // rotate the part offset around the bushlet's Y axis, then place
+        const ox = part.offset[0] * cosR + part.offset[2] * sinR;
+        const oz = -part.offset[0] * sinR + part.offset[2] * cosR;
+        mat.makeScale(
+          part.size[0] * scaleJitter,
+          part.size[1] * scaleJitter,
+          part.size[2] * scaleJitter,
+        );
+        mat.setPosition(b.x + ox, h + part.offset[1], b.z + oz);
         mesh.setMatrixAt(i, mat);
         color.set(part.color);
         mesh.setColorAt(i, color);
