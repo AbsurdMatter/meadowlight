@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { MEADOW_SIZE, terrainHeight } from '../engine/terrain';
+import { MEADOW_SIZE } from '../engine/terrain';
+import { groundAt } from '../engine/ground';
 import { PLANT_BY_ID } from '../data/plants';
 import { STRUCTURE_BY_ID } from '../data/structures';
 import { usePlacementStore } from './placementStore';
@@ -123,7 +124,7 @@ export function PlacementSystem() {
     const MAX_T = 120;
     const STEP = 0.75;
     let tPrev = 0;
-    const distPrev = ray.origin.y - terrainHeight(ray.origin.x, ray.origin.z);
+    const distPrev = ray.origin.y - groundAt(ray.origin.x, ray.origin.z).height;
     if (distPrev <= 0) {
       // camera start below terrain (shouldn't happen, but stay safe)
       return clampToMeadow(ray.origin.x, ray.origin.z);
@@ -132,7 +133,7 @@ export function PlacementSystem() {
       const x = ray.origin.x + ray.direction.x * t;
       const y = ray.origin.y + ray.direction.y * t;
       const z = ray.origin.z + ray.direction.z * t;
-      const dist = y - terrainHeight(x, z);
+      const dist = y - groundAt(x, z).height;
       if (dist <= 0) {
         // bisect between tPrev and t for a precise surface hit
         let lo = tPrev;
@@ -142,7 +143,7 @@ export function PlacementSystem() {
           const mx = ray.origin.x + ray.direction.x * mid;
           const my = ray.origin.y + ray.direction.y * mid;
           const mz = ray.origin.z + ray.direction.z * mid;
-          if (my - terrainHeight(mx, mz) > 0) lo = mid;
+          if (my - groundAt(mx, mz).height > 0) lo = mid;
           else hi = mid;
         }
         const hx = ray.origin.x + ray.direction.x * hi;
@@ -166,7 +167,7 @@ export function PlacementSystem() {
   const clampToMeadow = (x: number, z: number): [number, number, number] | null => {
     const cx = THREE.MathUtils.clamp(x, -HALF + 1, HALF - 1);
     const cz = THREE.MathUtils.clamp(z, -HALF + 1, HALF - 1);
-    return [cx, terrainHeight(cx, cz), cz];
+    return [cx, groundAt(cx, cz).height, cz];
   };
 
   /** Same occupancy + ground check for ghost preview and actual placement —

@@ -1,6 +1,7 @@
 import { Component, useEffect, useRef, useState, type ReactNode } from 'react';
 import { PLANTS } from '../data/plants';
-import { MEADOW_SIZE, terrainHeight } from '../engine/terrain';
+import { MEADOW_SIZE } from '../engine/terrain';
+import { groundAt } from '../engine/ground';
 import { usePlacementStore } from '../render/placementStore';
 
 const MEASURE_SECONDS = 10;
@@ -90,7 +91,7 @@ function PerfOverlayPanel() {
       store.plant({
         id: crypto.randomUUID(),
         plantId: def.id,
-        position: [x, terrainHeight(x, z), z],
+        position: [x, groundAt(x, z).height, z],
         rotationY: Math.random() * Math.PI * 2,
         phase: Math.random() * Math.PI * 2,
       });

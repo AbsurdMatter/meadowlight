@@ -3,7 +3,6 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { STRUCTURES } from '../data/structures';
 import { usePlacementStore } from './placementStore';
-import { terrainHeight } from '../engine/terrain';
 import { noVariation } from '../engine/variation';
 
 const tmpMat = new THREE.Matrix4();
@@ -46,7 +45,7 @@ export function PlacedStructures() {
         for (const part of def.parts) {
           tmpMat.makeTranslation(
             s.position[0],
-            terrainHeight(s.position[0], s.position[2]) + variation.heightJitter + s.position[1] - terrainHeight(s.position[0], s.position[2]),
+            s.position[1] + variation.heightJitter,
             s.position[2],
           );
           rotYMat.makeRotationY(s.rotationY + variation.rotationY);

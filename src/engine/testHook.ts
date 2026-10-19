@@ -1,6 +1,6 @@
 import { usePlacementStore } from '../render/placementStore';
 import { variationFor } from './variation';
-import { terrainHeight } from './terrain';
+import { groundAt } from './ground';
 import { isBuildable } from './ground';
 import type { PlacedItem, PlacedStructure } from './persistence';
 import type { StructureId } from '../data/structures';
@@ -97,7 +97,7 @@ export function installTestHook() {
       plant({
         id: crypto.randomUUID(),
         plantId,
-        position: [x, terrainHeight(x, z), z],
+        position: [x, groundAt(x, z).height, z],
         rotationY: ghostRotationY,
         phase: Math.random() * Math.PI * 2,
         variation: variationFor(placementVariation),
@@ -108,7 +108,7 @@ export function installTestHook() {
       placeStructure({
         id: crypto.randomUUID(),
         structureId,
-        position: [x, terrainHeight(x, z), z],
+        position: [x, groundAt(x, z).height, z],
         rotationY: ghostRotationY,
         variation: variationFor(placementVariation),
       });
@@ -125,7 +125,7 @@ export function installTestHook() {
     rareBeeCount: () => rareBeeDebug.count,
     capturePostcard: () => capturePostcardPng(),
     audioDebug: () => audioDebugInfo(),
-    terrainHeightAt: (x, z) => terrainHeight(x, z),
+    terrainHeightAt: (x, z) => groundAt(x, z).height,
     audioIsRunning: () => audioRunning(),
     ghostPosition: () => ({ pos: ghostDebug.pos, valid: ghostDebug.valid }),
     ghostVariation: () => ghostDebug.variation,

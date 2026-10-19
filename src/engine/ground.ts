@@ -1,5 +1,6 @@
 import { terrainHeight } from './terrain';
-import { LAKE, HILLS } from '../data/environment';
+import { LAKE, HILLS, MEADOW_BOWL } from '../data/environment';
+import { MEADOW_SIZE } from './terrain';
 
 /**
  * Ground oracle — the single module answering "what is at this cell of the
@@ -28,9 +29,17 @@ export function groundAt(x: number, z: number): GroundInfo {
   const lakeDistance = Math.hypot(x - LAKE.center[0], z - LAKE.center[1]);
   const isWater = lakeDistance <= LAKE.radius;
   const isShore = !isWater && lakeDistance <= LAKE.radius + LAKE.shoreWidth;
-  const height =
-    terrainHeight(x, z) +
-    Math.max(0, Math.hypot(x, z) - HILLS.liftStartRadius) * HILLS.liftPerRadius;
+  // #29 pass 4 — the meadow BOWL: inside the meadow square the ground is
+  // the low depression; everywhere else it is the natural heightfield
+  // (+ distance lift). The oracle stays the single source of truth: every
+  // renderer, the placement ray, the demo seeder, and the save loader
+  // re-derive heights from here, so the bowl can never drift from what
+  // renders.
+  const inMeadow = Math.abs(x) <= MEADOW_SIZE / 2 && Math.abs(z) <= MEADOW_SIZE / 2;
+  const height = inMeadow
+    ? terrainHeight(x, z) - MEADOW_BOWL.depth
+    : terrainHeight(x, z) +
+      Math.max(0, Math.hypot(x, z) - HILLS.liftStartRadius) * HILLS.liftPerRadius;
   return { kind: isWater ? 'water' : isShore ? 'shore' : 'meadow', height, lakeDistance, isWater, isShore };
 }
 

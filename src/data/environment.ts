@@ -37,8 +37,34 @@ export const HILLS = {
   fogBlendStrength: 0.55,
 };
 
+/**
+ * #29 pass 4: the meadow is the LOW BOWL of the terrain — not a layer
+ * laid on top. The green surface sits this far below the natural
+ * heightfield; the hills rise around it (their tops stay at the natural
+ * height + distance lift), so the meadow edge reads as terrain rising
+ * from a depression, with no seam and no floating layer.
+ */
+export const MEADOW_BOWL = {
+  /**
+   * Deep enough to read as THE low bowl: the natural heightfield undulates
+   * ~±1.2 around the meadow's rim, so a shallow dip gets swamped — at some
+   * spots the meadow edge would still sit above adjacent hills. 1.5 puts
+   * the entire meadow surface below the terrain everywhere on the rim.
+   */
+  depth: 1.5,
+} as const;
+
 export const LAKE = {
-  center: [26, -24] as [number, number],
+  /**
+   * #29 pass 4: relocated. The old center (26,-24) sat only 4.47u from the
+   * meadow SQUARE's corner (22,-22) — inside the pond disc, meadow layer
+   * boxes floated over the pond and the corner was unplantable. The new
+   * center clears the square by 16.1u (nearest point (22,-14)): >5u of
+   * hills between the band edge and any meadow cell, no adjacency, no
+   * feathering needed. Band outer edge at 49.2 stays inside the hills
+   * zone (outer 50). The pond is now a background terrain feature.
+   */
+  center: [36, -14] as [number, number],
   radius: 8,
   /**
    * Pond-as-terrain (final geometry): the pond is carved INTO the terrain
