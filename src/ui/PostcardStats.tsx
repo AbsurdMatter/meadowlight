@@ -1,57 +1,68 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { usePlacementStore } from '../render/placementStore';
 import { beeDebug } from '../render/BeeSwarm';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
-import { theme } from './theme';
+import { theme, headingStyle } from './theme';
 
 /**
  * #18 postcard stats strip: gentle nature facts, never scores.
  *
- * Reads the LIVE store (the same data the placement/bee systems use):
- *   - nature planted   — items.length (flowers in the ground)
- *   - bee care put up  — structures.length (hives, baths, hotels, hedges,
- *                        wild corners — everything the player put up FOR bees)
- *   - bees about       — the live swarm count (colony + solitary + rare)
- *   - seasons passed   — wildSeasons.length (the seasons dial has turned
- *                        through while a wild corner has been present)
- * Facts, phrased warm; no numbers-as-judgement, no high-score framing.
+ * Organized as one fact per line (PR review: not a wall of text) — each line
+ * has a bold label (nature planted / bee care put up / bees about /
+ * seasons passed) and a warm value. Reads the LIVE store (the same data
+ * the placement/bee systems use); the same four facts also appear on the
+ * composed postcard image (composePostcard).
  * Styled from the theme module only.
  */
-function natureFacts(): string[] {
-  const s = usePlacementStore.getState();
-  const bees = beeDebug.count + solitaryBeeDebug.count + rareBeeDebug.count;
-  const facts: string[] = [];
-  facts.push(
-    s.items.length === 1
-      ? 'one flower in the ground — every meadow starts here'
-      : `${s.items.length} flowers planted`,
-  );
-  facts.push(
-    s.structures.length === 0
-      ? 'no bee care up yet — the meadow manages on its own'
-      : s.structures.length === 1
-        ? 'one piece of bee care put up'
-        : `${s.structures.length} pieces of bee care put up`,
-  );
-  facts.push(
-    bees === 0
-      ? 'the air is quiet — bees come with blooms'
-      : bees === 1
-        ? 'one bee about the meadow'
-        : `${bees} bees about the meadow`,
-  );
-  facts.push(
-    (s.wildSeasons?.length ?? 0) === 0
-      ? 'the seasons have not turned yet'
-      : `${s.wildSeasons.length} season${s.wildSeasons.length === 1 ? '' : 's'} passed`,
-  );
-  return facts;
+interface StatLine {
+  key: string;
+  label: string;
+  value: string;
 }
 
+function statLines(): StatLine[] {
+  const s = usePlacementStore.getState();
+  const bees = beeDebug.count + solitaryBeeDebug.count + rareBeeDebug.count;
+  return [
+    {
+      key: 'nature',
+      label: 'Nature planted',
+      value:
+        s.items.length === 1
+          ? 'one flower — every meadow starts here'
+          : `${s.items.length} flowers`,
+    },
+    {
+      key: 'beecare',
+      label: 'Bee care put up',
+      value:
+        s.structures.length === 0
+          ? 'none yet — the meadow manages on its own'
+          : `${s.structures.length} piece${s.structures.length === 1 ? '' : 's'}`,
+    },
+    {
+      key: 'bees',
+      label: 'Bees about',
+      value: bees === 0 ? 'quiet skies — bees come with blooms' : `${bees}`,
+    },
+    {
+      key: 'seasons',
+      label: 'Seasons passed',
+      value: (s.wildSeasons?.length ?? 0) === 0 ? 'the dial has not turned yet' : `${s.wildSeasons.length}`,
+    },
+  ];
+}
+
+const labelStyle: CSSProperties = {
+  ...headingStyle(theme.font.smallSize),
+  color: theme.color.textSoft,
+  marginRight: 6,
+};
+
 export function PostcardStats() {
-  const [facts, setFacts] = useState<string[]>(natureFacts());
+  const [lines, setLines] = useState<StatLine[]>(statLines());
   useEffect(() => {
-    const t = setInterval(() => setFacts(natureFacts()), 800);
+    const t = setInterval(() => setLines(statLines()), 800);
     return () => clearInterval(t);
   }, []);
   return (
@@ -71,12 +82,25 @@ export function PostcardStats() {
         fontFamily: theme.font.family,
         fontSize: theme.font.smallSize,
         lineHeight: theme.font.lineHeight,
-        whiteSpace: 'pre-line',
         maxWidth: 320,
         pointerEvents: 'auto',
       }}
     >
-      {facts.join('\n')}
+      {lines.map((l, i) => (
+        <div
+          key={l.key}
+          data-postcard-stat-line={l.key}
+          style={{ display: 'flex', gap: 6, marginTop: i === 0 ? 0 : 4 }}
+        >
+          <span style={labelStyle}>{l.label} —</span>
+          <span>{l.value}</span>
+        </div>
+      ))}
     </div>
   );
+}
+
+/** The same four facts, for the composed postcard image (canvas 2D). */
+export function postcardStatText(): StatLine[] {
+  return statLines();
 }
