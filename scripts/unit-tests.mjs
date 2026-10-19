@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -78,9 +78,49 @@ const { checkMilestones } = require(OUT + '/engine/milestones.js');
 const { variationFor, rollVariation, noVariation, VARIATION_TUNING } = require(OUT + '/engine/variation.js');
 const { choosePlantFact, chooseStructureFact, chooseMeadowFact } = require(OUT + '/engine/factSelection.js');
 const { flowerBlocked, structureBlocked } = require(OUT + '/engine/collision.js');
+const { computeCaptionLayout, fallbackMetrics } = require(OUT + '/engine/postcardLayout.js');
 
 const mkItem = (plantId, x = 0, z = 0) => ({ id: plantId + ':' + x + ':' + z, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
 const mkStruct = (structureId, x = 0, z = 0) => ({ id: structureId + ':' + x + ':' + z, structureId, position: [x, 0, z], rotationY: 0 });
+
+// ---------- postcard caption layout (PR #32 blocker: measure, don't assume) ----------
+test('caption band grows with taller real font metrics — the blocker case', () => {
+  // real pixel fonts (700 weight) run taller than any fixed assumption:
+  // the band height must scale with the MEASURED metrics, never a constant
+  const short = computeCaptionLayout({ titleAscent: 30, titleDescent: 8, lineAscent: 15, lineDescent: 5, lineGap: 10 }, 4);
+  const tall = computeCaptionLayout({ titleAscent: 44, titleDescent: 12, lineAscent: 24, lineDescent: 9, lineGap: 10 }, 4);
+  assert.ok(tall.captionH > short.captionH, 'taller fonts must produce a taller band');
+  assert.ok(short.captionH !== tall.captionH, 'band height is computed, not fixed');
+  // the blocker: every line's ink fits with padding, whatever the metrics
+  assert.ok(tall.fits, 'tall metrics still fit');
+  assert.ok(short.fits, 'short metrics fit');
+  assert.ok(tall.bottomPadding >= 13, 'bottom padding survives the tallest line');
+});
+
+test('every stat baseline sits above the band bottom minus its descent', () => {
+  for (const m of [
+    { titleAscent: 30, titleDescent: 8, lineAscent: 15, lineDescent: 5, lineGap: 10 },
+    { titleAscent: 44, titleDescent: 12, lineAscent: 24, lineDescent: 9, lineGap: 10 },
+    fallbackMetrics(44, 20),
+  ]) {
+    const n = 4;
+    const l = computeCaptionLayout(m, n);
+    for (let i = 0; i < n; i++) {
+      assert.ok(l.statBaselines[i] + m.lineDescent < l.captionH, 'line ' + i + ' ink inside the band');
+      assert.ok(l.statBaselines[i] - m.lineAscent > l.titleBaseline, 'lines never overlap the title');
+    }
+    // monotonic baselines, one per stat
+    for (let i = 1; i < n; i++) assert.ok(l.statBaselines[i] > l.statBaselines[i - 1], 'baselines descend');
+  }
+});
+
+test('fallback metrics are generous relative to font size', () => {
+  const fb = fallbackMetrics(44, 20);
+  assert.ok(fb.titleAscent >= 44, 'title ascent at least 1em');
+  assert.ok(fb.lineAscent >= 20, 'line ascent at least 1em');
+  const l = computeCaptionLayout(fb, 4);
+  assert.ok(l.fits && l.bottomPadding >= 13);
+});
 
 // ---------- bloom succession (season engine) ----------
 test('each species blooms in at least one season, and bloom flags match data', () => {

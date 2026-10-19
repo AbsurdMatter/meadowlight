@@ -6,11 +6,13 @@ import {
 } from '../engine/audio';
 import { beeDebug } from '../render/BeeSwarm';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
+import { theme } from './theme';
 
 /**
  * Single visible audio toggle: OFF by default. The WebAudio graph is
  * constructed only inside this button's click handler (a real user gesture),
  * never on mount. Plain DOM UI — no canvas pointer interception.
+ * Styled from the theme module only (#16).
  */
 export function AudioToggle() {
   const [on, setOn] = useState(false);
@@ -35,14 +37,14 @@ export function AudioToggle() {
       title={on ? 'Mute the meadow' : 'Listen to the meadow'}
       style={{
         padding: '8px 12px',
-        borderRadius: 10,
-        border: `2px solid ${on ? '#7a9d54' : '#d9b36a'}`,
-        background: on ? '#dcedc2' : '#fff4dc',
-        color: '#5a4322',
-        fontFamily: 'inherit',
-        fontSize: 13,
+        borderRadius: theme.border.radius,
+        border: `${theme.border.chunk}px solid ${on ? theme.color.sage : theme.color.honey}`,
+        background: on ? theme.color.sageLight : theme.color.parchment,
+        color: theme.color.text,
+        fontFamily: theme.font.family,
+        fontSize: theme.font.smallSize,
         cursor: 'pointer',
-        boxShadow: '0 2px 8px rgba(122, 90, 43, 0.15)',
+        boxShadow: theme.border.shadow,
       }}
     >
       {on ? '\u{1F507} Sound on' : '\u{1F50A} Sound off'}

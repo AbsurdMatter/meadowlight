@@ -12,6 +12,7 @@ import {
 } from '../data/facts';
 import { MILESTONES } from '../data/milestones';
 import { usePlacementStore } from '../render/placementStore';
+import { theme, headingStyle } from './theme';
 
 class HubBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -42,7 +43,7 @@ const factText = (id: string): string | null => {
   return all.find((f) => f.id === id)?.text ?? null;
 };
 
-const panelStyle: React.CSSProperties = {
+const hubPanelStyle: React.CSSProperties = {
   // fixed to the viewport, not the hub button's corner wrapper — an absolute
   // panel inside that wrapper resolves top/left against the tiny corner box
   // and renders off-viewport (same bug class as the reset dialog)
@@ -53,12 +54,13 @@ const panelStyle: React.CSSProperties = {
   width: 520,
   maxHeight: '70vh',
   overflowY: 'auto',
-  padding: '18px 22px',
-  borderRadius: 16,
-  background: 'rgba(255, 250, 235, 0.97)',
-  boxShadow: '0 8px 32px rgba(122, 90, 43, 0.3)',
-  color: '#5a4322',
-  fontFamily: 'inherit',
+  padding: theme.spacing.dialogPadding,
+  borderRadius: theme.border.radiusPanel,
+  background: theme.color.panelSolid,
+  border: `${theme.border.chunky}px solid ${theme.color.honey}`,
+  boxShadow: theme.border.shadowPanel,
+  color: theme.color.text,
+  fontFamily: theme.font.family,
   zIndex: 40,
 };
 
@@ -100,30 +102,31 @@ function HubInner() {
         title="Field notebook"
         style={{
           padding: '4px 12px',
-          borderRadius: 10,
-          border: '2px solid #b0a58c',
-          background: '#f7ecd0',
-          color: '#5a4322',
-          fontFamily: 'inherit',
-          fontSize: 14,
+          borderRadius: theme.border.radius,
+          border: `${theme.border.chunk}px solid ${theme.color.honey}`,
+          background: theme.color.parchmentDeep,
+          color: theme.color.text,
+          fontFamily: theme.font.family,
+          fontSize: theme.font.bodySize,
           cursor: 'pointer',
+          boxShadow: theme.border.shadow,
         }}
       >
         📖
       </button>
       {open && (
-        <div style={panelStyle}>
+        <div style={hubPanelStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <strong style={{ fontSize: 16 }}>Field Notebook</strong>
+            <strong style={headingStyle(theme.font.titleSize)}>Field Notebook</strong>
             <button
               onClick={() => setOpen(false)}
-              style={{ border: 'none', background: 'transparent', color: '#7a5a2b', fontSize: 16, cursor: 'pointer' }}
+              style={{ border: 'none', background: 'transparent', color: theme.color.textSoft, fontSize: 16, cursor: 'pointer', fontFamily: theme.font.family }}
             >
               ✕
             </button>
           </div>
 
-          <h4 style={{ margin: '14px 0 6px', fontSize: 13, letterSpacing: 0.4 }}>LEARNED FACTS</h4>
+          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '14px 0 6px', letterSpacing: 0.4 }}>LEARNED FACTS</h4>
           {learnedByGroup.length === 0 && miscSeen.length === 0 && (
             <div style={{ fontSize: 13, opacity: 0.75 }}>
               Nothing yet — every flower, hive, and quiet corner of the meadow has a story. Click one with an empty hand and it will land here. 🐝
@@ -131,7 +134,7 @@ function HubInner() {
           )}
           {learnedByGroup.map((g) => (
             <div key={g.group} style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{g.group}</div>
+              <div style={headingStyle(13)}>{g.group}</div>
               {g.facts.map((f) => (
                 <div key={f.id} style={{ fontSize: 13, lineHeight: 1.5, opacity: 0.9 }}>
                   ✦ {f.text}
@@ -148,7 +151,7 @@ function HubInner() {
             ) : null;
           })}
 
-          <h4 style={{ margin: '16px 0 6px', fontSize: 13, letterSpacing: 0.4 }}>MILESTONES</h4>
+          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>MILESTONES</h4>
           {MILESTONES.map((m) => {
             const unlocked = milestones.includes(m.id);
             return (

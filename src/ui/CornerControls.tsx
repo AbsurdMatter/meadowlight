@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AudioToggle } from './AudioToggle';
 import { PostcardButton } from './PostcardButton';
 import { NotebookHub } from './NotebookHub';
+import { theme } from './theme';
 
 /**
  * One shared bottom-right container: Sound, Postcard, the notebook hub, and
@@ -36,14 +37,15 @@ function ControlsPopover({ open, onClose }: { open: boolean; onClose: () => void
         right: 0,
         marginBottom: 8,
         padding: '10px 14px',
-        borderRadius: 12,
-        background: 'rgba(255, 244, 220, 0.96)',
-        boxShadow: '0 4px 16px rgba(122, 90, 43, 0.22)',
-        color: '#5a4322',
-        fontSize: 13,
+        borderRadius: theme.border.radiusPanel,
+        background: theme.color.panelSolid,
+        border: `${theme.border.chunk}px solid ${theme.color.honey}`,
+        boxShadow: theme.border.shadowPanel,
+        color: theme.color.text,
+        fontSize: theme.font.smallSize,
         lineHeight: 1.7,
         whiteSpace: 'pre-line',
-        fontFamily: 'inherit',
+        fontFamily: theme.font.family,
         maxWidth: 320,
       }}
     >
@@ -77,14 +79,14 @@ export function CornerControls() {
           style={{
             width: 36,
             height: 36,
-            borderRadius: 10,
-            border: '2px solid #d9b36a',
-            background: '#fff4dc',
-            color: '#5a4322',
-            fontFamily: 'inherit',
+            borderRadius: theme.border.radius,
+            border: `${theme.border.chunk}px solid ${theme.color.honey}`,
+            background: theme.color.parchment,
+            color: theme.color.text,
+            fontFamily: theme.font.family,
             fontSize: 16,
             cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(122, 90, 43, 0.15)',
+            boxShadow: theme.border.shadow,
           }}
         >
           ?
