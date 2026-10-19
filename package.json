@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test:smoke": "node scripts/unit-tests.mjs && node scripts/build-health.mjs",
-    "test:perf": "echo \"[perf] start the dev server (npm run dev), open the game, press F3 or P, then click the stress button \u2014 results log to the browser console\"",
+    "test:perf": "echo \"[perf] start the dev server (npm run dev), open the game, press F3 or P, then click the stress button - results log to the browser console\"",
     "test:unit": "node scripts/unit-tests.mjs"
   },
   "dependencies": {
@@ -19,10 +19,12 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@fontsource/pixelify-sans": "^5.3.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/three": "^0.170.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "playwright-core": "^1.64.1",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"
   }

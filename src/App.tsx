@@ -12,6 +12,7 @@ import { BloomPipeline } from './render/BloomPipeline';
 import { GrassTufts } from './render/GrassTufts';
 import { PlacementSystem } from './render/PlacementSystem';
 import { DebugBridge } from './render/DebugBridge';
+import { CellMapLayer } from './ui/CellMap';
 import { OrbitControlsLite } from './render/OrbitControlsLite';
 import { Palette } from './ui/Palette';
 import { SeasonDial } from './ui/SeasonDial';
@@ -26,6 +27,7 @@ import { usePlacementStore } from './render/placementStore';
 import { maybeSeedDemoWorld } from './engine/testHook';
 import { SEASON_INFO } from './data/seasons';
 import { LIGHT_WARMTH, LONG_SHADOWS } from './data/polish';
+import { theme } from './ui/theme';
 
 const SEASON_LIGHT: Record<string, { sun: string; ambient: number; intensity: number }> = {
   spring: { sun: '#ffe9c0', ambient: 0.36, intensity: 1.4 },
@@ -96,6 +98,7 @@ function Scene() {
       <BeeSwarm />
       <SolitaryBees />
       <BloomPipeline />
+      {CellMapLayer && <CellMapLayer />}
       <PlacementSystem />
       <DebugBridge />
       <OrbitControlsLite />
@@ -154,10 +157,13 @@ export default function App() {
           top: 12,
           left: 12,
           padding: '8px 14px',
-          borderRadius: 12,
-          background: 'rgba(255, 244, 220, 0.85)',
-          color: '#7a5a2b',
-          fontSize: 14,
+          borderRadius: theme.border.radiusPanel,
+          background: theme.color.panel,
+          border: `${theme.border.chunk}px solid ${theme.color.honey}`,
+          boxShadow: theme.border.shadow,
+          color: theme.color.textSoft,
+          fontFamily: theme.font.family,
+          fontSize: theme.font.bodySize,
           pointerEvents: 'none',
         }}
       >

@@ -35,6 +35,7 @@ declare global {
       ghostPosition: () => { pos: [number, number, number] | null; valid: boolean };
       ghostVariation: () => { rotationY: number; heightJitter: number; tiltX: number; tiltZ: number } | null;
       resetWorld: () => void;
+      reloadFromSave: () => void;
       openNotebookPlant: (itemId: string) => void;
       __three?: {
         camera: PerspectiveCamera;
@@ -132,6 +133,7 @@ export function installTestHook() {
     ghostPosition: () => ({ pos: ghostDebug.pos, valid: ghostDebug.valid }),
     ghostVariation: () => ghostDebug.variation,
     resetWorld: () => usePlacementStore.getState().resetWorld(),
+    reloadFromSave: () => usePlacementStore.getState().reloadFromSave(),
     openNotebookPlant: (itemId) =>
       usePlacementStore.getState().openNotebook({ kind: 'plant', id: itemId }),
   };

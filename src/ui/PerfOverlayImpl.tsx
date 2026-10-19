@@ -4,6 +4,9 @@ import { MEADOW_SIZE } from '../engine/terrain';
 import { groundAt } from '../engine/ground';
 import { usePlacementStore } from '../render/placementStore';
 import { beeDebug } from '../render/BeeSwarm';
+import { setCellMapVisible, cellMapVisible } from '../render/CellMapOverlay';
+import { CELL_KINDS } from '../render/CellMapOverlay';
+import { MILESTONES } from '../data/milestones';
 
 const MEASURE_SECONDS = 10;
 const STRESS_ITEMS = 200;
@@ -52,9 +55,120 @@ function useDisplayFrameRate(active: boolean, onFrame: (dt: number) => void) {
   }, [active]);
 }
 
+/** #30: save-state inspector — reads the RAW localStorage blob (what the next
+ *  page load will see), not the live store, so it audits the actual save. */
+function SaveInspector() {
+  const [info, setInfo] = useState<ReturnType<typeof inspectSave> | null>(null);
+  const items = usePlacementStore((s) => s.items);
+  const structures = usePlacementStore((s) => s.structures);
+  const refresh = () => setInfo(inspectSave());
+  useEffect(() => {
+    refresh();
+    const t = setInterval(refresh, 1000);
+    return () => clearInterval(t);
+  }, []);
+  if (!info) return null;
+  return (
+    <div data-perf-save-inspector style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>save state</div>
+      <div>key         {info.key ?? '(none)'}</div>
+      <div>version     {info.version}</div>
+      <div>blob        {info.bytes} B</div>
+      <div>items       {info.itemCount}{info.itemCount !== items.length ? ` (!= store ${items.length})` : ''}</div>
+      <div>structures  {info.structureCount}{info.structureCount !== structures.length ? ` (!= store ${structures.length})` : ''}</div>
+      <div>facts seen  {info.seenFacts}</div>
+      <div>season      {info.season}</div>
+      <div>onboarding  {info.onboardingDismissed ? 'dismissed' : 'pending'}</div>
+      <div>wild seasons {info.wildSeasons}</div>
+      {info.backup && (
+        <div style={{ color: '#e0a55a' }}>backup blob present ({info.backupBytes} B)</div>
+      )}
+      <button
+        onClick={() => { usePlacementStore.getState().save(); refresh(); }}
+        style={{ marginTop: 4, padding: '4px 8px', borderRadius: 6, border: 'none', background: '#4a7a4a', color: '#fff', fontFamily: 'inherit', cursor: 'pointer' }}
+      >
+        save now
+      </button>
+      <button
+        data-perf-reload-save
+        onClick={() => { usePlacementStore.getState().reloadFromSave(); refresh(); }}
+        title="Discard in-memory state and rebuild the world from the localStorage blob (the same load path as a fresh page load — no save first). Manual test note: click within <3s of editing the blob in devtools — the app autosaves live state every 3s and would overwrite your edit."
+        style={{ marginTop: 4, marginLeft: 6, padding: '4px 8px', borderRadius: 6, border: 'none', background: '#4a6a9a', color: '#fff', fontFamily: 'inherit', cursor: 'pointer' }}
+      >
+        reload current save
+      </button>
+    </div>
+  );
+}
+
+function inspectSave() {
+  try {
+    const key = 'meadowlight.world.v2';
+    const raw = localStorage.getItem(key);
+    const backup = localStorage.getItem('meadowlight.world._backup');
+    if (!raw) {
+      return { key: null as string | null, version: '-', bytes: 0, itemCount: 0, structureCount: 0, seenFacts: 0, season: '-', onboardingDismissed: false, wildSeasons: 0, backup: !!backup, backupBytes: backup?.length ?? 0 };
+    }
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const backupInfo = { backup: !!backup, backupBytes: backup?.length ?? 0 };
+    return {
+      key,
+      version: typeof parsed.version === 'number' ? parsed.version : 1,
+      bytes: raw.length,
+      itemCount: Array.isArray(parsed.items) ? parsed.items.length : 0,
+      structureCount: Array.isArray(parsed.structures) ? parsed.structures.length : 0,
+      seenFacts: Array.isArray(parsed.seenFacts) ? parsed.seenFacts.length : 0,
+      season: typeof parsed.season === 'string' ? parsed.season : '-',
+      onboardingDismissed: parsed.onboardingDismissed === true,
+      wildSeasons: Array.isArray(parsed.wildSeasons) ? parsed.wildSeasons.length : 0,
+      ...backupInfo,
+    };
+  } catch {
+    return { key: null as string | null, version: '(unreadable)', bytes: 0, itemCount: 0, structureCount: 0, seenFacts: 0, season: '-', onboardingDismissed: false, wildSeasons: 0, backup: false, backupBytes: 0 };
+  }
+}
+
+/** #30: live milestone checklist — the live store, so it ticks as toasts fire. */
+function MilestoneChecklist() {
+  const milestones = usePlacementStore((s) => s.milestones);
+  const [items, setItems] = useState<{ id: string; label: string; done: boolean }[]>([]);
+  useEffect(() => {
+    const t = setInterval(() => {
+      const store = usePlacementStore.getState();
+      setItems(MILESTONES.map((m) => ({ id: m.id, label: m.label, done: store.milestones.includes(m.id) })));
+    }, 500);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div data-perf-milestones style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>milestones ({milestones.filter((m) => MILESTONES.some((d) => d.id === m)).length}/{MILESTONES.length})</div>
+      {items.map((m) => (
+        <div key={m.id} style={{ opacity: m.done ? 1 : 0.5 }}>
+          [{m.done ? 'x' : ' '}] {m.label}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CellMapLegend() {
+  return (
+    <div data-perf-cellmap-legend style={{ marginTop: 8, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>cell map legend</div>
+      {CELL_KINDS.map((k) => (
+        <div key={k.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 10, height: 10, background: k.color, display: 'inline-block' }} />
+          {k.label}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PerfOverlayPanel() {
   const [stats, setStats] = useState<Stats>({ fps: 0, frameMs: 0, items: 0, bee: { ...beeDebug } });
   const [running, setRunning] = useState(false);
+  const [cellMapOn, setCellMapOn] = useState(cellMapVisible());
   const frameTimes = useRef<number[]>([]);
   const lastUiUpdate = useRef(0);
   const runningRef = useRef(false);
@@ -76,6 +190,12 @@ function PerfOverlayPanel() {
       });
     }
   });
+
+  const toggleCellMap = () => {
+    const next = !cellMapOn;
+    setCellMapOn(next);
+    setCellMapVisible(next);
+  };
 
   const stressTest = () => {
     if (running) return;
@@ -104,6 +224,12 @@ function PerfOverlayPanel() {
     const startedAt = performance.now();
     const report = () => {
       const times = frameTimes.current.filter((_, i) => i >= 60);
+      if (times.length === 0) {
+        console.log('[perf] stress test result: no frame samples collected (rAF never ticked?)');
+        usePlacementStore.setState({ items: before });
+        setRunning(false);
+        return;
+      }
       const avg = times.reduce((a, b) => a + b, 0) / times.length;
       const sorted = [...times].sort((a, b) => a - b);
       const p95 = sorted[Math.floor(sorted.length * 0.95)];
@@ -155,6 +281,8 @@ function PerfOverlayPanel() {
         lineHeight: 1.6,
         pointerEvents: 'auto',
         whiteSpace: 'pre',
+        maxHeight: '80vh',
+        overflowY: 'auto',
       }}
     >
       <div style={{ fontWeight: 'bold', marginBottom: 4 }}>perf overlay (P / ~)</div>
@@ -183,6 +311,28 @@ function PerfOverlayPanel() {
       <div style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>
         logs to console · target &lt; {FRAME_BUDGET_MS} ms
       </div>
+      <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+        <div style={{ fontWeight: 'bold' }}>cell map</div>
+        <button
+          data-perf-cellmap-toggle
+          onClick={toggleCellMap}
+          style={{
+            marginTop: 4,
+            padding: '6px 10px',
+            borderRadius: 8,
+            border: 'none',
+            background: cellMapOn ? '#7a9d54' : '#666',
+            color: '#fff',
+            fontFamily: 'inherit',
+            cursor: 'pointer',
+          }}
+        >
+          {cellMapOn ? 'cell map ON' : 'cell map OFF'}
+        </button>
+        {cellMapOn && <CellMapLegend />}
+      </div>
+      <SaveInspector />
+      <MilestoneChecklist />
     </div>
   );
 }

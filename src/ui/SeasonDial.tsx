@@ -1,14 +1,15 @@
 import { SEASONS, SEASON_INFO } from '../data/seasons';
 import { usePlacementStore } from '../render/placementStore';
+import { theme } from './theme';
 
 const uiButtonStyle = (active: boolean): React.CSSProperties => ({
   padding: '6px 10px',
-  borderRadius: 10,
-  border: `2px solid ${active ? '#d24a43' : 'transparent'}`,
-  background: active ? '#ffe9b8' : '#fff8e8',
-  color: '#7a5a2b',
-  fontFamily: 'inherit',
-  fontSize: 13,
+  borderRadius: theme.border.radius,
+  border: `${theme.border.chunk}px solid ${active ? theme.color.clay : theme.color.honeyDark}`,
+  background: active ? theme.color.honeyActive : theme.color.parchmentLight,
+  color: theme.color.textSoft,
+  fontFamily: theme.font.family,
+  fontSize: theme.font.smallSize,
   cursor: 'pointer',
 });
 
@@ -24,10 +25,11 @@ export function SeasonDial() {
         display: 'flex',
         gap: 6,
         padding: '8px 10px',
-        borderRadius: 14,
-        background: 'rgba(255, 244, 220, 0.9)',
-        boxShadow: '0 4px 16px rgba(122, 90, 43, 0.18)',
-        alignItems: 'center',
+        borderRadius: theme.border.radiusPanel,
+        background: theme.color.panel,
+        border: `${theme.border.chunk}px solid ${theme.color.honey}`,
+        boxShadow: theme.border.shadowPanel,
+        fontFamily: theme.font.family,
       }}
     >
       {SEASONS.map((s) => (
