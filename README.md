@@ -82,9 +82,16 @@ npm run build
   each embedding site gets its own save slot — saves won't follow the
   player across sites, and the meadow boots fresh there. Nothing breaks;
   nothing syncs.
-- **Sharing.** `og:image` points at `og-image.png` next to the built
-  `index.html` — replace it (1200×630 works best) with your favorite
-  postcard screenshot.
+- **Sharing.** The `og:image` tag is absolute-URL-ready: it points at
+  `https://meadowlight.example/og-image.png` (1200×630) — swap in the real
+  deployment origin at deploy time and drop a real-GPU screenshot at
+  `/og-image.png`. No other og tag needs touching.
+- **Embed checklist (re-run, session 4).** Verified headlessly in an iframe
+  at 1280×300, 480×900, 600×600, and 914×391: canvas fills the frame
+  exactly, zero horizontal/vertical scroll, zero console errors, fonts
+  self-hosted (no runtime fetch). Known gap: the palette panel clips in
+  frames narrower than ~700px (#33) — mobile/touch layout is parked until
+  the world + chrome finalize.
 
 ## Credits
 
