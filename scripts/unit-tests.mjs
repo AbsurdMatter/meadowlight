@@ -137,12 +137,36 @@ test('succession: single-species meadow has famine seasons', () => {
   // lavender is summer-only: a lavender-only meadow starves in 3 of 4 seasons
   assert.ok(!hasBloom(['lavender'], 'winter'));
   assert.ok(!yearRoundBloom(['lavender'], SEASONS));
-  // a full six-species planting covers every GROWING season (winter is the
-  // quiet season by design — the colony clusters; see milestones.ts)
+  // session 5: the crocus makes the ALL-four-seasons meadow reachable, so a
+  // full roster planting now covers every season including winter (the old
+  // "winter famine is by design" assertion was pre-crocus)
   const all = PLANTS.map((p) => p.id);
   const growing = SEASONS.filter((s) => s !== 'winter');
-  assert.ok(!yearRoundBloom(all, SEASONS), 'winter famine is by design');
-  assert.ok(yearRoundBloom(all, growing));
+  assert.ok(yearRoundBloom(all, growing), 'roster covers growing seasons');
+  assert.ok(yearRoundBloom(all, SEASONS), 'roster + crocus covers winter too');
+  // but the pre-session-5 six species alone still famish in winter
+  const six = ['lavender', 'clover', 'poppy', 'sunflower', 'thyme', 'forget-me-not'];
+  assert.ok(!yearRoundBloom(six, SEASONS), 'six originals still famish in winter');
+});
+
+test('reachability: every species is plantable and blooms in a traceable session', () => {
+  // yearRoundBloom lesson: a flower that can never be seen blooming is broken.
+  // For each species, trace a realistic session: plant the whole roster, dial
+  // every season, and confirm each species is in bloom in at least one season
+  // AND out of bloom in at least one season (succession must be visible).
+  const all = PLANTS.map((p) => p.id);
+  for (const p of PLANTS) {
+    const bloomingSeasons = SEASONS.filter((s) => inBloom(p.id, s));
+    assert.ok(bloomingSeasons.length >= 1, p.id + ' never blooms (unreachable)');
+    assert.ok(
+      bloomingSeasons.length < SEASONS.length,
+      p.id + ' blooms year-round (succession invisible)',
+    );
+  }
+  // each season has at least one blooming roster species (no dead season)
+  for (const s of SEASONS) {
+    assert.ok(hasBloom(all, s), 'no roster species blooms in ' + s);
+  }
 });
 
 test('plantedSpecies dedupes and ignores unknown ids', () => {

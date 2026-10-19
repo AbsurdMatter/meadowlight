@@ -6,21 +6,21 @@ export const SEASON_INFO: Record<Season, { label: string; emoji: string; tip: st
   spring: {
     label: 'Spring',
     emoji: '\u{1F33C}',
-    tip: 'Early blooms wake the queens \u2014 thyme and forget-me-nots lead.',
+    tip: 'Early blooms wake the queens \u2014 crocuses, thyme and forget-me-nots lead.',
   },
   summer: {
     label: 'Summer',
     emoji: '\u{1F41D}',
-    tip: 'Peak forage \u2014 lavender hums before you see it.',
+    tip: 'Peak forage \u2014 lavender and borage hum before you see them.',
   },
   autumn: {
     label: 'Autumn',
     emoji: '\u{1F341}',
-    tip: 'Poppies and sunflowers keep the table set late.',
+    tip: 'Cosmos, asters and poppies keep the table set late.',
   },
   winter: {
     label: 'Winter',
     emoji: '\u2744\uFE0F',
-    tip: 'The colony clusters round the queen, living on stored honey.',
+    tip: 'Quiet days — crocuses open early for the first brave foragers.',
   },
 };
