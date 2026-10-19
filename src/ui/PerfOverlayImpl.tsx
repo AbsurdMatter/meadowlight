@@ -3,6 +3,7 @@ import { PLANTS } from '../data/plants';
 import { MEADOW_SIZE } from '../engine/terrain';
 import { groundAt } from '../engine/ground';
 import { usePlacementStore } from '../render/placementStore';
+import { beeDebug } from '../render/BeeSwarm';
 
 const MEASURE_SECONDS = 10;
 const STRESS_ITEMS = 200;
@@ -12,6 +13,7 @@ interface Stats {
   fps: number;
   frameMs: number;
   items: number;
+  bee: typeof beeDebug;
 }
 
 class OverlayBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
@@ -51,7 +53,7 @@ function useDisplayFrameRate(active: boolean, onFrame: (dt: number) => void) {
 }
 
 function PerfOverlayPanel() {
-  const [stats, setStats] = useState<Stats>({ fps: 0, frameMs: 0, items: 0 });
+  const [stats, setStats] = useState<Stats>({ fps: 0, frameMs: 0, items: 0, bee: { ...beeDebug } });
   const [running, setRunning] = useState(false);
   const frameTimes = useRef<number[]>([]);
   const lastUiUpdate = useRef(0);
@@ -69,6 +71,8 @@ function PerfOverlayPanel() {
         fps: Math.round(1000 / avg),
         frameMs: avg,
         items: usePlacementStore.getState().items.length,
+        // live bee telemetry snapshot (reads the same beeDebug the gate reads)
+        bee: { ...beeDebug },
       });
     }
   });
@@ -157,6 +161,9 @@ function PerfOverlayPanel() {
       <div>fps        {stats.fps}</div>
       <div>frame time {stats.frameMs.toFixed(2)} ms</div>
       <div>items      {stats.items}</div>
+      <div>bees       {beeDebug.count} · foraging {beeDebug.foraging} · wander {beeDebug.wandering} · home {beeDebug.homing}</div>
+      <div>targets    found {beeDebug.targetFound} · lost {beeDebug.targetLost} · wander picked {beeDebug.wanderPicked}</div>
+      <div>hive dist  avg {beeDebug.avgDistFromHive.toFixed(1)}u · max {beeDebug.maxDistFromHive.toFixed(1)}u · speed {beeDebug.avgSpeed.toFixed(1)}</div>
       <button
         onClick={stressTest}
         disabled={running}
