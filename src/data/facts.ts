@@ -172,6 +172,21 @@ export const CONTEXT_FACTS: Record<string, FactEntry> = {
   },
 };
 
+/** #15 (session 5): wild visitor facts — hoverfly mimicry verified against
+ *  reliable sources before adding (Batesian mimicry: harmless hoverflies
+ *  mimic stinging bees/wasps; NC State Extension, Wikipedia Syrphidae);
+ *  butterfly fact reuses EDUCATION.md's overwintering line. */
+export const WILD_VISITOR_FACTS: Record<string, FactEntry> = {
+  butterfly: {
+    id: 'wild:butterfly',
+    text: 'Leaving a corner of the meadow unmown gives butterflies a place to overwinter — this visitor will be back next spring.',
+  },
+  hoverfly: {
+    id: 'wild:hoverfly',
+    text: 'This little "bee" is a hoverfly — a harmless mimic with no stinger at all; its disguise fools hungry birds while it sips nectar.',
+  },
+};
+
 export const MEADOW_FACTS: FactEntry[] = [
   {
     id: 'meadow:one-in-three',

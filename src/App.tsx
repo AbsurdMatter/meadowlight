@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { Meadow } from './render/Meadow';
 import { Background } from './render/Background';
 import { Sky, DistantRidge } from './render/Sky';
+import { WildPollinators } from './render/WildPollinators';
 import { PlantedFlowers } from './render/PlantedFlowers';
 import { PlacedStructures } from './render/PlacedStructures';
 import { BeeSwarm } from './render/BeeSwarm';
@@ -98,6 +99,7 @@ function Scene() {
       <PlacedStructures />
       <BeeSwarm />
       <SolitaryBees />
+      <WildPollinators />
       <BloomPipeline />
       {CellMapLayer && <CellMapLayer />}
       <PlacementSystem />

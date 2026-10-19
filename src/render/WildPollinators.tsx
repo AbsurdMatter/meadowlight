@@ -1,0 +1,295 @@
+import { useMemo, useRef } from 'react';
+import { useFrame, type RootState } from '@react-three/fiber';
+import * as THREE from 'three';
+import {
+  BUTTERFLY_TUNING,
+  HOVERFLY_TUNING,
+  WILD_MIN_BLOOM,
+  WILD_FLOWERS_PER_EXTRA,
+  type WildPollinatorTuning,
+} from '../data/wildpollinators';
+import { PLANT_BY_ID } from '../data/plants';
+import { usePlacementStore } from './placementStore';
+import { inBloom } from '../engine/pollinator';
+import { noVariation } from '../engine/variation';
+
+/**
+ * #15 (session 5): butterflies & hoverflies. Reuses the bee swarm's steering
+ * approach — the SAME fixed target-resolution order as BeeSwarm (PR #34's
+ * lesson): flower world data is re-resolved IMMEDIATELY after target
+ * selection, same frame, so a visitor that picks a flower never steers at
+ * its spawn anchor that frame (the bees-idle-at-hive trap). With no bloom in
+ * range, visitors wander gently instead of parking.
+ *
+ * Telemetry follows the beeDebug pattern (addendum B): wildDebug exposes
+ * per-species counts plus targetFound/targetLost/foraging/wandering/homing.
+ */
+
+interface VisitorState {
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  /** id of the placed flower this visitor heads to — re-resolved per frame */
+  targetFlowerId: string | null;
+  /** gentle wander point when no bloom is reachable */
+  wanderTarget: THREE.Vector3 | null;
+  /** true while drifting back toward a meadow anchor */
+  headingHome: boolean;
+  phase: number;
+  restingUntil: number;
+}
+
+/** home anchor for wandering visitors: a fixed point above the meadow center */
+const ANCHOR = new THREE.Vector3(0, 3.2, 0);
+
+/** live telemetry, exposed for the test hook / P panel (beeDebug pattern) */
+export const wildDebug = {
+  butterflies: 0,
+  hoverflies: 0,
+  targetFound: 0,
+  targetLost: 0,
+  foraging: 0,
+  wandering: 0,
+  homing: 0,
+};
+
+const tmpMat = new THREE.Matrix4();
+const lookMat = new THREE.Matrix4();
+const scaleMat = new THREE.Matrix4();
+const up = new THREE.Vector3(0, 1, 0);
+const flowerById = new Map<string, { x: number; y: number; z: number; plantId: string }>();
+let crashLogged = false;
+
+function syncFlowers() {
+  const s = usePlacementStore.getState();
+  flowerById.clear();
+  for (const f of s.items) {
+    const variation = f.variation ?? noVariation();
+    flowerById.set(f.id, {
+      x: f.position[0],
+      y: f.position[1] + variation.heightJitter,
+      z: f.position[2],
+      plantId: f.plantId,
+    });
+  }
+}
+
+function makeVisitors(
+  tuning: WildPollinatorTuning,
+  count: number,
+): VisitorState[] {
+  const out: VisitorState[] = [];
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = 4 + Math.random() * 10;
+    out.push({
+      pos: new THREE.Vector3(Math.cos(a) * r, 1.8 + Math.random() * 1.4, Math.sin(a) * r),
+      vel: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5)
+        .normalize()
+        .multiplyScalar(tuning.speed * 0.5),
+      targetFlowerId: null,
+      wanderTarget: null,
+      headingHome: true,
+      phase: Math.random() * Math.PI * 2,
+      restingUntil: 0,
+    });
+  }
+  return out;
+}
+
+function WildSpecies({ tuning }: { tuning: WildPollinatorTuning }) {
+  const bodyRef = useRef<THREE.InstancedMesh>(null);
+  const wingRef = useRef<THREE.InstancedMesh>(null);
+  const accentRef = useRef<THREE.InstancedMesh>(null);
+  const visitors = useRef<VisitorState[]>([]);
+  const lastCount = useRef(-1);
+
+  const bodyGeo = useMemo(() => new THREE.BoxGeometry(...tuning.bodySize), [tuning]);
+  const wingGeo = useMemo(
+    () =>
+      new THREE.BoxGeometry(
+        tuning.bodySize[0] * 3.2,
+        tuning.bodySize[1] * 0.18,
+        tuning.bodySize[2] * 1.1,
+      ),
+    [tuning],
+  );
+  const accentGeo = useMemo(
+    () =>
+      new THREE.BoxGeometry(
+        tuning.bodySize[0] * 0.9,
+        tuning.bodySize[1] * 0.5,
+        tuning.bodySize[2] * 0.9,
+      ),
+    [tuning],
+  );
+
+  const update = (state: RootState, delta: number) => {
+    const body = bodyRef.current;
+    const wings = wingRef.current;
+    const accent = accentRef.current;
+    if (!body || !wings || !accent) return;
+    const s = usePlacementStore.getState();
+    syncFlowers();
+
+    const active = tuning.activeSeasons.includes(s.season);
+    const blooming: string[] = active
+      ? s.items.filter((f) => inBloom(f.plantId, s.season)).map((f) => f.id)
+      : [];
+
+    // population: base + one per WILD_FLOWERS_PER_EXTRA blooming flowers,
+    // gated at WILD_MIN_BLOOM so an empty meadow stays quiet; capped
+    let target = 0;
+    if (active && blooming.length >= WILD_MIN_BLOOM) {
+      target = Math.min(
+        tuning.maxCount,
+        tuning.baseCount + Math.floor((blooming.length - WILD_MIN_BLOOM) / WILD_FLOWERS_PER_EXTRA),
+      );
+    }
+    if (target !== lastCount.current) {
+      lastCount.current = target;
+      const list = visitors.current;
+      while (list.length > target) list.pop();
+      while (list.length < target) list.push(...makeVisitors(tuning, target - list.length));
+    }
+
+    const t = state.clock.elapsedTime;
+    if (tuning.id === 'butterfly') wildDebug.butterflies = visitors.current.length;
+    else wildDebug.hoverflies = visitors.current.length;
+
+    for (let bi = 0; bi < visitors.current.length; bi++) {
+      const v = visitors.current[bi];
+
+      // PR #34's fixed resolution order, unchanged: resolve, then — if a new
+      // target was picked this frame — re-resolve immediately so steering
+      // aims at the flower, never at the anchor while resting inside it
+      let flowerInfo = v.targetFlowerId ? flowerById.get(v.targetFlowerId) : undefined;
+      if (flowerInfo && !inBloom(flowerInfo.plantId, s.season)) flowerInfo = undefined;
+      if (v.targetFlowerId !== null && !flowerInfo) {
+        v.targetFlowerId = null;
+        v.headingHome = true;
+        v.wanderTarget = null;
+        wildDebug.targetLost++;
+      }
+
+      if (v.restingUntil <= t && v.targetFlowerId === null) {
+        if (blooming.length > 0) {
+          v.targetFlowerId = blooming[Math.floor(Math.random() * blooming.length)];
+          flowerInfo = flowerById.get(v.targetFlowerId) ?? undefined;
+          if (flowerInfo && !inBloom(flowerInfo.plantId, s.season)) flowerInfo = undefined;
+          if (flowerInfo) {
+            v.headingHome = false;
+            v.wanderTarget = null;
+            wildDebug.targetFound++;
+          } else {
+            v.targetFlowerId = null;
+            v.headingHome = true;
+            wildDebug.targetLost++;
+          }
+        } else {
+          // no bloom: gentle wander, never park
+          v.headingHome = false;
+          if (!v.wanderTarget) {
+            v.wanderTarget = new THREE.Vector3(
+              (Math.random() - 0.5) * 26,
+              1.6 + Math.random() * 1.8,
+              (Math.random() - 0.5) * 26,
+            );
+          }
+        }
+      }
+
+      const target = new THREE.Vector3();
+      if (v.targetFlowerId !== null && flowerInfo) {
+        const def = PLANT_BY_ID[flowerInfo.plantId];
+        target.set(
+          flowerInfo.x,
+          flowerInfo.y + (def ? def.height * 0.9 : 0.7),
+          flowerInfo.z,
+        );
+        wildDebug.foraging++;
+      } else if (v.wanderTarget && !v.headingHome) {
+        target.copy(v.wanderTarget);
+        wildDebug.wandering++;
+      } else {
+        target.copy(ANCHOR);
+        wildDebug.homing++;
+      }
+
+      if (v.restingUntil <= t) {
+        const toTarget = target.clone().sub(v.pos);
+        const dist = toTarget.length();
+        if (dist < 0.5) {
+          v.restingUntil =
+            t +
+            tuning.restSeconds[0] +
+            Math.random() * (tuning.restSeconds[1] - tuning.restSeconds[0]);
+          v.targetFlowerId = null;
+          v.headingHome = true;
+          v.wanderTarget = null;
+        } else {
+          toTarget.normalize().multiplyScalar(tuning.speed);
+          toTarget.x += Math.sin(t * 2.2 + v.phase) * tuning.wanderStrength;
+          toTarget.z += Math.cos(t * 1.9 + v.phase * 1.3) * tuning.wanderStrength;
+          v.vel.lerp(toTarget, Math.min(1, delta * 3));
+          v.pos.addScaledVector(v.vel, delta);
+        }
+      }
+
+      const bob = Math.sin(t * tuning.bobSpeed + v.phase) * tuning.bobAmplitude;
+      lookMat.lookAt(v.pos, target, up);
+      lookMat.setPosition(0, 0, 0);
+      tmpMat.makeTranslation(v.pos.x, v.pos.y + bob, v.pos.z);
+      tmpMat.multiply(lookMat);
+      body.setMatrixAt(bi, tmpMat);
+      accent.setMatrixAt(bi, tmpMat);
+      // wings: slow flap for butterflies, blur-fast shimmer for hoverflies
+      const flapRate = tuning.id === 'butterfly' ? 7 : 40;
+      const flap = Math.abs(Math.sin(t * flapRate + v.phase)) * 0.9 + 0.1;
+      tmpMat.makeTranslation(v.pos.x, v.pos.y + bob + 0.04, v.pos.z);
+      tmpMat.multiply(lookMat);
+      scaleMat.makeScale(flap, 1, 1);
+      tmpMat.multiply(scaleMat);
+      wings.setMatrixAt(bi, tmpMat);
+    }
+    body.count = visitors.current.length;
+    accent.count = visitors.current.length;
+    wings.count = visitors.current.length;
+    body.instanceMatrix.needsUpdate = true;
+    accent.instanceMatrix.needsUpdate = true;
+    wings.instanceMatrix.needsUpdate = true;
+  };
+
+  useFrame((state, delta) => {
+    try {
+      update(state, delta);
+    } catch (err) {
+      if (!crashLogged) {
+        crashLogged = true;
+        console.error('[wild pollinators] frame error contained:', err);
+      }
+    }
+  });
+
+  return (
+    <group>
+      <instancedMesh ref={bodyRef} args={[bodyGeo, undefined, tuning.maxCount]} frustumCulled={false}>
+        <meshLambertMaterial color={tuning.bodyColor} />
+      </instancedMesh>
+      <instancedMesh ref={accentRef} args={[accentGeo, undefined, tuning.maxCount]} frustumCulled={false}>
+        <meshLambertMaterial color={tuning.wingColor} />
+      </instancedMesh>
+      <instancedMesh ref={wingRef} args={[wingGeo, undefined, tuning.maxCount]} frustumCulled={false}>
+        <meshLambertMaterial color={tuning.wingAccentColor} transparent opacity={tuning.wingOpacity} />
+      </instancedMesh>
+    </group>
+  );
+}
+
+export function WildPollinators() {
+  return (
+    <group>
+      <WildSpecies tuning={BUTTERFLY_TUNING} />
+      <WildSpecies tuning={HOVERFLY_TUNING} />
+    </group>
+  );
+}

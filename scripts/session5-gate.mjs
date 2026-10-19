@@ -411,12 +411,79 @@ async function checkSky(browser) {
   await page.close();
 }
 
+/** U5 (#15): butterflies & hoverflies — appear with bloom, wander without
+ *  it (never parked), distinct from bees at gameplay distance */
+async function checkWild(browser) {
+  const { page, errors } = await newPage(browser, url);
+
+  // 1. with bloom: both species appear and forage (telemetry via test hook)
+  await page.evaluate(() => {
+    const w = window.__meadowlight;
+    w.clear();
+    w.setSeason('summer');
+    for (let i = 0; i < 12; i++) w.plant('lavender', -8 + i * 1.5, 3);
+    w.placeStructure('hive', 0, 0);
+  });
+  await page.waitForTimeout(4000);
+  const withBloom = await page.evaluate(() => {
+    const d = window.__meadowlight.wildDebug();
+    const b = window.__meadowlight.beeDebug();
+    return { wild: d, bees: b.count, beeBodySize: 0.22 };
+  });
+  rec.record('wild.visitors-appear-with-bloom',
+    withBloom.wild.butterflies >= BUTTERFLY_MIN && withBloom.wild.hoverflies >= HOVERFLY_MIN,
+    JSON.stringify({ butterflies: withBloom.wild.butterflies, hoverflies: withBloom.wild.hoverflies, targetFound: withBloom.wild.targetFound, foraging: withBloom.wild.foraging }));
+
+  // 2. distinctness: butterfly wing mesh is ~3.2x its body width (0.45 vs
+  //    bee wing 0.57x body) and hoverfly is smaller than a bee body
+  const sizes = await page.evaluate(() => {
+    const scene = window.__meadowlight.__three.scene;
+    const found = [];
+    scene.traverse((o) => {
+      if (o.isInstancedMesh && o.geometry?.parameters) {
+        found.push({ w: +o.geometry.parameters.width.toFixed(3), h: +o.geometry.parameters.height.toFixed(3), d: +o.geometry.parameters.depth.toFixed(3), count: o.count });
+      }
+    });
+    return found;
+  });
+  // butterfly wing: width 0.14*3.2 = 0.448; bee body: 0.22; hoverfly body: 0.11
+  const hasButterflyWing = sizes.some((g) => Math.abs(g.w - 0.448) < 0.02);
+  const hasHoverflyBody = sizes.some((g) => Math.abs(g.w - 0.11) < 0.015 && Math.abs(g.d - 0.16) < 0.02);
+  const hasBeeBody = sizes.some((g) => Math.abs(g.w - 0.22) < 0.02);
+  rec.record('wild.distinct-from-bees-at-distance', hasButterflyWing && hasHoverflyBody && hasBeeBody,
+    JSON.stringify({ hasButterflyWing, hasHoverflyBody, hasBeeBody }));
+
+  // 3. empty meadow: visitors wander (never frozen), counts go to zero
+  await page.evaluate(() => {
+    const w = window.__meadowlight;
+    w.clear();
+    w.setSeason('summer'); // foraging season, ZERO flowers
+  });
+  await page.waitForTimeout(4000);
+  const empty = await page.evaluate(() => window.__meadowlight.wildDebug());
+  rec.record('wild.empty-meadow-quiet-or-wandering',
+    (empty.butterflies + empty.hoverflies === 0) || empty.wandering > 0,
+    JSON.stringify(empty));
+  // no bloom => below WILD_MIN_BLOOM => counts 0 by design (cozy, not dead)
+  rec.record('wild.empty-meadow-no-visitors-by-design',
+    empty.butterflies === 0 && empty.hoverflies === 0,
+    JSON.stringify({ butterflies: empty.butterflies, hoverflies: empty.hoverflies }));
+
+  const re = realErrors(errors);
+  rec.record('wild.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
+const BUTTERFLY_MIN = 1;
+const HOVERFLY_MIN = 1;
+
 const browser = await launchChromium(chromium, { libPath });
 for (const check of checks.split(',')) {
   if (check === 'roster') await checkRoster(browser);
   else if (check === 'terrain') await checkTerrain(browser);
   else if (check === 'bushes') await checkBushes(browser);
   else if (check === 'sky') await checkSky(browser);
+  else if (check === 'wild') await checkWild(browser);
   else rec.record(`unknown-check:${check}`, false, 'no such check');
 }
 await browser.close();
