@@ -46,12 +46,14 @@ export const HILLS = {
  */
 export const MEADOW_BOWL = {
   /**
-   * Deep enough to read as THE low bowl: the natural heightfield undulates
-   * ~±1.2 around the meadow's rim, so a shallow dip gets swamped — at some
-   * spots the meadow edge would still sit above adjacent hills. 1.5 puts
-   * the entire meadow surface below the terrain everywhere on the rim.
+   * PR #35 terrain verdict (2): 1.5 read as a pit, not a gentle dip — the
+   * user's eye is the acceptance criterion. Lifted to 0.9: still a clear
+   * depression (the rim keeps the meadow surface below the terrain
+   * everywhere — verified by the rim survey), but reads as a dip.
+   * Pond plateau is untouched (approved); water-below-banks is checked by
+   * the bank-margin survey after this change.
    */
-  depth: 1.5,
+  depth: 0.9,
 } as const;
 
 /**

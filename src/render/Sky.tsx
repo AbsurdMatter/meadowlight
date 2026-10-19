@@ -2,8 +2,8 @@ import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
-import { FOG, shapedHeight } from '../data/environment';
-import { skyPaletteAt, GOLDEN_HOUR, dayPhase, advanceDay } from '../engine/dayCycle';
+import { FOG, HILLS, shapedHeight } from '../data/environment';
+import { skyPaletteAt, dayPhase, advanceDay } from '../engine/dayCycle';
 
 /**
  * #6 (session 5): graded voxel sky. The flat linear gradient becomes a
@@ -91,20 +91,18 @@ export function Sky() {
  * version used absolute y = h * 0.28 at r 56..74, past the end of the hills
  * meshes (HILLS.outerRadius 50), leaving a floating wall over empty ground.
  */
-const ridgeColor = new THREE.Color();
+/**
+ * Distant terrain (#6, redesigned per PR #35 review): a further range of
+ * hills IN THE MEADOW'S OWN VOXEL LANGUAGE — the same hillColors palette,
+ * the same fog-blend math, the same lit Lambert material as the Hills
+ * renderer, sitting ON the shared shapedHeight() (bottom-clears-oracle).
+ * The first version inherited the sky unit's treatment (MeshBasicMaterial,
+ * horizon-glow colors) and read as clouds/mist — terrain and sky are
+ * distinct systems; nothing between them may read as a third thing.
+ */
 export function DistantRidge() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const count = 96;
-  // U6: ridge silhouettes track the live sky horizon (night = dark ridge)
-  useFrame(() => {
-    const m = meshRef.current;
-    if (!m || !m.instanceColor) return;
-    const live = skyPaletteAt(dayPhase());
-    const palette = skyPaletteAt(GOLDEN_HOUR);
-    ridgeColor.copy(new THREE.Color(palette.horizon)).lerp(new THREE.Color(live.horizon), 0.8);
-    for (let i = 0; i < count; i++) m.setColorAt(i, ridgeColor);
-    m.instanceColor.needsUpdate = true;
-  });
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
@@ -118,37 +116,43 @@ export function DistantRidge() {
     const mat = new THREE.Matrix4();
     const color = new THREE.Color();
     const fogColor = new THREE.Color(FOG.color);
-    const palette = skyPaletteAt(GOLDEN_HOUR);
-    const base = new THREE.Color(palette.horizon);
+    // the HILLS renderer's own palette + fog blend — terrain, not sky
+    const hillColors = HILLS.hillColors.map((c) => new THREE.Color(c));
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2 + rng() * 0.06;
       const r = 50 + rng() * 12;
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;
-      // ground at this box's own position, from the shared oracle — the
-      // same function the hills renderer and placement use
+      // ground at this box's own position, from the shared oracle —
+      // the same function the hills renderer and placement use
       const ground = shapedHeight(x, z);
-      // stepped peaks: taller at two "range" headings for composition, but
-      // modest (distant hills, not a wall): 2.5..5.5 total extent
-      const rangeBoost = Math.max(0, Math.cos(a * 2 + 0.8)) * 1.8;
-      const h = 2.5 + rng() * 1.2 + rangeBoost;
+      // hills, not a wall: extents match the far-hills scale (1.4 box
+      // height + rise), with a mild range boost at two headings
+      const rangeBoost = Math.max(0, Math.cos(a * 2 + 0.8)) * 1.1;
+      const h = HILLS.boxHeight + 1.2 + rng() * 1.4 + rangeBoost;
       const w = 9 + rng() * 6;
-      // bottom clears the oracle (the #28 pattern): center sits so the box
-      // extends h above ground and only h*0.15 below it
+      // bottom clears the oracle (the #28 pattern)
       mat.makeScale(w, h, 4);
       mat.setPosition(x, ground + h * 0.35, z);
       mesh.setMatrixAt(i, mat);
-      // melt toward the horizon glow: far ridges barely distinct from sky
-      color.copy(base).lerp(fogColor, 0.35);
+      // the hills' own color logic: hill palette, fog-blended by distance
+      // with the same curve the Hills renderer uses (fogBlendStrength 0.55)
+      const t = THREE.MathUtils.clamp(
+        (r - HILLS.fogBlendStart) / (HILLS.fogBlendEnd - HILLS.fogBlendStart),
+        0,
+        1,
+      );
+      const base = hillColors[Math.floor(rng() * hillColors.length)];
+      color.copy(base).lerp(fogColor, t * HILLS.fogBlendStrength);
       mesh.setColorAt(i, color);
     }
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   }, []);
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, count]} frustumCulled={false}>
+    <instancedMesh ref={meshRef} args={[undefined, undefined, count]} frustumCulled={false} receiveShadow>
       <boxGeometry args={[1, 1, 1]} />
-      <meshBasicMaterial />
+      <meshLambertMaterial side={THREE.DoubleSide} />
     </instancedMesh>
   );
 }
