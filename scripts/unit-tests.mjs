@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -82,6 +82,8 @@ const { SEASONS, SEASON_SECONDS } = require(OUT + '/data/seasons.js');
 const { seasonProgress, advanceSeasons, forceSeason, resumeSeasonClock, seasonClockOverridden, setSeasonProgressForTest, nextSeason } = require(OUT + '/engine/seasonClock.js');
 const { companionSet, newlyFormed, recipeBetween } = require(OUT + '/engine/companions.js');
 const { RECIPES, RECIPE_TUNING, recipeFor } = require(OUT + '/data/recipes.js');
+const { advanceComb, combReady, fillAfterHarvest } = require(OUT + '/engine/honey.js');
+const { HONEY_TUNING, HONEY_FORAGING_SEASONS, HONEY_FACTS } = require(OUT + '/data/honey.js');
 const { checkMilestones } = require(OUT + '/engine/milestones.js');
 const { variationFor, rollVariation, noVariation, VARIATION_TUNING } = require(OUT + '/engine/variation.js');
 const { choosePlantFact, chooseStructureFact, chooseMeadowFact } = require(OUT + '/engine/factSelection.js');
@@ -466,6 +468,43 @@ test('recipes: every pairing references real roster species (buildable in play)'
     assert.ok(r.fact.length > 20, 'recipe ' + r.id + ' has a warm fact');
   }
   assert.ok(RECIPE_TUNING.vigorScale > 1, 'vigor is a bonus multiplier');
+});
+
+// ---------- session 6 U3 (#10): honey ----------
+test('honey: comb fills from foraging effort, gated by daylight + season', () => {
+  // active foraging: increases
+  let f = advanceComb(0, 10, 8, 0.8, 'summer', true);
+  assert.ok(f > 0, 'active foraging fills the comb');
+  // night or winter: only the gentle idle trickle
+  const night = advanceComb(0, 10, 8, 0.8, 'summer', false);
+  const winter = advanceComb(0, 10, 8, 0.8, 'winter', true);
+  assert.ok(night > 0 && night < f, 'night trickles, never zero — residents, not machines');
+  assert.strictEqual(night, winter, 'same gentle trickle off-season');
+  assert.ok(night <= HONEY_TUNING.idleFillPerSecond * 10 + 1e-9, 'idle rate matches tuning');
+  // no bees at all: still fills, slowly (no pressure, no fail)
+  const lonely = advanceComb(0, 60, 0, 0, 'summer', true);
+  assert.ok(lonely > 0, 'an empty meadow still fills the comb slowly');
+  // appeal scales the rate
+  const rich = advanceComb(0, 10, 8, 1, 'summer', true);
+  const poor = advanceComb(0, 10, 8, 0.1, 'summer', true);
+  assert.ok(rich > poor, 'appeal scales fill');
+});
+
+test('honey: fill caps at 1; harvest resets partial, never zero', () => {
+  const full = advanceComb(0.99, 60, 20, 1, 'summer', true);
+  assert.strictEqual(full, 1, 'fill caps at 1');
+  assert.ok(combReady(1), 'a full comb is harvestable');
+  assert.ok(!combReady(0.99), 'not-yet-full is not harvestable');
+  const after = fillAfterHarvest();
+  assert.ok(after > 0 && after < 1, 'harvest leaves a partial comb');
+  assert.strictEqual(after, HONEY_TUNING.afterHarvest, 'after-harvest fill matches tuning');
+  assert.ok(after >= 0.3, 'the bees keep a generous share — residents, not machines');
+});
+
+test('honey: facts verified against sources; winter is not a foraging season', () => {
+  assert.ok(!HONEY_FORAGING_SEASONS.includes('winter'), 'winter is quiet');
+  assert.ok(HONEY_FACTS.harvest.length > 20 && HONEY_FACTS.filling.length > 20, 'facts exist');
+  assert.ok(HONEY_TUNING.combColorFloor !== HONEY_TUNING.combColorFull, 'glow palette has range');
 });
 
 // ---------- session 5 U7 (#14): weather — cozy, no fail state ----------

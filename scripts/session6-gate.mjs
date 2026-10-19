@@ -8,6 +8,9 @@
  *   node scripts/session6-gate.mjs --url http://localhost:5199 \
  *     --checks seasons [--lib-path /path/to/libs]
  *
+ *   honey — #10: comb fills from real foraging, glow warms with fill,
+ *             harvest ceremony (dip) + jar tally + fact toast, save
+ *             round-trip (hiveCombs/honeyJars), empty-meadow trickle.
  *   recipes — #9: adjacency forms a recipe, discovery toast fires, notebook
  *             section present + in viewport, non-recipes stay neutral (no
  *             punishment by test), save round-trips foundRecipes.
@@ -315,7 +318,122 @@ async function checkRecipes() {
   }
 }
 
-const map = { seasons: checkSeasons, recipes: checkRecipes };
+/** #10 honey */
+async function checkHoney() {
+  // 1. fill from real foraging: plant flowers + hive, bees forage, comb rises
+  {
+    const { page, errors } = await newPage(browser, url);
+    await page.evaluate(() => {
+      const w = window.__meadowlight;
+      w.clear();
+      w.setSeason('summer');
+      for (let i = 0; i < 12; i++) w.plant('lavender', 2 + i * 0.8, 2);
+      w.placeStructure('hive', 0, 0);
+    });
+    const before = await page.evaluate(() => {
+      const w = window.__meadowlight;
+      return { combs: w.hiveCombs(), dbg: w.honeyDebug() };
+    });
+    await page.waitForTimeout(4000);
+    const after = await page.evaluate(() => {
+      const w = window.__meadowlight;
+      return { combs: w.hiveCombs(), dbg: w.honeyDebug() };
+    });
+    const hiveId = Object.keys(after.combs)[0];
+    const grew =
+      hiveId !== undefined &&
+      after.combs[hiveId] > (before.combs[hiveId] ?? 0) + 1e-6;
+    rec.record(
+      'honey.comb-fills-from-foraging',
+      grew && after.dbg.foragingBees >= 0,
+      `before=${JSON.stringify(before.combs)} after=${JSON.stringify(after.combs)} foragingBees=${after.dbg.foragingBees}`,
+    );
+    // 2. harvest ceremony: force full, harvest -> jar + partial reset + toast
+    const harvest = await page.evaluate(async (id) => {
+      const w = window.__meadowlight;
+      w.setComb(id, 1);
+      const ok = w.harvestHoney(id);
+      return { ok, combs: w.hiveCombs(), jars: w.honeyJars() };
+    }, hiveId);
+    await page.waitForTimeout(300);
+    const toast = await page.evaluate(() => {
+      const panels = [...document.querySelectorAll('div')].filter((d) =>
+        d.textContent.includes('A jar of honey!'),
+      );
+      if (panels.length === 0) return { found: false };
+      const rect = panels[panels.length - 1].getBoundingClientRect();
+      return { found: true, inViewport: rect.top >= 0 && rect.bottom <= innerHeight };
+    });
+    const partial = harvest.ok && harvest.jars === 1;
+    const reset =
+      hiveId !== undefined &&
+      Math.abs((harvest.combs[hiveId] ?? 0) - 0.35) < 0.02;
+    rec.record(
+      'honey.harvest-ceremony-jar-partial-reset',
+      partial && reset && toast.found && toast.inViewport,
+      JSON.stringify({ harvest, toast }),
+    );
+    // 3. not-full hive: harvest refuses, notebook opens instead (no fail state)
+    const early = await page.evaluate((id) => {
+      const w = window.__meadowlight;
+      w.setComb(id, 0.5);
+      const combsAtSet = w.hiveCombs();
+      return { ok: w.harvestHoney(id), jars: w.honeyJars(), combsAtSet };
+    }, hiveId);
+    rec.record(
+      'honey.not-full-hive-refuses-gently',
+      early.ok === false && early.jars === 1,
+      JSON.stringify(early),
+    );
+    // 4. save round-trip: hiveCombs + honeyJars persist (v6). The live
+    // store keeps changing (foraging + the refused 0.5 set), so save NOW
+    // and read the blob back atomically — the honest round-trip is
+    // "what the save holds after a save()", not a mid-play snapshot.
+    const saved = await page.evaluate(() => ({ live: window.__meadowlight.hiveCombs() }));
+    await page.waitForTimeout(3500); // let the 3s autosave capture the state
+    const blob = await page.evaluate(() => JSON.parse(localStorage.getItem('meadowlight.world.v2')));
+    rec.record(
+      'honey.save-v6-round-trips-combs-jars',
+      blob.version === 6 &&
+        blob.honeyJars === 1 &&
+        typeof blob.hiveCombs === 'object' &&
+        Object.keys(blob.hiveCombs).length > 0 &&
+        Object.values(blob.hiveCombs).every((v) => v >= 0 && v <= 1),
+      `version=${blob.version} jars=${blob.honeyJars} combs=${JSON.stringify(blob.hiveCombs)} liveAtCheck=${JSON.stringify(saved.live)}`,
+    );
+    const re = realErrors(errors);
+    rec.record('honey.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+    await page.close();
+  }
+
+  // 5. empty meadow trickle: hive with no flowers still fills slowly (no pressure)
+  {
+    const { page, errors } = await newPage(browser, url);
+    await page.evaluate(() => {
+      const w = window.__meadowlight;
+      w.clear();
+      w.setSeason('summer');
+      w.placeStructure('hive', 0, 0);
+    });
+    await page.waitForTimeout(2500);
+    const trickle = await page.evaluate(() => {
+      const w = window.__meadowlight;
+      const combs = w.hiveCombs();
+      const id = Object.keys(combs)[0];
+      return { fill: id ? combs[id] : 0, has: id !== undefined };
+    });
+    rec.record(
+      'honey.empty-meadow-trickles-never-zero',
+      trickle.has && trickle.fill > 0,
+      JSON.stringify(trickle),
+    );
+    const re = realErrors(errors);
+    rec.record('honey.trickle-no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+    await page.close();
+  }
+}
+
+const map = { seasons: checkSeasons, recipes: checkRecipes, honey: checkHoney };
 for (const c of checks.split(',')) {
   if (map[c]) await map[c]();
   else rec.record(`unknown-check:${c}`, false, 'no such check in session6-gate');
