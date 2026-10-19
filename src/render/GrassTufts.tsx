@@ -5,61 +5,93 @@ import { GRASS_TUFTS } from '../data/polish';
 import { terrainHeight } from '../engine/terrain';
 
 /**
- * Grass clumps (#24): blades are BASE-JOINED — every blade's base sits at
- * the clump point and leans outward/upward (pivot at the ground), never
- * top-converged. Distribution clusters into drifts with bare gaps between
- * them (the ?demo=1 flower drifts are the reference), and the greens are
- * the exact Meadow.tsx floor palette so tufts read as part of the lawn.
- * One InstancedMesh (clumps × bladesPerClump, one draw call); sway via
- * per-frame matrices, deterministic phases. No shadows (budget unchanged).
+ * Leafy grass tufts with per-tuft variety (#25):
+ *  - blade count 3-7 per tuft, weighted toward 5 (adjacent tufts differ)
+ *  - per-blade length and lean variance
+ *  - uneven angular spacing (jittered fan angles)
+ *  - POSITION-SEEDED: all randomness derives deterministically from each
+ *    tuft's quantized x/z, so the meadow's grass is identical across loads
+ *    and sessions (no Math.random anywhere here).
+ * Blades are base-joined at the tuft point and fan upward-outward (#24).
+ * One InstancedMesh sized for the max blade count; unused slots parked at
+ * zero scale. One draw call; sway via per-frame matrices. No shadows.
  */
+
+/**
+ * Deterministic 0..1 hash from two integers — stable across loads,
+ * no RNG state to persist.
+ */
+function hash2(x: number, z: number, salt: number): number {
+  let h = (x * 374761393 + z * 668265263 + salt * 2246822519) | 0;
+  h = (h ^ (h >>> 13)) * 1274126177;
+  h = h ^ (h >>> 16);
+  return (h >>> 0) / 4294967296;
+}
+
+/** Weighted blade-count pick from the tuning table, seeded per tuft. */
+function bladeCountFor(r: number): number {
+  const w = GRASS_TUFTS.bladeWeights;
+  const total = w.reduce((a, b) => a + b, 0);
+  let acc = 0;
+  for (let i = 0; i < w.length; i++) {
+    acc += w[i];
+    if (r < acc / total) return GRASS_TUFTS.bladesMin + i;
+  }
+  return GRASS_TUFTS.bladesMin + w.length - 1;
+}
+
 export function GrassTufts() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  const count = GRASS_TUFTS.count * GRASS_TUFTS.bladesPerClump;
+  const maxPer = GRASS_TUFTS.bladesMax;
+  const count = GRASS_TUFTS.count * maxPer;
 
-  const clumps = useMemo(() => {
-    const rng = (n: number) => {
-      let s = n;
-      return () => {
-        s = (s * 16807) % 2147483647;
-        return (s - 1) / 2147483646;
-      };
-    };
-    const r = rng(20261024);
-    // drift centers scattered in the meadow (demo-flower drift reference)
+  /** per-tuft layout, fully derived from quantized positions (stable) */
+  const tufts = useMemo(() => {
+    // drift centers — seeded by a fixed constant (stable across loads)
     const drifts: { x: number; z: number }[] = [];
     for (let d = 0; d < GRASS_TUFTS.driftCount; d++) {
-      const a = (d / GRASS_TUFTS.driftCount) * Math.PI * 2 + r() * 0.8;
-      const rad = 3 + r() * (GRASS_TUFTS.radius - 5);
+      const a = (d / GRASS_TUFTS.driftCount) * Math.PI * 2 + hash2(d, 7, 1) * 0.8;
+      const rad = 3 + hash2(d, 13, 2) * (GRASS_TUFTS.radius - 5);
       drifts.push({ x: Math.cos(a) * rad, z: Math.sin(a) * rad });
     }
-    // clumps cluster around drift centers — gaps between drifts stay bare
     const out: {
       x: number;
       z: number;
       blades: { ang: number; lean: number; hScale: number; colorIdx: number; phase: number }[];
     }[] = [];
-    let guard = 0;
-    while (out.length < GRASS_TUFTS.count && guard < GRASS_TUFTS.count * 40) {
-      guard++;
-      const drift = drifts[Math.floor(r() * drifts.length)];
-      const a = r() * Math.PI * 2;
-      const rad = Math.sqrt(r()) * GRASS_TUFTS.driftRadius;
-      const x = drift.x + Math.cos(a) * rad;
-      const z = drift.z + Math.sin(a) * rad;
+    let placed = 0;
+    let ring = 0;
+    while (placed < GRASS_TUFTS.count && ring < GRASS_TUFTS.count * 40) {
+      ring++;
+      // candidate position from a deterministic spiral index
+      const a = ring * 2.399963;
+      const rad = Math.sqrt(ring / (GRASS_TUFTS.count * 2)) * GRASS_TUFTS.driftRadius;
+      const drift = drifts[ring % drifts.length];
+      const jitterA = (hash2(ring, 3, 11) - 0.5) * 1.2;
+      const jitterR = (hash2(ring, 5, 12) - 0.5) * 1.0;
+      const x = drift.x + Math.cos(a + jitterA) * (rad + jitterR * 0.5);
+      const z = drift.z + Math.sin(a + jitterA) * (rad + jitterR * 0.5);
       if (Math.hypot(x, z) > GRASS_TUFTS.radius) continue;
+      // quantized seed = stable identity for this tuft
+      const qx = Math.round(x * 20);
+      const qz = Math.round(z * 20);
+      const nBlades = bladeCountFor(hash2(qx, qz, 100));
       const blades = [];
-      const n = GRASS_TUFTS.bladesPerClump;
-      for (let b = 0; b < n; b++) {
+      for (let b = 0; b < nBlades; b++) {
+        const sr = (salt: number) => hash2(qx * 31 + b, qz * 17 + b, salt);
         blades.push({
-          ang: (b / n) * Math.PI * 2 + r() * 0.5,
-          lean: GRASS_TUFTS.fanSpread * (0.7 + r() * 0.6),
-          hScale: 0.75 + r() * 0.5,
-          colorIdx: Math.floor(r() * GRASS_TUFTS.colors.length),
-          phase: r() * Math.PI * 2,
+          // uneven angular spacing: jittered fractions of the circle
+          ang: (b / nBlades) * Math.PI * 2 + (sr(1) - 0.5) * 1.4,
+          // per-blade lean variance
+          lean: GRASS_TUFTS.fanSpread * (0.55 + sr(2) * 0.85),
+          // per-blade length variance
+          hScale: 0.7 + sr(3) * 0.65,
+          colorIdx: Math.floor(sr(4) * GRASS_TUFTS.colors.length),
+          phase: sr(5) * Math.PI * 2,
         });
       }
       out.push({ x, z, blades });
+      placed++;
     }
     return out;
   }, []);
@@ -69,51 +101,59 @@ export function GrassTufts() {
     if (!mesh) return;
     const color = new THREE.Color();
     let i = 0;
-    for (const clump of clumps) {
-      for (const blade of clump.blades) {
+    for (const tuft of tufts) {
+      for (const blade of tuft.blades) {
         color.set(GRASS_TUFTS.colors[blade.colorIdx]);
+        mesh.setColorAt(i, color);
+        i++;
+      }
+      // park unused capacity slots (up to bladesMax) with a neutral color
+      for (let p = tuft.blades.length; p < maxPer; p++) {
         mesh.setColorAt(i, color);
         i++;
       }
     }
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  }, [clumps]);
+  }, [tufts, maxPer]);
 
   const tmpMat = useMemo(() => new THREE.Matrix4(), []);
+  const parkMat = useMemo(() => new THREE.Matrix4(), []);
   const rotY = useMemo(() => new THREE.Matrix4(), []);
   const rotLean = useMemo(() => new THREE.Matrix4(), []);
   const rotSway = useMemo(() => new THREE.Matrix4(), []);
-  const scaleVec = useMemo(() => new THREE.Vector3(...GRASS_TUFTS.bladeSize), []);
   const halfHeightMat = useMemo(() => new THREE.Matrix4(), []);
+  const scaleVec = useMemo(() => new THREE.Vector3(...GRASS_TUFTS.bladeSize), []);
 
   useFrame(({ clock }) => {
     const mesh = meshRef.current;
     if (!mesh) return;
     const t = clock.elapsedTime;
     let i = 0;
-    for (const clump of clumps) {
-      const h = terrainHeight(clump.x, clump.z);
-      for (const blade of clump.blades) {
+    for (const tuft of tufts) {
+      const h = terrainHeight(tuft.x, tuft.z);
+      for (const blade of tuft.blades) {
         const sway = Math.sin(t * GRASS_TUFTS.swaySpeed + blade.phase) * GRASS_TUFTS.swayAmplitude;
         const bladeH = GRASS_TUFTS.bladeSize[1] * blade.hScale;
-        // BASE-JOINED fan: pivot at the clump point on the ground. The
-        // blade box is translated up its own half-height FIRST (in its
-        // local frame), then leaned outward — so the base stays planted
-        // at the clump center and the tip swings up/outward. Never
-        // top-converged: each blade owns its own lean direction.
-        tmpMat.makeTranslation(clump.x, h - 0.05, clump.z);
+        // base-joined fan: pivot at the tuft point on the ground
+        tmpMat.makeTranslation(tuft.x, h - 0.05, tuft.z);
         rotY.makeRotationY(blade.ang);
         tmpMat.multiply(rotY);
         rotLean.makeRotationZ(blade.lean);
         tmpMat.multiply(rotLean);
         rotSway.makeRotationX(sway * 0.4);
         tmpMat.multiply(rotSway);
-        // translate along the leaned-up axis by half the blade height
         halfHeightMat.makeTranslation(0, bladeH / 2, 0);
         tmpMat.multiply(halfHeightMat);
         scaleVec.set(GRASS_TUFTS.bladeSize[0], bladeH, GRASS_TUFTS.bladeSize[2]);
         tmpMat.scale(scaleVec);
         mesh.setMatrixAt(i, tmpMat);
+        i++;
+      }
+      // park the unused capacity slots at zero scale (invisible)
+      const unused = maxPer - tuft.blades.length;
+      for (let p = 0; p < unused; p++) {
+        parkMat.makeScale(0, 0, 0);
+        mesh.setMatrixAt(i, parkMat);
         i++;
       }
     }

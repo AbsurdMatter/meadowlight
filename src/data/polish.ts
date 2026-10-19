@@ -43,8 +43,15 @@ export const GRASS_TUFTS = {
    */
   enabled: true,
   count: 80,
-  /** blades per clump — bases joined at the clump point, fanning upward */
-  bladesPerClump: 5,
+  /**
+   * #25: per-tuft blade count varies 3-7, weighted toward 5 — adjacent
+   * tufts visibly differ. Capacity must cover the max (7); unused
+   * instance slots are parked at zero scale.
+   */
+  bladesMin: 3,
+  bladesMax: 7,
+  /** weights for [3,4,5,6,7] — 5 is the mode */
+  bladeWeights: [1, 2, 4, 2, 1],
   bladeSize: [0.17, 0.36, 0.06] as [number, number, number],
   /**
    * outward lean of each blade from vertical (base-pivoted fan). Wide
