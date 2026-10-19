@@ -11,6 +11,8 @@ import { wildDebug } from '../render/WildPollinators';
 import { fireflyDebug } from '../render/Fireflies';
 import { setDayPhase } from './dayCycle';
 import { setRaining } from './weather';
+import { dayPhase } from './dayCycle';
+import { setFireflyForce } from '../render/Fireflies';
 import { rainDebug } from '../render/Rain';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
 import { capturePostcardPng } from './postcard';
@@ -36,6 +38,8 @@ declare global {
     fireflyDebug: () => unknown;
     setDayPhase: (p: number) => void;
     setRaining: (v: boolean) => void;
+    setFireflyForce: (v: boolean | null) => void;
+    dayPhaseReadback: () => number;
     rainDebug: () => unknown;
     rareBeeCount: () => number;
     capturePostcard: () => string | null;
@@ -139,6 +143,8 @@ export function installTestHook() {
     fireflyDebug: () => ({ ...fireflyDebug }),
     setDayPhase,
     setRaining,
+    setFireflyForce,
+    dayPhaseReadback: () => dayPhase(),
     rainDebug: () => ({ ...rainDebug }),
     rareBeeCount: () => rareBeeDebug.count,
     capturePostcard: () => capturePostcardPng(),

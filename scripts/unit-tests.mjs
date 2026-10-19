@@ -77,7 +77,7 @@ const { groundAt, waterSurfaceHeight, pondFloorHeight } = require(OUT + '/engine
 const { LAKE, TERRAIN_SHAPE, shapedHeight, POND_FLAT_HEIGHT } = require(OUT + '/data/environment.js');
 const { MEADOW_SIZE, terrainHeight } = require(OUT + '/engine/terrain.js');
 const { isRaining, setRaining } = require(OUT + '/engine/weather.js');
-const { skyPaletteAt, GOLDEN_HOUR, sunElevation, isDaylight, isDusk, DUSK_START, DUSK_END, DAY_CYCLE_SECONDS, dayPhase, setDayPhase, advanceDay } = require(OUT + '/engine/dayCycle.js');
+const { skyPaletteAt, GOLDEN_HOUR, sunElevation, isDaylight, isDusk, DUSK_START, DUSK_END, DAY_CYCLE_SECONDS, dayPhase, setDayPhase, advanceDay, resumeDayCycle, dayCycleOverridden } = require(OUT + '/engine/dayCycle.js');
 const { SEASONS } = require(OUT + '/data/seasons.js');
 const { checkMilestones } = require(OUT + '/engine/milestones.js');
 const { variationFor, rollVariation, noVariation, VARIATION_TUNING } = require(OUT + '/engine/variation.js');
@@ -329,16 +329,26 @@ test('sun model: elevation peaks at noon, night is dark', () => {
 
 // ---------- session 5 U6 (#13): day/night clock ----------
 
-test('day clock: 12-minute cycle, phase wraps, save-resume semantics', () => {
+test('day clock: 12-minute cycle, overrides hold, resume drifts again', () => {
   assert.strictEqual(DAY_CYCLE_SECONDS, 720, 'cycle length per approved plan');
+  // override semantics (P panel): setDayPhase holds the clock still
+  resumeDayCycle();
   setDayPhase(0.5);
   assert.strictEqual(dayPhase(), 0.5);
+  assert.ok(dayCycleOverridden(), 'override must hold the clock');
   advanceDay(720);
-  assert.ok(Math.abs(dayPhase() - 0.5) < 1e-9, 'one full cycle returns to start');
+  assert.ok(Math.abs(dayPhase() - 0.5) < 1e-9, 'override: clock does not drift');
+  // resume: natural drift returns
+  resumeDayCycle();
+  assert.ok(!dayCycleOverridden(), 'resume releases the override');
   advanceDay(360);
   assert.ok(Math.abs(dayPhase() - 0.0) < 1e-9, 'half cycle wraps to midnight');
+  advanceDay(720);
+  assert.ok(Math.abs(dayPhase() - 0.0) < 1e-9, 'one full cycle returns to start');
+  // negative phases wrap
   setDayPhase(-0.25);
   assert.ok(Math.abs(dayPhase() - 0.75) < 1e-9, 'negative phase wraps');
+  resumeDayCycle();
 });
 
 test('dusk window: fireflies appear only in 0.79-0.92', () => {

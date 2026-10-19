@@ -16,6 +16,19 @@ import { groundAt } from '../engine/ground';
 
 export const fireflyDebug = { count: 0, active: false };
 
+/**
+ * P panel / tests: force fireflies on/off independent of the dusk window,
+ * so the dusk clustering can be inspected in full light and confirmed
+ * absent at noon. null = natural (dusk window decides).
+ */
+const fireflyForce: { value: boolean | null } = { value: null };
+export function setFireflyForce(v: boolean | null): void {
+  fireflyForce.value = v;
+}
+export function fireflyForced(): boolean | null {
+  return fireflyForce.value;
+}
+
 const FIREFLY_TUNING = {
   /** gentle population: scales with wild corners, capped */
   perCorner: 4,
@@ -62,7 +75,8 @@ export function Fireflies() {
     const mesh = meshRef.current;
     if (!mesh) return;
     const s = usePlacementStore.getState();
-    const dusk = isDusk(dayPhase());
+    // natural dusk window, unless the P harness forces a state
+    const dusk = fireflyForced() ?? isDusk(dayPhase());
     fireflyDebug.active = dusk;
 
     // rebuild only when the corner set changes

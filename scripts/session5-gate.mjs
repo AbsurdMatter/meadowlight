@@ -582,6 +582,96 @@ async function checkWeather(browser) {
   await page.close();
 }
 
+/** P-panel triggers (dev): forced rain + night produce their observables in
+ *  seconds; overrides do not corrupt the saved dayPhase; natural cycle
+ *  resumes cleanly; firefly force works independent of the dusk window */
+async function checkTriggers(browser) {
+  const { page, errors } = await newPage(browser, url);
+  await page.evaluate(() => {
+    const w = window.__meadowlight;
+    w.clear();
+    w.setSeason('summer');
+    for (let i = 0; i < 10; i++) w.plant('lavender', -7 + i * 1.5, 3);
+    w.placeStructure('hive', 0, 0);
+    w.placeStructure('wildcorner', -10, -10);
+  });
+  await page.waitForTimeout(2500);
+
+  // A. P panel mounts with the session-5 trigger buttons (DOM geometry)
+  await page.keyboard.press('p');
+  await page.waitForTimeout(600);
+  const panel = await page.evaluate(() => {
+    const btns = [...document.querySelectorAll('button[data-perf-s5]')];
+    const labels = btns.map((b) => b.textContent);
+    const first = btns[0]?.getBoundingClientRect();
+    return { count: btns.length, labels, inViewport: !!first && first.width > 0 && first.top >= 0 };
+  });
+  rec.record('triggers.panel-has-s5-buttons-in-viewport',
+    panel.count >= 10 && panel.inViewport && panel.labels.includes('rain ON') && panel.labels.includes('resume natural'),
+    JSON.stringify({ count: panel.count, labels: panel.labels }));
+
+  // B. forced night: bees home, sky dark; saved dayPhase survives reload
+  await page.evaluate(() => window.__meadowlight.setDayPhase(0.97));
+  await page.waitForTimeout(3000);
+  const night = await page.evaluate(() => ({
+    bees: window.__meadowlight.beeDebug(),
+    rain: window.__meadowlight.rainDebug(),
+  }));
+  rec.record('triggers.forced-night-bees-home',
+    night.bees.homing >= 3 || night.bees.count === 0 || night.bees.foraging < night.bees.homing,
+    JSON.stringify({ homing: night.bees.homing, foraging: night.bees.foraging, count: night.bees.count }));
+
+  // C. forced rain at night: rain renders; petals glisten path active (count>0)
+  await page.evaluate(() => window.__meadowlight.setRaining(true));
+  await page.waitForTimeout(2000);
+  const wetNight = await page.evaluate(() => ({
+    rain: window.__meadowlight.rainDebug(),
+    bees: window.__meadowlight.beeDebug(),
+  }));
+  rec.record('triggers.forced-rain-renders-and-bees-home',
+    wetNight.rain.count > 100 && wetNight.bees.homing >= wetNight.bees.foraging,
+    JSON.stringify({ drops: wetNight.rain.count, homing: wetNight.bees.homing, foraging: wetNight.bees.foraging }));
+
+  // D. override does not corrupt the save: reload, dayPhase resumes from save
+  await page.evaluate(() => new Promise((r) => setTimeout(r, 3600))); // autosave captures the override phase
+  const savedBlob = await page.evaluate(() => localStorage.getItem('meadowlight.world.v2'));
+  const savedPhase = JSON.parse(savedBlob).dayPhase;
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(3000);
+  const resumed = await page.evaluate(() => ({
+    phase: window.__meadowlight.dayPhaseReadback?.() ?? null,
+    rain: window.__meadowlight.rainDebug(),
+  }));
+  // phase should resume near the saved override (natural drift adds a little)
+  const phaseOk = savedPhase !== undefined && Math.abs(savedPhase - (resumed.phase ?? savedPhase)) < 0.05;
+  rec.record('triggers.dayphase-save-not-corrupted', savedPhase !== undefined && phaseOk,
+    JSON.stringify({ savedPhase, resumedPhase: resumed.phase }));
+  // rain is per-visit ambient: must NOT persist through reload
+  rec.record('triggers.rain-does-not-persist', resumed.rain.count === 0,
+    JSON.stringify({ rainAfterReload: resumed.rain.count }));
+
+  // E. firefly force: on at noon (independent of dusk), off at dusk
+  await page.evaluate(() => {
+    window.__meadowlight.setDayPhase(0.5); // noon
+    window.__meadowlight.setRaining(false);
+  });
+  await page.waitForTimeout(1200);
+  await page.evaluate(() => window.__meadowlight.setFireflyForce?.(true));
+  await page.waitForTimeout(1500);
+  const forcedOn = await page.evaluate(() => window.__meadowlight.fireflyDebug());
+  await page.evaluate(() => window.__meadowlight.setFireflyForce?.(false));
+  await page.waitForTimeout(1200);
+  const forcedOff = await page.evaluate(() => window.__meadowlight.fireflyDebug());
+  await page.evaluate(() => window.__meadowlight.setFireflyForce?.(null));
+  rec.record('triggers.firefly-force-works-any-time',
+    forcedOn.count >= 4 && forcedOff.count === 0,
+    JSON.stringify({ forcedOn: forcedOn.count, forcedOff: forcedOff.count }));
+
+  const re = realErrors(errors);
+  rec.record('triggers.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
 const browser = await launchChromium(chromium, { libPath });
 for (const check of checks.split(',')) {
   if (check === 'roster') await checkRoster(browser);
@@ -591,6 +681,7 @@ for (const check of checks.split(',')) {
   else if (check === 'wild') await checkWild(browser);
   else if (check === 'daynight') await checkDayNight(browser);
   else if (check === 'weather') await checkWeather(browser);
+  else if (check === 'triggers') await checkTriggers(browser);
   else rec.record(`unknown-check:${check}`, false, 'no such check');
 }
 await browser.close();

@@ -20,16 +20,31 @@ export const DAY_CYCLE_SECONDS = 720;
  * one source; the render loop advances it, the P harness can jump it.
  * Starts at golden hour — the default look — and drifts slowly from there.
  */
-const clock = { phase: GOLDEN_HOUR };
+const clock = { phase: GOLDEN_HOUR, paused: false };
 export function dayPhase(): number {
   return clock.phase;
 }
 export function advanceDay(deltaSeconds: number): void {
+  if (clock.paused) return;
   clock.phase = (clock.phase + deltaSeconds / DAY_CYCLE_SECONDS) % 1;
 }
-/** P harness / tests: jump to any phase directly */
+/**
+ * P panel / tests: jump to any phase directly. This is the OVERRIDE: it
+ * pauses the natural clock so the forced phase holds (the panel's "resume"
+ * control unpauses). The saved dayPhase always reflects the live phase, so
+ * a save written during an override resumes exactly there — never corrupts.
+ */
 export function setDayPhase(p: number): void {
   clock.phase = ((p % 1) + 1) % 1;
+  clock.paused = true;
+}
+/** P panel / tests: release the override, natural drift resumes */
+export function resumeDayCycle(): void {
+  clock.paused = false;
+}
+/** true while an override holds the clock still */
+export function dayCycleOverridden(): boolean {
+  return clock.paused;
 }
 /** dusk window: fireflies appear here (just before the light fully fades) */
 export const DUSK_START = 0.79;

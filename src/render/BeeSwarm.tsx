@@ -6,6 +6,7 @@ import { PLANT_BY_ID } from '../data/plants';
 import { usePlacementStore } from './placementStore';
 import { computeAppeal, beesForHive, inBloom, FORAGE_RADIUS, type PollinatorWorld } from '../engine/pollinator';
 import { isRaining, RAIN_TUNING } from '../engine/weather';
+import { dayPhase, isDaylight } from '../engine/dayCycle';
 import { noVariation } from '../engine/variation';
 import type { PlacedStructure } from '../engine/persistence';
 
@@ -208,7 +209,9 @@ export function BeeSwarm() {
       if (bee.restingUntil <= t && bee.targetFlowerId === null) {
         // #14: rain sends the colony home - cozy, never punished; a bee
         // mid-trip finishes it, the next pick is the hive
-        if (RAIN_TUNING.beesHome && isRaining()) {
+        // #13 (P-trigger verification found the gap): night too - real
+        // colonies stop foraging in the dark and cluster until morning
+        if ((RAIN_TUNING.beesHome && isRaining()) || !isDaylight(dayPhase())) {
           bee.headingHome = true;
           bee.wanderTarget = null;
         } else if (blooming.length > 0 && Math.random() > 0.15) {
