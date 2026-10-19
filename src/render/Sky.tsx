@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
-import { FOG } from '../data/environment';
+import { FOG, shapedHeight } from '../data/environment';
 import { skyPaletteAt, GOLDEN_HOUR, dayPhase, advanceDay } from '../engine/dayCycle';
 
 /**
@@ -81,9 +81,15 @@ export function Sky() {
 
 /**
  * Distant terrain variation (#6): a silhouette ridge beyond the hills zone —
- * flat, fog-melted boxes in a ring far out (r 56..74), heights stepping with
+ * flat, fog-melted boxes in a ring (r 50..62), heights stepping with
  * the day palette's horizon. Composes with the #31 second rim (they read as
  * further ranges). One instanced mesh, static.
+ *
+ * PR #35 terrain fix (bottom-clears-oracle, the #28 pattern): every box is
+ * anchored to the SHARED shapedHeight() at its own (x, z) — box bottom sits
+ * below the terrain it visually rests on, so nothing floats. The earlier
+ * version used absolute y = h * 0.28 at r 56..74, past the end of the hills
+ * meshes (HILLS.outerRadius 50), leaving a floating wall over empty ground.
  */
 const ridgeColor = new THREE.Color();
 export function DistantRidge() {
@@ -116,15 +122,21 @@ export function DistantRidge() {
     const base = new THREE.Color(palette.horizon);
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2 + rng() * 0.06;
-      const r = 56 + rng() * 18;
+      const r = 50 + rng() * 12;
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;
-      // stepped peaks: taller at two "range" headings for composition
-      const rangeBoost = Math.max(0, Math.cos(a * 2 + 0.8)) * 5;
-      const h = 4 + rng() * 3 + rangeBoost;
+      // ground at this box's own position, from the shared oracle — the
+      // same function the hills renderer and placement use
+      const ground = shapedHeight(x, z);
+      // stepped peaks: taller at two "range" headings for composition, but
+      // modest (distant hills, not a wall): 2.5..5.5 total extent
+      const rangeBoost = Math.max(0, Math.cos(a * 2 + 0.8)) * 1.8;
+      const h = 2.5 + rng() * 1.2 + rangeBoost;
       const w = 9 + rng() * 6;
+      // bottom clears the oracle (the #28 pattern): center sits so the box
+      // extends h above ground and only h*0.15 below it
       mat.makeScale(w, h, 4);
-      mat.setPosition(x, h * 0.28, z);
+      mat.setPosition(x, ground + h * 0.35, z);
       mesh.setMatrixAt(i, mat);
       // melt toward the horizon glow: far ridges barely distinct from sky
       color.copy(base).lerp(fogColor, 0.35);
