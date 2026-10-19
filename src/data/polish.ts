@@ -68,9 +68,18 @@ export const GRASS_TUFTS = {
    * #24: clumps cluster into drifts with bare gaps between them (the
    * ?demo=1 flower drifts are the reference) — N drift centers, clumps
    * scattered around them
+   * #27: drift CENTERS ring the meadow outskirts — placement probability
+   * rises with distance from the meadow center (the wild band between the
+   * buildable center and the brown terrain), with a few inward stragglers
+   * so it never reads as a perfect ring.
    */
   driftCount: 6,
   driftRadius: 3.2,
+  /** #27: clumps are placed at radii in [innerR, GRASS_TUFTS.radius] —
+   *  the band between the buildable heart and the terrain edge */
+  outskirtsInnerRadius: 10,
+  /** fraction of drifts allowed to stray inward (naturalness) */
+  stragglerChance: 0.15,
   swaySpeed: 1.3,
   swayAmplitude: 0.16,
   /** only within the meadow radius (44/2 minus margin) */
