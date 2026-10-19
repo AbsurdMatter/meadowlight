@@ -85,3 +85,21 @@ export const GRASS_TUFTS = {
   /** only within the meadow radius (44/2 minus margin) */
   radius: 20,
 } as const;
+
+/**
+ * #7 (session 5): ambient bushlets — dwarf shrub clusters interleaved into
+ * the SAME outskirts ring the grass drifts own (a seeded fraction of clump
+ * positions sprout bushlets instead of extra grass; never a second ring pass
+ * stacked on top). One small instanced mesh (<= count * 4 boxes).
+ */
+export const BUSHLETS = {
+  /** fraction of accepted clump positions that grow a bushlet */
+  fraction: 0.12,
+  /** boxes per bushlet (low, wide, darker than grass — reads as scrub) */
+  parts: [
+    { size: [0.55, 0.28, 0.55], offset: [0, 0.14, 0], color: '#5f7a45' },
+    { size: [0.4, 0.24, 0.4], offset: [0.05, 0.36, 0.03], color: '#6c8a4f' },
+    { size: [0.24, 0.18, 0.24], offset: [-0.04, 0.52, 0.05], color: '#77995b' },
+    { size: [0.12, 0.1, 0.12], offset: [0.16, 0.44, -0.14], color: '#a5493f' },
+  ],
+} as const;

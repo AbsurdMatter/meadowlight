@@ -81,6 +81,7 @@ export function Palette() {
     hotel: hotelUnlocked,
     hedge: hedgeUnlocked,
     wildcorner: wildUnlocked,
+    bush: true,
   };
   // voxel thumbnails rendered once at startup, cached (no per-frame cost)
   const [thumbs, setThumbs] = useState<Record<string, string | null>>({});
@@ -105,7 +106,7 @@ export function Palette() {
         thumb: thumbs['plant:' + p.id] ?? null,
         swatch: p.parts[p.parts.length - 1].color,
       })),
-      ...STRUCTURES.filter((s) => s.id === 'hedge' || s.id === 'wildcorner').map((s) => ({
+      ...STRUCTURES.filter((s) => s.id === 'hedge' || s.id === 'wildcorner' || s.id === 'bush').map((s) => ({
         key: 'structure:' + s.id,
         name: s.name,
         kind: 'structure' as const,

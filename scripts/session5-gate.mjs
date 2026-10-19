@@ -249,10 +249,106 @@ async function checkTerrain(browser) {
   await page.close();
 }
 
+/** U3 (#7): placeable bushes + ambient bushlets interleaved in the grass ring */
+async function checkBushes(browser) {
+  // 1. bush placeable via palette + hook, renders, appeal rises
+  {
+    const { page, errors } = await newPage(browser, url);
+    const r = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.clear();
+      // palette button exists and is not locked
+      const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith('Berry Bush'));
+      const paletteOk = !!btn && !btn.disabled && btn.getBoundingClientRect().width > 0;
+      // place flowers + hive, then a bush; appeal is internal, so observe the
+      // bee count proxy: beesForHive scales with appeal
+      for (let i = 0; i < 5; i++) w.plant('lavender', -3 + i, 2);
+      w.placeStructure('hive', 0, 0);
+      await new Promise((res) => setTimeout(res, 300));
+      const beesBefore = w.beeCount();
+      w.placeStructure('bush', 2, 2);
+      await new Promise((res) => setTimeout(res, 3200)); // per-hive retarget window
+      const beesAfter = w.beeCount();
+      const structures = w.structures();
+      return {
+        paletteOk,
+        bushPlaced: structures.some((st) => st.structureId === 'bush'),
+        beesBefore,
+        beesAfter,
+      };
+    });
+    rec.record('bushes.placeable-palette-and-hook', r.paletteOk && r.bushPlaced, JSON.stringify(r));
+    const re = realErrors(errors);
+    rec.record('bushes.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+    await page.close();
+  }
+
+  // 2. ambient bushlets render, interleaved (same ring radii as grass)
+  {
+    const { page, errors } = await newPage(browser, url);
+    const r = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.clear();
+      await new Promise((res) => setTimeout(res, 600));
+      const scene = w.__three.scene;
+      // bushlet mesh: instanced, count > 0, parts of 0.55 width scale present
+      let bushletCount = 0;
+      let radii = [];
+      scene.traverse((o) => {
+        if (!o.isInstancedMesh || !o.instanceMatrix || o.count === 0) return;
+        const m = o.instanceMatrix.array;
+        // count INSTANCES with part[0]'s exact 0.55 scale signature — one
+        // per bushlet (its other parts have different scales)
+        for (let i = 0; i < o.count; i++) {
+          const off = i * 16;
+          const sx = Math.hypot(m[off], m[off + 1], m[off + 2]);
+          if (Math.abs(sx - 0.55) < 0.01) {
+            bushletCount++;
+            const tx = m[off + 12], tz = m[off + 14];
+            radii.push(Math.hypot(tx, tz));
+          }
+        }
+      });
+      radii = radii.slice(0, 40);
+      const minR = radii.length ? Math.min(...radii) : -1;
+      const maxR = radii.length ? Math.max(...radii) : -1;
+      return { bushletGroups: bushletCount, minR: +minR.toFixed(1), maxR: +maxR.toFixed(1) };
+    });
+    // interleaved = bushlets share the grass system's OWN radius band: inside
+    // GRASS_TUFTS.radius (20), outward-biased (most beyond the inner ring),
+    // with the same inward stragglers grass allows — never a stacked second ring
+    const inBand = r.bushletGroups >= 8 && r.maxR <= 21 && r.maxR >= 14;
+    rec.record('bushes.bushlets-interleaved-in-ring', inBand, JSON.stringify(r));
+    const re = realErrors(errors);
+    rec.record('bushlets.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+    await page.close();
+  }
+
+  // 3. bush round-trips through a save
+  {
+    const { page, errors } = await newPage(browser, url);
+    await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.clear();
+      w.placeStructure('bush', 3, 3);
+      w.plant('lavender', 1, 1);
+      await new Promise((res) => setTimeout(res, 100));
+      w.save?.();
+    });
+    const blob = await page.evaluate(() => localStorage.getItem('meadowlight.world.v2'));
+    const hasBush = blob && blob.includes('"structureId":"bush"');
+    rec.record('bushes.save-roundtrip', !!hasBush, 'bush in blob: ' + hasBush);
+    const re = realErrors(errors);
+    rec.record('bushes.save-no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+    await page.close();
+  }
+}
+
 const browser = await launchChromium(chromium, { libPath });
 for (const check of checks.split(',')) {
   if (check === 'roster') await checkRoster(browser);
   else if (check === 'terrain') await checkTerrain(browser);
+  else if (check === 'bushes') await checkBushes(browser);
   else rec.record(`unknown-check:${check}`, false, 'no such check');
 }
 await browser.close();

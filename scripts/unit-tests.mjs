@@ -263,6 +263,35 @@ test('second outer rim: terrain rises steeply beyond the calm ring', () => {
   );
 });
 
+// ---------- session 5 U3 (#7): bushes & shelter mechanics ----------
+
+test('bushes contribute shelter at half strength, hedge always dominates', () => {
+  const base = { flowers: [], water: [], shelter: [], bushes: [], season: 'summer' };
+  // a bush at distance d scores half the hedge term at the same distance
+  const mk = (over) => computeAppeal({ x: 0, z: 0 }, { ...base, ...over }, FORAGE_RADIUS);
+  const none = mk({});
+  const bushNear = mk({ bushes: [{ x: 2, z: 0 }] });
+  const hedgeNear = mk({ shelter: [{ x: 2, z: 0 }] });
+  assert.ok(bushNear.shelter > none.shelter, 'bush must raise shelter score');
+  assert.ok(
+    Math.abs(bushNear.shelter - hedgeNear.shelter * 0.5) < 1e-9,
+    'bush shelter should be half the hedge term at equal distance',
+  );
+  // hedge beats bush at equal distance
+  assert.ok(hedgeNear.shelter > bushNear.shelter, 'hedge must dominate bush');
+  // a bush beyond the radius does not count
+  const far = mk({ bushes: [{ x: 100, z: 100 }] });
+  assert.strictEqual(far.shelter, 0, 'bush beyond forage radius must not count');
+  // no stacking: bush + hedge at the same spot = hedge alone (max, not sum)
+  const both = mk({ shelter: [{ x: 2, z: 0 }], bushes: [{ x: 2, z: 0 }] });
+  assert.ok(Math.abs(both.shelter - hedgeNear.shelter) < 1e-9, 'shelter must not stack');
+  // and appeal itself rises with a bush present (the meadow gets better)
+  const w1 = { flowers: [{ x: 1, z: 0, plantId: 'lavender' }], water: [], shelter: [], bushes: [], season: 'summer' };
+  const appealNo = computeAppeal({ x: 0, z: 0 }, w1, FORAGE_RADIUS).score;
+  const appealBush = computeAppeal({ x: 0, z: 0 }, { ...w1, bushes: [{ x: 2, z: 0 }] }, FORAGE_RADIUS).score;
+  assert.ok(appealBush > appealNo, 'bush must raise appeal');
+});
+
 test('plantedSpecies dedupes and ignores unknown ids', () => {
   assert.deepStrictEqual(plantedSpecies(['lavender', 'lavender', 'clover', 'nope']), ['clover', 'lavender']);
 });

@@ -1,6 +1,6 @@
 import type { PlantPart } from './plants';
 
-export type StructureId = 'hive' | 'bath' | 'hotel' | 'hedge' | 'wildcorner';
+export type StructureId = 'hive' | 'bath' | 'hotel' | 'hedge' | 'wildcorner' | 'bush';
 
 export interface StructureDef {
   id: StructureId;
@@ -85,6 +85,25 @@ export const STRUCTURES: StructureDef[] = [
       { size: [1.2, 0.35, 0.38], offset: [-0.1, 1.02, 0.02], color: '#77995b' },
       { size: [0.3, 0.25, 0.2], offset: [-0.85, 0.55, 0.28], color: '#77995b' },
       { size: [0.28, 0.2, 0.2], offset: [0.9, 0.5, 0.3], color: '#77995b' },
+    ],
+  },
+  {
+    // #7 (session 5): placeable bush - low woody structure. Weaker shelter
+    // than a hedge (half strength in the appeal engine) and a cozy visual
+    // anchor for drifts; overwintering cover echoes the unmown-corner
+    // principle (EDUCATION.md).
+    id: 'bush',
+    name: 'Berry Bush',
+    emoji: '\u{1F33F}',
+    radius: 0.8,
+    footprint: 0.9,
+    parts: [
+      { size: [0.7, 0.5, 0.7], offset: [0, 0.25, 0], color: '#5f7a45' },
+      { size: [0.55, 0.4, 0.55], offset: [0.08, 0.62, 0.05], color: '#6c8a4f' },
+      { size: [0.35, 0.3, 0.35], offset: [-0.05, 0.9, 0.02], color: '#77995b' },
+      { size: [0.1, 0.1, 0.1], offset: [0.24, 0.72, 0.22], color: '#a5493f' },
+      { size: [0.09, 0.09, 0.09], offset: [-0.2, 0.55, 0.2], color: '#b25850' },
+      { size: [0.08, 0.08, 0.08], offset: [0.02, 1.02, -0.16], color: '#a5493f' },
     ],
   },
   {

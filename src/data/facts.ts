@@ -82,6 +82,10 @@ export const STRUCTURE_FACTS: Record<string, FactEntry> = {
     id: 'structure:hedge',
     text: 'Bees waste energy flying in wind — a hedge gives them a sheltered lane to forage along.',
   },
+  bush: {
+    id: 'structure:bush',
+    text: 'Leaving a corner of the meadow unmown gives wild bees nesting sites and butterflies a place to overwinter — a low bush is a cozy shelter.',
+  },
   wildcorner: {
     id: 'structure:wildcorner',
     text: 'Leaving a corner of the meadow unmown gives wild bees nesting sites and butterflies a place to overwinter.',

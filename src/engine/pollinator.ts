@@ -23,6 +23,13 @@ export interface PollinatorWorld {
   water: ForageSpot[];
   /** hedges (shelter) */
   shelter: ForageSpot[];
+  /**
+   * #7 (session 5): placeable bushes - low woody structure breaks wind near
+   * the ground and gives overwintering cover, but weaker than a hedge;
+   * half shelter strength, capped by the same max so a hedge always beats
+   * bushes at equal distance.
+   */
+  bushes?: ForageSpot[];
   season: Season;
 }
 
@@ -100,11 +107,18 @@ export function computeAppeal(
     }
   }
 
-  // shelter: hedges anywhere in forage range count (wind breaks protect plots)
+  // shelter: hedges anywhere in forage range count (wind breaks protect
+  // plots); bushes count at half strength (#7) - the max() keeps a hedge
+  // strictly dominant, and a nearby bush beats a far hedge only through the
+  // distance term, never through stacking
   let shelter = 0;
   for (const h of world.shelter) {
     const d = Math.sqrt(distance2(h, origin));
     if (d <= radius) shelter = Math.max(shelter, 1 - Math.min(1, d / radius) * 0.5);
+  }
+  for (const b of world.bushes ?? []) {
+    const d = Math.sqrt(distance2(b, origin));
+    if (d <= radius) shelter = Math.max(shelter, (1 - Math.min(1, d / radius) * 0.5) * 0.5);
   }
 
   const score = Math.min(

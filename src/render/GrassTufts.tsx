@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { GRASS_TUFTS } from '../data/polish';
+import { GRASS_TUFTS, BUSHLETS } from '../data/polish';
 import { groundAt, isGrassSpawnable } from '../engine/ground';
 
 /**
@@ -46,7 +46,7 @@ export function GrassTufts() {
   const count = GRASS_TUFTS.count * maxPer;
 
   /** per-tuft layout, fully derived from quantized positions (stable) */
-  const tufts = useMemo(() => {
+  const layout = useMemo(() => {
     // drift centers — seeded by fixed constants (stable across loads).
     // #27: centers ring the OUTSKIRTS — radius drawn from the outer band
     // with probability rising outward; a seeded minority stray inward so
@@ -70,6 +70,7 @@ export function GrassTufts() {
       z: number;
       blades: { ang: number; lean: number; hScale: number; colorIdx: number; phase: number }[];
     }[] = [];
+    const bushlets: { x: number; z: number }[] = [];
     let placed = 0;
     let ring = 0;
     while (placed < GRASS_TUFTS.count && ring < GRASS_TUFTS.count * 60) {
@@ -119,9 +120,16 @@ export function GrassTufts() {
       }
       out.push({ x, z, blades });
       placed++;
+      // #7: a seeded fraction of ACCEPTED clump positions sprout a bushlet —
+      // same ring, same rejection sampling, interleaved not stacked
+      if (hash2(qx, qz, 777) < BUSHLETS.fraction) {
+        bushlets.push({ x, z });
+      }
     }
-    return out;
+    return { tufts: out, bushlets };
   }, []);
+  const tufts = layout.tufts;
+  const bushlets = layout.bushlets;
 
   useEffect(() => {
     const mesh = meshRef.current;
@@ -187,10 +195,50 @@ export function GrassTufts() {
     mesh.instanceMatrix.needsUpdate = true;
   });
 
+  // #7: bushlets — static geometry, written once (they don't sway; scrub
+  // reads as sturdy next to the moving grass). One extra draw call.
+  const bushletRef = useRef<THREE.InstancedMesh>(null);
+  const bushletCapacity = GRASS_TUFTS.count * BUSHLETS.parts.length;
+  useEffect(() => {
+    const mesh = bushletRef.current;
+    if (!mesh) return;
+    const mat = new THREE.Matrix4();
+    const color = new THREE.Color();
+    let i = 0;
+    for (const b of bushlets) {
+      const h = groundAt(b.x, b.z).height;
+      for (const part of BUSHLETS.parts) {
+        mat.makeScale(part.size[0], part.size[1], part.size[2]);
+        mat.setPosition(b.x + part.offset[0], h + part.offset[1], b.z + part.offset[2]);
+        mesh.setMatrixAt(i, mat);
+        color.set(part.color);
+        mesh.setColorAt(i, color);
+        i++;
+      }
+    }
+    // park remaining capacity
+    mat.makeScale(0, 0, 0);
+    for (; i < bushletCapacity; i++) mesh.setMatrixAt(i, mat);
+    mesh.count = bushlets.length * BUSHLETS.parts.length;
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  }, [bushlets, bushletCapacity]);
+
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, count]} frustumCulled={false}>
-      <boxGeometry args={[1, 1, 1]} />
-      <meshLambertMaterial />
-    </instancedMesh>
+    <group>
+      <instancedMesh ref={meshRef} args={[undefined, undefined, count]} frustumCulled={false}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshLambertMaterial />
+      </instancedMesh>
+      <instancedMesh
+        ref={bushletRef}
+        args={[undefined, undefined, bushletCapacity]}
+        frustumCulled={false}
+        castShadow
+      >
+        <boxGeometry args={[1, 1, 1]} />
+        <meshLambertMaterial />
+      </instancedMesh>
+    </group>
   );
 }

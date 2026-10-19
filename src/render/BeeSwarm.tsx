@@ -30,7 +30,7 @@ const tmpMat = new THREE.Matrix4();
 const lookMat = new THREE.Matrix4();
 const scaleMat = new THREE.Matrix4();
 const up = new THREE.Vector3(0, 1, 0);
-const world: PollinatorWorld = { flowers: [], water: [], shelter: [], season: 'summer' };
+const world: PollinatorWorld = { flowers: [], water: [], shelter: [], bushes: [], season: 'summer' };
 /** flower id -> world position (+bloom info), rebuilt from the store each frame */
 const flowerById = new Map<string, { x: number; y: number; z: number; plantId: string }>();
 let crashLogged = false;
@@ -60,6 +60,10 @@ function syncWorld() {
     .map((st) => ({ x: st.position[0], z: st.position[2] }));
   world.shelter = s.structures
     .filter((st) => st.structureId === 'hedge')
+    .map((st) => ({ x: st.position[0], z: st.position[2] }));
+  // #7: placeable bushes join the shelter view at their own strength
+  world.bushes = s.structures
+    .filter((st) => st.structureId === 'bush')
     .map((st) => ({ x: st.position[0], z: st.position[2] }));
 }
 
