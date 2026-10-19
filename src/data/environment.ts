@@ -1,4 +1,4 @@
-import { terrainHeight } from '../engine/terrain';
+import { terrainHeight, MEADOW_SIZE } from '../engine/terrain';
 
 export const FOG = {
   color: '#f0c48a',
@@ -84,6 +84,17 @@ export const TERRAIN_SHAPE = {
   /** the second outer rim: hills beyond this radius rise fast */
   outerRimStartRadius: 34,
   outerRimLiftPerRadius: 0.12,
+  /**
+   * #36 item 3 (session 6): edge anchoring. Just outside the meadow square
+   * the terrain continues the MEADOW's own wave plus this constant step —
+   * so the rim margin is the same from every side (the survey found the
+   * radial profile giving 0.32u on one edge vs 1.81u on the opposite).
+   * edgeStep is the gentle height of the surrounding terrain above the
+   * meadow surface: enough to read as a rim, small enough to stay cozy.
+   */
+  edgeStep: 0.25,
+  /** the blend band (u) from the square edge, anchored -> radial profile */
+  edgeBlend: 6,
 } as const;
 
 export const LAKE = {
@@ -211,10 +222,42 @@ export function backgroundHeight(x: number, z: number): number {
  *   r <= pond flat zone -> plateau at the pond-center natural height
  *   meadow rim band     -> damped waves, gentle lift (calmLiftPerRadius)
  *   beyond calmOuter    -> second rim lift (outerRimLiftPerRadius)
+ *
+ * #36 item 3 (session 6): the rim-margin survey found the meadow nearly
+ * flush on one edge (0.32u margin at +x) and dipping deep on the opposite
+ * side (1.81u at 230-260°) — the surrounding profile is RADIAL while the
+ * meadow is a SQUARE, so the wave field's cross-boundary gradient varied
+ * by direction. Fix: anchor the terrain at the meadow edge to the meadow's
+ * own approved wave (terrainHeight) plus a constant step (edgeStep),
+ * then blend to the radial profile over edgeBlend band. One source —
+ * shapedHeight stays the single height oracle for renderer + placement.
  */
 export function shapedHeight(x: number, z: number): number {
   const r = Math.hypot(x, z);
   const t = TERRAIN_SHAPE;
+  // #36 item 3: edge anchoring. The radial profile crossed the SQUARE
+  // meadow boundary with a direction-dependent gradient (survey: margins
+  // 0.32u..1.81u around the perimeter). The anchored profile instead
+  // continues the meadow's own approved wave outward plus a CONSTANT step,
+  // so the rim reads as one gentle bowl from every side. The blend applies
+  // ONLY where the radial profile governs — the pond plateau and its
+  // feather band return first (bank-margin invariant: the plateau stays
+  // exactly flat and the banks untouched).
+  const HALF = MEADOW_SIZE / 2;
+  const outside = Math.max(Math.abs(x), Math.abs(z)) - HALF;
+  const pd = Math.hypot(x - LAKE.center[0], z - LAKE.center[1]);
+  const pondGoverned = pd < t.pondFlatFeatherEnd;
+  if (!pondGoverned && outside < t.edgeBlend) {
+    const radial = radialHeight(x, z, r, t);
+    const anchored = terrainHeight(x, z) + MEADOW_BOWL.depth + t.edgeStep;
+    const f = Math.min(1, Math.max(0, outside / t.edgeBlend));
+    return radial * f + anchored * (1 - f);
+  }
+  return radialHeight(x, z, r, t);
+}
+
+/** the pre-#36 radial profile (unchanged math, extracted for the blend) */
+function radialHeight(x: number, z: number, r: number, t: typeof TERRAIN_SHAPE): number {
 
   // wave amplitude: damped inside the calm ring, feathered back to full
   // between calmOuterRadius and calmOuterRadius + calmFeather
