@@ -7,6 +7,7 @@ import {
 import type { PlacedItem, PlacedStructure } from '../engine/persistence';
 import { variationFor, type PlacementVariation } from '../engine/variation';
 import type { Season } from '../data/seasons';
+import { setDayPhase, dayPhase } from '../engine/dayCycle';
 import type { MilestoneId } from '../data/milestones';
 
 export interface Toast {
@@ -66,6 +67,8 @@ export interface PlacementState {
 }
 
 const initial = loadWorld();
+// #13: resume the day cycle where the save left it (absent = golden hour)
+if (typeof initial.dayPhase === 'number') setDayPhase(initial.dayPhase);
 let toastSeq = 1;
 
 export const usePlacementStore = create<PlacementState>((set, get) => ({
@@ -190,6 +193,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       seenFacts: s.seenFacts,
       wildSeasons: s.wildSeasons,
       onboardingDismissed: s.onboardingDismissed,
+      dayPhase: dayPhase(),
     });
   },
 }));

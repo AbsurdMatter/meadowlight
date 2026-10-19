@@ -15,6 +15,29 @@ export const GOLDEN_HOUR = 0.82;
 /** full cycle length in seconds (U6: 12-minute day, per approved plan) */
 export const DAY_CYCLE_SECONDS = 720;
 
+/**
+ * U6: the live cycle clock. Kept here (engine, pure-ish) so renderers read
+ * one source; the render loop advances it, the P harness can jump it.
+ * Starts at golden hour — the default look — and drifts slowly from there.
+ */
+const clock = { phase: GOLDEN_HOUR };
+export function dayPhase(): number {
+  return clock.phase;
+}
+export function advanceDay(deltaSeconds: number): void {
+  clock.phase = (clock.phase + deltaSeconds / DAY_CYCLE_SECONDS) % 1;
+}
+/** P harness / tests: jump to any phase directly */
+export function setDayPhase(p: number): void {
+  clock.phase = ((p % 1) + 1) % 1;
+}
+/** dusk window: fireflies appear here (just before the light fully fades) */
+export const DUSK_START = 0.79;
+export const DUSK_END = 0.92;
+export function isDusk(phase: number): boolean {
+  return phase >= DUSK_START && phase <= DUSK_END;
+}
+
 export interface SkyPalette {
   /** zenith color */
   top: string;

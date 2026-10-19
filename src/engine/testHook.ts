@@ -8,6 +8,8 @@ import type { PerspectiveCamera, WebGLRenderer } from 'three';
 import type { Size } from '@react-three/fiber';
 import { beeDebug } from '../render/BeeSwarm';
 import { wildDebug } from '../render/WildPollinators';
+import { fireflyDebug } from '../render/Fireflies';
+import { setDayPhase } from './dayCycle';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
 import { capturePostcardPng } from './postcard';
 import { audioDebugInfo, audioRunning } from './audio';
@@ -29,6 +31,8 @@ declare global {
       beeDebug: () => unknown;
     solitaryBeeCount: () => number;
     wildDebug: () => unknown;
+    fireflyDebug: () => unknown;
+    setDayPhase: (p: number) => void;
     rareBeeCount: () => number;
     capturePostcard: () => string | null;
     audioDebug: () => unknown;
@@ -128,6 +132,8 @@ export function installTestHook() {
     beeDebug: () => ({ ...beeDebug }),
     solitaryBeeCount: () => solitaryBeeDebug.count,
     wildDebug: () => ({ ...wildDebug }),
+    fireflyDebug: () => ({ ...fireflyDebug }),
+    setDayPhase,
     rareBeeCount: () => rareBeeDebug.count,
     capturePostcard: () => capturePostcardPng(),
     audioDebug: () => audioDebugInfo(),

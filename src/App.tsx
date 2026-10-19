@@ -4,7 +4,9 @@ import * as THREE from 'three';
 import { Meadow } from './render/Meadow';
 import { Background } from './render/Background';
 import { Sky, DistantRidge } from './render/Sky';
+import { dayPhase, skyPaletteAt } from './engine/dayCycle';
 import { WildPollinators } from './render/WildPollinators';
+import { Fireflies } from './render/Fireflies';
 import { PlantedFlowers } from './render/PlantedFlowers';
 import { PlacedStructures } from './render/PlacedStructures';
 import { BeeSwarm } from './render/BeeSwarm';
@@ -43,6 +45,9 @@ function SunLight({ season }: { season: string }) {
   useFrame(({ camera }) => {
     const sun = ref.current;
     if (!sun) return;
+    // U6: the day clock tints the sun (golden hour warm, night cool and dim)
+    const day = skyPaletteAt(dayPhase());
+    const nightDim = 0.35 + day.ambient * 0.65;
     // camera polar angle: 1 = mid, 1.32 = lowest allowed (golden hour)
     const polar = Math.atan2(
       Math.hypot(camera.position.x, camera.position.z),
@@ -55,6 +60,9 @@ function SunLight({ season }: { season: string }) {
       sun.color.set(light.sun).lerp(new THREE.Color(LIGHT_WARMTH.warmSunColor), warmth * 0.85);
       sun.intensity = light.intensity + warmth * LIGHT_WARMTH.warmIntensityBoost;
     }
+    // blend the day-cycle palette over the seasonal base (lerp, then dim)
+    sun.color.lerp(new THREE.Color(day.light), 0.5);
+    sun.intensity *= nightDim;
     // long shadows: stretch the sun outward and lower as the camera drops
     const stretch = LONG_SHADOWS.enabled
       ? 1 + warmth * (LONG_SHADOWS.stretchMax - 1)
@@ -100,6 +108,7 @@ function Scene() {
       <BeeSwarm />
       <SolitaryBees />
       <WildPollinators />
+      <Fireflies />
       <BloomPipeline />
       {CellMapLayer && <CellMapLayer />}
       <PlacementSystem />

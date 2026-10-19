@@ -76,7 +76,7 @@ const { PLANTS, PLANT_BY_ID } = require(OUT + '/data/plants.js');
 const { groundAt, waterSurfaceHeight, pondFloorHeight } = require(OUT + '/engine/ground.js');
 const { LAKE, TERRAIN_SHAPE, shapedHeight, POND_FLAT_HEIGHT } = require(OUT + '/data/environment.js');
 const { MEADOW_SIZE, terrainHeight } = require(OUT + '/engine/terrain.js');
-const { skyPaletteAt, GOLDEN_HOUR, sunElevation, isDaylight } = require(OUT + '/engine/dayCycle.js');
+const { skyPaletteAt, GOLDEN_HOUR, sunElevation, isDaylight, isDusk, DUSK_START, DUSK_END, DAY_CYCLE_SECONDS, dayPhase, setDayPhase, advanceDay } = require(OUT + '/engine/dayCycle.js');
 const { SEASONS } = require(OUT + '/data/seasons.js');
 const { checkMilestones } = require(OUT + '/engine/milestones.js');
 const { variationFor, rollVariation, noVariation, VARIATION_TUNING } = require(OUT + '/engine/variation.js');
@@ -324,6 +324,27 @@ test('sun model: elevation peaks at noon, night is dark', () => {
   assert.ok(isDaylight(0.5), 'noon is daylight');
   assert.ok(!isDaylight(0.0), 'midnight is not daylight');
   assert.ok(!isDaylight(0.82) || sunElevation(0.82) > 0.05, 'golden hour check consistent');
+});
+
+// ---------- session 5 U6 (#13): day/night clock ----------
+
+test('day clock: 12-minute cycle, phase wraps, save-resume semantics', () => {
+  assert.strictEqual(DAY_CYCLE_SECONDS, 720, 'cycle length per approved plan');
+  setDayPhase(0.5);
+  assert.strictEqual(dayPhase(), 0.5);
+  advanceDay(720);
+  assert.ok(Math.abs(dayPhase() - 0.5) < 1e-9, 'one full cycle returns to start');
+  advanceDay(360);
+  assert.ok(Math.abs(dayPhase() - 0.0) < 1e-9, 'half cycle wraps to midnight');
+  setDayPhase(-0.25);
+  assert.ok(Math.abs(dayPhase() - 0.75) < 1e-9, 'negative phase wraps');
+});
+
+test('dusk window: fireflies appear only in 0.79-0.92', () => {
+  assert.ok(isDusk(0.82), 'golden hour is in dusk');
+  assert.ok(isDusk(0.79) && isDusk(0.92), 'window is inclusive');
+  assert.ok(!isDusk(0.5), 'noon is not dusk');
+  assert.ok(!isDusk(0.95) && !isDusk(0.78), 'night and late afternoon are not dusk');
 });
 
 test('plantedSpecies dedupes and ignores unknown ids', () => {

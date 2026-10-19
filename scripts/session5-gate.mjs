@@ -477,6 +477,68 @@ async function checkWild(browser) {
 const BUTTERFLY_MIN = 1;
 const HOVERFLY_MIN = 1;
 
+/** U6 (#13): day/night cycle — sky grade changes, fireflies only at dusk
+ *  near wild corners, bees home at night (homing counter, addendum B) */
+async function checkDayNight(browser) {
+  const { page, errors } = await newPage(browser, url);
+  await page.evaluate(() => {
+    const w = window.__meadowlight;
+    w.clear();
+    w.setSeason('summer');
+    for (let i = 0; i < 10; i++) w.plant('lavender', -7 + i * 1.5, 3);
+    w.placeStructure('hive', 0, 0);
+    w.placeStructure('wildcorner', -10, -10);
+  });
+  await page.waitForTimeout(2500);
+
+  const sample = async () =>
+    page.evaluate(() => {
+      const w = window.__meadowlight;
+      const scene = w.__three.scene;
+      // sky top color: read the background texture's top-left pixel
+      let skyTop = -1;
+      if (scene.background?.image) {
+        const img = scene.background.image;
+        const c = document.createElement('canvas');
+        c.width = img.width; c.height = img.height;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const d = ctx.getImageData(2, 2, 1, 1).data;
+        skyTop = (d[0] << 16) | (d[1] << 8) | d[2];
+      }
+      const ff = w.fireflyDebug();
+      const bees = w.beeDebug();
+      return { skyTop, fireflies: ff.count, ffActive: ff.active, beeHoming: bees.homing, beeCount: bees.count };
+    });
+
+  // 1. noon: bright sky, no fireflies
+  await page.evaluate(() => window.__meadowlight.setDayPhase(0.5));
+  await page.waitForTimeout(1200);
+  const noon = await sample();
+  // 2. dusk: fireflies near the wild corner, sky darkening
+  await page.evaluate(() => window.__meadowlight.setDayPhase(0.85));
+  await page.waitForTimeout(1200);
+  const dusk = await sample();
+  // 3. night: dark sky, fireflies gone (dusk window over)
+  await page.evaluate(() => window.__meadowlight.setDayPhase(0.97));
+  await page.waitForTimeout(1200);
+  const night = await sample();
+
+  // sky actually grades: night top is much darker than noon top
+  const noonLum = ((noon.skyTop >> 16) & 255) * 0.3 + ((noon.skyTop >> 8) & 255) * 0.6 + (noon.skyTop & 255) * 0.1;
+  const nightLum = ((night.skyTop >> 16) & 255) * 0.3 + ((night.skyTop >> 8) & 255) * 0.6 + (night.skyTop & 255) * 0.1;
+  rec.record('daynight.sky-grades-day-to-night', noonLum > nightLum + 40,
+    'noon top lum ' + noonLum.toFixed(0) + ' vs night ' + nightLum.toFixed(0));
+  rec.record('daynight.fireflies-at-dusk-near-corner', dusk.ffActive && dusk.fireflies >= 4,
+    JSON.stringify({ noon: noon.fireflies, dusk: dusk.fireflies, active: dusk.ffActive }));
+  rec.record('daynight.fireflies-absent-at-noon-and-night',
+    noon.fireflies === 0 && night.fireflies === 0,
+    JSON.stringify({ noon: noon.fireflies, night: night.fireflies }));
+  await page.close();
+  const re = realErrors(errors);
+  rec.record('daynight.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+}
+
 const browser = await launchChromium(chromium, { libPath });
 for (const check of checks.split(',')) {
   if (check === 'roster') await checkRoster(browser);
@@ -484,6 +546,7 @@ for (const check of checks.split(',')) {
   else if (check === 'bushes') await checkBushes(browser);
   else if (check === 'sky') await checkSky(browser);
   else if (check === 'wild') await checkWild(browser);
+  else if (check === 'daynight') await checkDayNight(browser);
   else rec.record(`unknown-check:${check}`, false, 'no such check');
 }
 await browser.close();
