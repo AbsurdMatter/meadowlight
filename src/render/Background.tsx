@@ -10,6 +10,7 @@ import {
   FOG,
   backgroundHeight,
 } from '../data/environment';
+import { groundAt } from '../engine/ground';
 
 function makeRng(seed: number) {
   let s = seed;
@@ -173,10 +174,15 @@ function Lake() {
         const cover = THREE.MathUtils.clamp((LAKE.radius - d) / step + 0.5, 0, 1);
         if (cover <= 0.05) continue;
         const size = step * Math.max(0.35, cover);
-        // #22: thin water cubes — the visible lip is the point; deep cube
-        // sides under a near-opaque material read black from low angles
-        const bottom = topY - LAKE.cubeDepth;
-        const h = topY - bottom;
+        // #22 root cause: the pond sits in the background-lift band, where
+        // the VISIBLE surface is backgroundHeight — the old fixed
+        // level+surfaceHeight put the cube tops BELOW that ground, so the
+        // hills boxes covered the entire pond ("nearly black water" was the
+        // fog-tinted hills box tops). Each cube's top now clears the ground
+        // oracle's height at its own cell; the lip is relative to terrain.
+        const cellTop = Math.max(topY, groundAt(x, z).height + LAKE.surfaceHeight);
+        const bottom = cellTop - LAKE.cubeDepth;
+        const h = cellTop - bottom;
         mat.makeScale(size, h, size);
         mat.setPosition(x, bottom + h / 2, z);
         water.setMatrixAt(i, mat);
@@ -202,7 +208,7 @@ function Lake() {
       </instancedMesh>
       <instancedMesh ref={waterRef} args={[undefined, undefined, waterCount]} receiveShadow>
         <boxGeometry args={[1, 1, 1]} />
-        <meshLambertMaterial transparent opacity={LAKE.opacity} vertexColors />
+        <meshLambertMaterial transparent opacity={LAKE.opacity} />
       </instancedMesh>
     </group>
   );
