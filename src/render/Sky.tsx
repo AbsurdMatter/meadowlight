@@ -5,6 +5,7 @@ import { useThree } from '@react-three/fiber';
 import { FOG, HILLS, shapedHeight } from '../data/environment';
 import { skyPaletteAt, dayPhase, advanceDay } from '../engine/dayCycle';
 import { advanceSeasons, seasonClockOverridden } from '../engine/seasonClock';
+import { timeMultiplier } from '../engine/timeControl';
 import { usePlacementStore } from './placementStore';
 
 /**
@@ -61,11 +62,15 @@ export function Sky() {
   useFrame((_, delta) => {
     // ONE time system: this is the single site that advances both clocks
     // (day cycle + #11 season calendar). Nothing else may tick either —
-    // a second advance site is how two clocks drift apart.
-    advanceDay(delta);
+    // a second advance site is how two clocks drift apart. The speed
+    // control (#36 item 2) multiplies ONCE, here, for both clocks — never
+    // two separate scalings; paused = multiplier 0. Overrides (forced
+    // phase/season) still hold their clocks exactly as before.
+    const scaled = delta * timeMultiplier();
+    advanceDay(scaled);
     if (!seasonClockOverridden()) {
       const store = usePlacementStore.getState();
-      const crossed = advanceSeasons(delta, store.season);
+      const crossed = advanceSeasons(scaled, store.season);
       if (crossed.length > 0) store.arriveAtSeason(crossed[crossed.length - 1], true);
     }
     const phase = dayPhase();

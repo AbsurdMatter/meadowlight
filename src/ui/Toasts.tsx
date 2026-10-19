@@ -52,7 +52,7 @@ export function Toasts() {
     <div
       style={{
         position: 'absolute',
-        top: 64,
+        top: 108,
         right: 12,
         display: 'flex',
         flexDirection: 'column',

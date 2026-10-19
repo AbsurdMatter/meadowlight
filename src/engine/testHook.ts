@@ -14,6 +14,7 @@ import { setRaining } from './weather';
 import { dayPhase } from './dayCycle';
 import { seasonProgress, seasonClockOverridden } from './seasonClock';
 import { honeyDebug } from '../render/BeeSwarm';
+import { setSpeedStep, setPaused, isPaused, currentSpeedStep, timeMultiplier, type SpeedStep } from './timeControl';
 import { setFireflyForce } from '../render/Fireflies';
 import { rainDebug } from '../render/Rain';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
@@ -54,6 +55,12 @@ declare global {
       harvestHoney: (hiveId: string) => boolean;
       honeyJars: () => number;
       honeyDebug: () => { foragingBees: number; appeal: number };
+      /** #36 item 2: time controls (pause + 1x/2x/4x/8x + jump) via the test hook */
+      timeSetSpeed: (step: number) => void;
+      timeSetPaused: (paused: boolean) => void;
+      timeIsPaused: () => boolean;
+      timeSpeed: () => number;
+      timeMultiplierReadback: () => number;
       milestones: () => string[];
       beeCount: () => number;
       beeDebug: () => unknown;
@@ -171,6 +178,12 @@ export function installTestHook() {
     harvestHoney: (hiveId) => usePlacementStore.getState().harvestHoney(hiveId),
     honeyJars: () => usePlacementStore.getState().honeyJars,
     honeyDebug: () => ({ foragingBees: honeyDebug.lastForagingBees, appeal: honeyDebug.lastAppeal }),
+    /** #36 item 2: time-control triggers (pause/steps/jump) + readbacks */
+    timeSetSpeed: (step: number) => setSpeedStep(step as SpeedStep),
+    timeSetPaused: (paused: boolean) => setPaused(paused),
+    timeIsPaused: () => isPaused(),
+    timeSpeed: () => currentSpeedStep(),
+    timeMultiplierReadback: () => timeMultiplier(),
     milestones: () => usePlacementStore.getState().milestones,
     beeCount: () => beeDebug.count,
     beeDebug: () => ({ ...beeDebug }),

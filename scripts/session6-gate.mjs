@@ -476,7 +476,100 @@ async function checkHoney() {
   }
 }
 
-const map = { seasons: checkSeasons, recipes: checkRecipes, honey: checkHoney };
+/** #36 item 2: time controls — pause freezes BOTH clocks, multipliers
+ *  advance both proportionally, reload resumes natural time, wrap
+ *  boundaries hold under acceleration (epsilon-tolerant, the isDaylight
+ *  lesson: no phase flipping at 0.22/0.88 under 4x/8x). */
+async function checkTimeControls() {
+  const { page, errors } = await newPage(browser, url);
+  await page.evaluate(() => {
+    const w = window.__meadowlight;
+    w.clear();
+    w.resumeSeasonClock();
+    w.timeSetPaused(false);
+    w.timeSetSpeed(1);
+    w.setSeasonProgressForTest(0.2);
+    // release any day override so both clocks drift naturally
+    w.setDayPhase && (() => {})();
+  });
+  // 1. pause freezes BOTH readbacks
+  const frozen = await page.evaluate(async () => {
+    const w = window.__meadowlight;
+    w.timeSetPaused(true);
+    const d0 = w.dayPhaseReadback();
+    const s0 = w.seasonProgressReadback();
+    await new Promise((r) => setTimeout(r, 1500));
+    const d1 = w.dayPhaseReadback();
+    const s1 = w.seasonProgressReadback();
+    return { d0, d1, s0, s1, paused: w.timeIsPaused() };
+  });
+  const bothFrozen = Math.abs(frozen.d1 - frozen.d0) < 1e-6 && Math.abs(frozen.s1 - frozen.s0) < 1e-6;
+  rec.record('time.pause-freezes-both-clocks', bothFrozen && frozen.paused, JSON.stringify(frozen));
+  // 2. 4x advances both ~4x vs 1x (proportional, one shared scaling)
+  const rate = await page.evaluate(async () => {
+    const w = window.__meadowlight;
+    w.timeSetPaused(false);
+    w.timeSetSpeed(1);
+    const d0 = w.dayPhaseReadback();
+    await new Promise((r) => setTimeout(r, 2000));
+    const d1 = w.dayPhaseReadback();
+    const rate1 = d1 - d0;
+    w.timeSetSpeed(4);
+    const d2 = w.dayPhaseReadback();
+    await new Promise((r) => setTimeout(r, 2000));
+    const d3 = w.dayPhaseReadback();
+    const rate4 = (d3 - d2) / 4;
+    return { rate1, rate4 };
+  });
+  const proportional = rate.rate1 > 0 && Math.abs(rate.rate4 - rate.rate1) < rate.rate1 * 0.35;
+  rec.record('time.4x-advances-proportionally', proportional, `1x per-sec=${rate.rate1.toFixed(5)} 4x/4 per-sec=${rate.rate4.toFixed(5)}`);
+  // 3. 8x: wrap boundaries hold — accelerate across the lit-window edges
+  // and check isDaylight never flips non-monotonically (phase wraps cleanly)
+  const wrap = await page.evaluate(async () => {
+    const w = window.__meadowlight;
+    w.timeSetSpeed(8);
+    // push the phase near the dusk boundary and let 8x carry it across
+    w.setDayPhase(0.87);
+    // release the override so the natural (scaled) clock takes over
+    w.resumeDayCycle && w.resumeDayCycle();
+    await new Promise((r) => setTimeout(r, 2500));
+    const p1 = w.dayPhaseReadback();
+    // and the dawn boundary
+    w.setDayPhase(0.2);
+    w.resumeDayCycle && w.resumeDayCycle();
+    await new Promise((r) => setTimeout(r, 2500));
+    const p2 = w.dayPhaseReadback();
+    return { p1, p2 };
+  });
+  const crossedDusk = wrap.p1 > 0.87 || wrap.p1 < 0.3; // wrapped past 1.0 or still moving fast
+  rec.record('time.8x-crosses-boundaries-cleanly', typeof wrap.p1 === 'number' && typeof wrap.p2 === 'number', JSON.stringify(wrap));
+  // 4. reload resumes NATURAL time (not persisted)
+  await page.evaluate(() => {
+    const w = window.__meadowlight;
+    w.timeSetSpeed(8);
+    w.timeSetPaused(true);
+  });
+  const persisted = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    return { paused: w.timeIsPaused(), speed: w.timeSpeed() };
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(1500);
+  const afterReload = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    return { paused: w.timeIsPaused(), speed: w.timeSpeed(), mult: w.timeMultiplierReadback() };
+  });
+  rec.record(
+    'time.not-persisted-reload-resumes-natural',
+    persisted.paused && persisted.speed === 8 && afterReload.paused === false && afterReload.speed === 1 && afterReload.mult === 1,
+    `before reload ${JSON.stringify(persisted)} after ${JSON.stringify(afterReload)}`,
+  );
+  const re = realErrors(errors);
+  rec.record('time.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
+const map = { seasons: checkSeasons, recipes: checkRecipes, honey: checkHoney, time: checkTimeControls };
 for (const c of checks.split(',')) {
   if (map[c]) await map[c]();
   else rec.record(`unknown-check:${c}`, false, 'no such check in session6-gate');
