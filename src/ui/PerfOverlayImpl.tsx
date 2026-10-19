@@ -341,6 +341,7 @@ function PerfOverlayPanel() {
       </div>
       <Session5Triggers />
       <Session6SeasonTriggers />
+      <Session6RecipeTriggers />
       <SaveInspector />
       <MilestoneChecklist />
     </div>
@@ -457,6 +458,55 @@ function Session6SeasonTriggers() {
         {btn('progress → 0.999…', () => { setSeasonProgressForTest(0.999999); refresh(); }, false, 'season-boundary')}
         <span style={{ fontSize: 11, opacity: 0.7 }}>
           {' '}progress {seasonProgress().toFixed(3)} {seasonClockOverridden() ? '(held)' : '(drifting)'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** session 6 trigger section: companion recipes (#9) — form a recipe via
+ *  the test path (plant both species adjacent, rescan) and read the state.
+ *  Dev-only (prod-excluded via PerfOverlay.tsx). */
+function Session6RecipeTriggers() {
+  const [, forceRender] = useState(0);
+  const refresh = () => forceRender((n) => n + 1);
+  const found = usePlacementStore((s) => s.foundRecipes);
+  const btn = (label: string, onClick: () => void, key?: string) => (
+    <button
+      key={key}
+      data-perf-s6={key}
+      onClick={() => {
+        onClick();
+        refresh();
+      }}
+      style={{
+        margin: '2px 4px 2px 0',
+        padding: '5px 9px',
+        borderRadius: 8,
+        border: 'none',
+        background: '#666',
+        color: '#fff',
+        fontFamily: 'inherit',
+        fontSize: 12,
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>companion recipes (#9)</div>
+      <div>
+        {btn('form lavender+thyme', () => {
+          const w = (window as unknown as { __meadowlight?: { plant: (id: string, x: number, z: number) => void } }).__meadowlight;
+          w?.plant('lavender', 2, 2);
+          w?.plant('thyme', 2.6, 2);
+          usePlacementStore.getState().checkCompanions();
+        }, 'recipe-form')}
+        {btn('rescan', () => usePlacementStore.getState().checkCompanions(), 'recipe-rescan')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {' '}discovered {found.length}/5 · active {usePlacementStore.getState().activeRecipes().length}
         </span>
       </div>
     </div>

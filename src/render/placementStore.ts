@@ -15,6 +15,7 @@ import {
   setSeasonProgressForTest,
 } from '../engine/seasonClock';
 import { SEASON_ARRIVAL } from '../data/seasons';
+import { newlyFormed, companionSet } from '../engine/companions';
 import type { MilestoneId } from '../data/milestones';
 
 export interface Toast {
@@ -63,6 +64,12 @@ export interface PlacementState {
   seasonProgress: () => number;
   /** #11: tests only — drive the calendar boundary directly */
   setSeasonProgressForTest: (p: number) => void;
+  /** #9: discovered companion-recipe ids (persisted, v6 additive) */
+  foundRecipes: string[];
+  /** #9: scan for newly formed recipes — toast + unlock on first form */
+  checkCompanions: () => void;
+  /** #9: P panel readback — which recipes are currently formed */
+  activeRecipes: () => string[];
   earnMilestone: (id: MilestoneId, label: string, detail: string) => void;
   dismissToast: (id: number) => void;
   openNotebook: (entry: PlacementState['notebook']) => void;
@@ -114,7 +121,11 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   markFactSeen: (id) =>
     set((s) => (s.seenFacts.includes(id) ? s : { seenFacts: [...s.seenFacts, id] })),
   setModalOpen: (open) => set({ modalOpen: open }),
-  plant: (item) => set((s) => ({ items: [...s.items, item] })),
+  plant: (item) => {
+    set((s) => ({ items: [...s.items, item] }));
+    // #9: a new flower may complete a recipe — discover it warmly
+    get().checkCompanions();
+  },
   placeStructure: (structure) =>
     set((s) => ({
       structures: [...s.structures, structure],
@@ -167,6 +178,27 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   },
   seasonProgress: () => seasonProgress(),
   setSeasonProgressForTest: (p) => setSeasonProgressForTest(p),
+  foundRecipes: initial.foundRecipes ?? [],
+  checkCompanions: () => {
+    const s = get();
+    const fresh = newlyFormed(s.items, s.foundRecipes);
+    if (fresh.length === 0) return;
+    // discovery is a delight, never a lecture: one warm toast per recipe,
+    // notebook entry unlocks silently beside it
+    set({
+      foundRecipes: [...s.foundRecipes, ...fresh.map((r) => r.id)],
+      toasts: [
+        ...s.toasts,
+        ...fresh.map((r) => ({
+          id: toastSeq++,
+          title: 'A garden recipe!',
+          body: `${r.label} — ${r.fact}`,
+        })),
+      ],
+    });
+    get().save();
+  },
+  activeRecipes: () => companionSet(get().items).active.map((r) => r.id),
   earnMilestone: (id, label, detail) => {
     const s = get();
     if (s.milestones.includes(id)) return;
@@ -192,6 +224,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       seenFacts: [],
       wildSeasons: [],
       onboardingDismissed: false,
+      foundRecipes: [],
     });
     forceSeason('summer');
     resumeSeasonClock();
@@ -224,6 +257,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       wildSeasons: w.wildSeasons ?? [],
       onboardingDismissed: w.onboardingDismissed ?? false,
       placementVariation: w.placementVariation,
+      foundRecipes: w.foundRecipes ?? [],
     });
     // #11: the reload must re-derive the calendar position from the blob —
     // same semantics as a fresh page load, not the live clock
@@ -243,6 +277,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       onboardingDismissed: s.onboardingDismissed,
       dayPhase: dayPhase(),
       seasonProgress: seasonProgress(),
+      foundRecipes: s.foundRecipes,
     });
   },
 }));

@@ -81,6 +81,12 @@ export interface WorldData {
    * visitor resumes mid-season, no catch-up, no "you missed it".
    */
   seasonProgress?: number;
+  /**
+   * #9 (session 6, v6, additive): ids of companion recipes the player
+   * has discovered (the toast + notebook unlock fire once each).
+   * Absent = none discovered; old saves simply discover fresh.
+   */
+  foundRecipes?: string[];
 }
 
 function parseItems(parsed: unknown): PlacedItem[] {
@@ -150,6 +156,12 @@ function parseDayPhase(parsed: unknown): number | undefined {
 /** v6 additive: season-calendar position; absent = season start */
 function parseSeasonProgress(parsed: unknown): number | undefined {
   return typeof parsed === 'number' && parsed >= 0 && parsed <= 1 ? parsed : undefined;
+}
+
+/** v6 additive: discovered companion-recipe ids */
+function parseFoundRecipes(parsed: unknown): string[] {
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((r): r is string => typeof r === 'string');
 }
 
 function freshWorld(): WorldData {
@@ -222,6 +234,7 @@ export function loadWorld(): WorldData {
         onboardingDismissed: parseOnboardingDismissed(data.onboardingDismissed),
         dayPhase: parseDayPhase(data.dayPhase),
         seasonProgress: parseSeasonProgress(data.seasonProgress),
+        foundRecipes: parseFoundRecipes(data.foundRecipes),
       };
     }
     // v1 shape: bare array of items

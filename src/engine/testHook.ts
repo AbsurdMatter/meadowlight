@@ -39,6 +39,12 @@ declare global {
       setSeasonProgressForTest: (p: number) => void;
       /** #11: true while the calendar is held by an override */
       seasonClockOverridden: () => boolean;
+      /** #9: discovered recipe ids (persisted) */
+      foundRecipes: () => string[];
+      /** #9: rescans for newly formed recipes (the plant() path calls it) */
+      checkCompanions: () => void;
+      /** #9: currently-formed recipe ids (readback) */
+      activeRecipes: () => string[];
       milestones: () => string[];
       beeCount: () => number;
       beeDebug: () => unknown;
@@ -148,6 +154,9 @@ export function installTestHook() {
     seasonProgressReadback: () => seasonProgress(),
     setSeasonProgressForTest: (p) => usePlacementStore.getState().setSeasonProgressForTest(p),
     seasonClockOverridden: () => seasonClockOverridden(),
+    foundRecipes: () => usePlacementStore.getState().foundRecipes,
+    checkCompanions: () => usePlacementStore.getState().checkCompanions(),
+    activeRecipes: () => usePlacementStore.getState().activeRecipes(),
     milestones: () => usePlacementStore.getState().milestones,
     beeCount: () => beeDebug.count,
     beeDebug: () => ({ ...beeDebug }),
