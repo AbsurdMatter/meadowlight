@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -76,6 +76,7 @@ const { PLANTS, PLANT_BY_ID } = require(OUT + '/data/plants.js');
 const { groundAt, waterSurfaceHeight, pondFloorHeight } = require(OUT + '/engine/ground.js');
 const { LAKE, TERRAIN_SHAPE, shapedHeight, POND_FLAT_HEIGHT } = require(OUT + '/data/environment.js');
 const { MEADOW_SIZE, terrainHeight } = require(OUT + '/engine/terrain.js');
+const { skyPaletteAt, GOLDEN_HOUR, sunElevation, isDaylight } = require(OUT + '/engine/dayCycle.js');
 const { SEASONS } = require(OUT + '/data/seasons.js');
 const { checkMilestones } = require(OUT + '/engine/milestones.js');
 const { variationFor, rollVariation, noVariation, VARIATION_TUNING } = require(OUT + '/engine/variation.js');
@@ -290,6 +291,39 @@ test('bushes contribute shelter at half strength, hedge always dominates', () =>
   const appealNo = computeAppeal({ x: 0, z: 0 }, w1, FORAGE_RADIUS).score;
   const appealBush = computeAppeal({ x: 0, z: 0 }, { ...w1, bushes: [{ x: 2, z: 0 }] }, FORAGE_RADIUS).score;
   assert.ok(appealBush > appealNo, 'bush must raise appeal');
+});
+
+// ---------- session 5 U4 (#6): sky palette / day model ----------
+
+test('sky palette: golden hour matches the classic meadow look', () => {
+  const p = skyPaletteAt(GOLDEN_HOUR);
+  // the pre-session-5 sky constants: #6fa8dc top, #a8cdf0 mid, #ffd9a0 horizon
+  assert.ok(Math.abs(parseInt(p.horizon.slice(1), 16) - parseInt('ffd9a0', 16)) < 0x0c0c0c, 'horizon drift: ' + p.horizon);
+  // golden hour is warm: horizon clearly warmer (more red) than the day blue
+  const day = skyPaletteAt(0.5);
+  const warm = (x) => parseInt(x.slice(1), 16);
+  assert.ok((warm(p.horizon) >> 16) > (warm(day.top) >> 16), 'golden hour must be warm');
+});
+
+test('sky palette wraps cleanly and never throws at any phase', () => {
+  for (let i = 0; i <= 100; i++) {
+    const p = skyPaletteAt(i / 100);
+    assert.ok(typeof p.top === 'string' && p.top.startsWith('#'), 'bad palette at ' + i / 100);
+    assert.ok(p.ambient >= 0 && p.ambient <= 1, 'ambient out of range');
+  }
+  // wrapping out-of-range phases must not throw either
+  for (const phase of [-0.2, 1.3, 7.7]) {
+    const p = skyPaletteAt(phase);
+    assert.ok(!!p.top, 'wrap failed at ' + phase);
+  }
+});
+
+test('sun model: elevation peaks at noon, night is dark', () => {
+  assert.ok(sunElevation(0.5) > 0.85, 'noon should be high: ' + sunElevation(0.5).toFixed(2));
+  assert.ok(sunElevation(0.0) < -0.7, 'midnight should be low: ' + sunElevation(0.0).toFixed(2));
+  assert.ok(isDaylight(0.5), 'noon is daylight');
+  assert.ok(!isDaylight(0.0), 'midnight is not daylight');
+  assert.ok(!isDaylight(0.82) || sunElevation(0.82) > 0.05, 'golden hour check consistent');
 });
 
 test('plantedSpecies dedupes and ignores unknown ids', () => {

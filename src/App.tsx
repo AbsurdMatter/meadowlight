@@ -3,7 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Meadow } from './render/Meadow';
 import { Background } from './render/Background';
-import { Sky } from './render/Sky';
+import { Sky, DistantRidge } from './render/Sky';
 import { PlantedFlowers } from './render/PlantedFlowers';
 import { PlacedStructures } from './render/PlacedStructures';
 import { BeeSwarm } from './render/BeeSwarm';
@@ -87,6 +87,7 @@ function Scene() {
   return (
     <>
       <Sky />
+      <DistantRidge />
       <hemisphereLight args={['#ffe6c7', '#5a7a4a', 0.6]} />
       <SunLight season={season} />
       <ambientLight intensity={light.ambient} color="#fff3e0" />

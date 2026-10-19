@@ -344,11 +344,79 @@ async function checkBushes(browser) {
   }
 }
 
+/** U4 (#6): graded banded sky, distant ridge, composed clouds */
+async function checkSky(browser) {
+  const { page, errors } = await newPage(browser, url);
+  const r = await page.evaluate(async () => {
+    const w = window.__meadowlight;
+    w.clear();
+    await new Promise((res) => setTimeout(res, 800));
+    const scene = w.__three.scene;
+    // 1. banded sky: the background texture must have FLAT rows (quantized):
+    //    sample the scene.background canvas via the texture image
+    let skyBanded = false;
+    let skySamples = [];
+    if (scene.background && scene.background.image) {
+      const img = scene.background.image;
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      // sample a center column: rows within one band must be identical,
+      // so collect distinct colors down the column — 14 bands => ~7-20 distinct
+      const col = [];
+      for (let y = 0; y < img.height; y += 2) {
+        const d = ctx.getImageData(Math.floor(img.width / 2), y, 1, 1).data;
+        col.push((d[0] << 16) | (d[1] << 8) | d[2]);
+      }
+      const distinct = new Set(col);
+      skySamples = [...distinct].slice(0, 20);
+      skyBanded = distinct.size >= 5 && distinct.size <= 30;
+    }
+    // 2. distant ridge: a ~96-instance basic-material mesh at r 56..74
+    let ridgeCount = 0;
+    scene.traverse((o) => {
+      if (o.isInstancedMesh && o.instanceMatrix && o.count === 96) {
+        const m = o.instanceMatrix.array;
+        const r0 = Math.hypot(m[12], m[14]);
+        if (r0 > 50 && r0 < 80) ridgeCount++;
+      }
+    });
+    // 3. composed clouds: puffs wide-and-low (x size >> y size)
+    let cloudPuffs = [];
+    scene.traverse((o) => {
+      if (o.isMesh && o.geometry?.parameters?.width > 3 && o.material?.transparent) {
+        cloudPuffs.push({
+          w: o.geometry.parameters.width,
+          h: o.geometry.parameters.height,
+          x: o.position.x,
+        });
+      }
+    });
+    const wide = cloudPuffs.filter((p) => p.w / p.h > 2.5);
+    return {
+      skyBanded,
+      skyDistinct: skySamples.length,
+      ridgeCount,
+      cloudPuffs: cloudPuffs.length,
+      widePuffs: wide.length,
+    };
+  });
+  rec.record('sky.banded-gradient-renders', r.skyBanded, 'distinct band colors: ' + r.skyDistinct);
+  rec.record('sky.distant-ridge-renders', r.ridgeCount >= 1, 'ridge meshes: ' + r.ridgeCount);
+  rec.record('sky.composed-wide-clouds', r.cloudPuffs >= 20 && r.widePuffs >= r.cloudPuffs * 0.8,
+    'puffs: ' + r.cloudPuffs + ' wide: ' + r.widePuffs);
+  const re = realErrors(errors);
+  rec.record('sky.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
 const browser = await launchChromium(chromium, { libPath });
 for (const check of checks.split(',')) {
   if (check === 'roster') await checkRoster(browser);
   else if (check === 'terrain') await checkTerrain(browser);
   else if (check === 'bushes') await checkBushes(browser);
+  else if (check === 'sky') await checkSky(browser);
   else rec.record(`unknown-check:${check}`, false, 'no such check');
 }
 await browser.close();

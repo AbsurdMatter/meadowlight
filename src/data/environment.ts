@@ -172,6 +172,12 @@ export const CLOUDS = {
   color: '#fff4e0',
   opacity: 0.92,
   wrapHalfWidth: 62,
+  /**
+   * #6 (session 5): purposeful clouds — each cluster is a COMPOSITION, not
+   * a random blob: a flat wind-swept base puff, a smaller puff above-left,
+   * a bright cap. Shapes are wide-and-low (cumulus humilis at golden hour),
+   * spaced so the sky reads composed from the default camera.
+   */
   clusters: [
     { height: 17, speed: 0.5, z: -16, scale: 1.2 },
     { height: 21, speed: 0.32, z: 6, scale: 1.45 },
@@ -180,6 +186,16 @@ export const CLOUDS = {
     { height: 19, speed: 0.42, z: 28, scale: 1.0 },
   ],
   puffsPerCloud: 6,
+  /** composed puff template (offsets/sizes in cluster-local units, x-z spread
+   *  much wider than y — the wind-swept reading) */
+  puffTemplate: [
+    { offset: [0, 0, 0], size: [7.5, 1.3, 3.4] },
+    { offset: [-4.2, 0.5, 0.8], size: [4.5, 1.1, 2.6] },
+    { offset: [4.0, 0.4, -0.7], size: [4.0, 1.0, 2.4] },
+    { offset: [-1.6, 1.1, 0.3], size: [3.4, 1.0, 2.0] },
+    { offset: [2.2, 0.9, -0.4], size: [2.8, 0.9, 1.8] },
+    { offset: [0.4, 1.7, 0], size: [2.2, 0.8, 1.5] },
+  ],
 };
 
 /** Decorative background ground height: meadow terrain + gentle rise with distance. */
