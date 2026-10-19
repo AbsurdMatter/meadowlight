@@ -51,8 +51,19 @@ export const LAKE = {
   voxelStep: 1.6,
   /** carve depth: pond floor sits this far below the surrounding terrain */
   carveDepth: 1.5,
-  /** water surface sits this far below the shoreline terrain top (#28) */
-  surfaceDrop: 0.8,
+  /**
+   * #29: reduced to a third of the old 0.8 drop — a subtle step down to
+   * the water, not a cube-well. The blue-green floor still reads through
+   * the translucency at this level (verified by pixel readback).
+   */
+  surfaceDrop: 0.27,
+  /**
+   * #29: the sandy band granulates into finer sub-pieces (a 2x2
+   * subdivision of the terrain cell) so the ring reads as gravelly detail
+   * rather than chunky slabs. Sub-pieces snap to the parent lattice —
+   * the subdivision is exact, so no offsets or new gaps are possible.
+   */
+  bandSubdivision: 2,
   /** width of the sandy shoreline band around the carved area */
   shoreWidth: 2.6,
   /** floor tint: solid, blue-green, visible through the translucent water */

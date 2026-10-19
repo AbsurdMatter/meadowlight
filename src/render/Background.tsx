@@ -47,11 +47,13 @@ function Hills() {
       for (let z = -outer; z <= outer; z += step) {
         const r = Math.hypot(x, z);
         if (r < HILLS.innerRadius || r > outer) continue;
-        // pond-as-terrain: the pond body + sandy band are laid by the pond
-        // system on THIS grid — hills boxes yield those cells entirely
+        // pond-as-terrain, ONE cell map (#29): hills and pond share this
+        // exact lattice; a cell belongs to pond/band (laid by Lake) or to
+        // hills (laid here) — classified by center, so nothing overlaps
+        // and no sliver gaps exist at the boundary
         const lakeD = Math.hypot(x - LAKE.center[0], z - LAKE.center[1]);
         if (lakeD <= LAKE.radius + LAKE.shoreWidth) continue;
-        // no jitter near the band edge so terrain meets the band flush
+        // no jitter near the band so hills boxes meet the band flush
         const nearBand = lakeD < LAKE.radius + LAKE.shoreWidth + step * 1.5;
         const jitterScale = nearBand ? 0 : HILLS.jitter;
         const jx = x + (rng() - 0.5) * step * jitterScale;
@@ -93,28 +95,29 @@ function Hills() {
 
 function Lake() {
   /**
-   * Pond-as-terrain: the pond is part of the terrain grid, not a special
-   * object. On the SAME 1.6 step the hills use (snapped, unjittered here):
-   *  - SANDY BAND: terrain-height boxes in a ring around the carved area,
-   *    lightly sand-tinted — the un-carved banks (highest by construction)
-   *  - CARVED BASIN: inside the disc, terrain boxes DROPPED to the carved
-   *    floor depth, tinted blue-green — the solid pond bottom, no void
-   *  - WATER BODY: translucent boxes filling from the floor up to a
-   *    surface half a step below the band top (#28 closed by construction)
-   * Every piece snaps to the same grid the regular terrain follows, so
-   * edges meet in clean voxel steps: no gaps, no overlaps, no offsets.
+   * Pond-as-terrain, one cell map (#29): the pond pass runs ON the hills'
+   * own lattice — the same origin and 1.6 step, snapped. Every lattice
+   * cell near the pond is EXACTLY ONE of: pond (carved floor + water),
+   * sandy band (granulated into 2x2 sub-pieces), or hills terrain (laid by
+   * the hills pass, which skips the first two). One lattice means zero
+   * offset overlaps ("meadow cut-in") and zero sliver gaps ("holes") at
+   * the shoreline — by construction, not by tuning.
    */
   const bandRef = useRef<THREE.InstancedMesh>(null);
   const floorRef = useRef<THREE.InstancedMesh>(null);
   const waterRef = useRef<THREE.InstancedMesh>(null);
 
-  const step = LAKE.voxelStep;
+  const step = HILLS.step;
+  const sub = LAKE.bandSubdivision;
+  const subStep = step / sub;
   const cx = LAKE.center[0];
   const cz = LAKE.center[1];
-  // capacity bounds per ring (generous, counts set after fill)
+  const maxD = LAKE.radius + LAKE.shoreWidth;
+
   const bandCount = useMemo(() => {
-    const r = LAKE.radius + LAKE.shoreWidth;
-    return Math.ceil((Math.PI * (r + step) ** 2) / (step * step));
+    // band cells x sub^2 pieces, generous
+    const cells = Math.ceil((Math.PI * (maxD + step) ** 2) / (step * step));
+    return Math.ceil(cells * sub * sub * 1.3);
   }, []);
   const waterCount = useMemo(
     () => Math.ceil((Math.PI * (LAKE.radius + step) ** 2) / (step * step)),
@@ -132,51 +135,62 @@ function Lake() {
     const bottom = new THREE.Color(LAKE.bottomColor);
     const waterCol = new THREE.Color(LAKE.colorA);
 
-    let bi = 0; // band index
-    let fi = 0; // floor index
-    let wi = 0; // water index
-    // one deterministic pass over the pond's grid neighborhood — snapped,
-    // NO jitter: the pond pieces are grid-locked by definition
-    for (let gx = cx - (LAKE.radius + LAKE.shoreWidth) - step; gx <= cx + (LAKE.radius + LAKE.shoreWidth) + step; gx += step) {
-      for (let gz = cz - (LAKE.radius + LAKE.shoreWidth) - step; gz <= cz + (LAKE.radius + LAKE.shoreWidth) + step; gz += step) {
-        const d = Math.hypot(gx - cx, gz - cz);
-        const ground = groundAt(gx, gz).height;
+    // THE HILLS LATTICE: same origin (-outer) and step the hills pass uses.
+    // Iterate lattice cells whose center falls within maxD + step of the
+    // pond center — the cell's classification is by its CENTER, so the
+    // partition is exact on this lattice.
+    const outer = HILLS.outerRadius;
+    let bi = 0;
+    let fi = 0;
+    let wi = 0;
+    for (let x = -outer; x <= outer; x += step) {
+      for (let z = -outer; z <= outer; z += step) {
+        const d = Math.hypot(x - cx, z - cz);
+        if (d > maxD + step * 0.75) continue;
+        const ground = groundAt(x, z).height;
         if (d <= LAKE.radius) {
-          // CARVED BASIN: solid floor at the carved depth (blue-green,
-          // visible through the water), water body filling above it
+          // POND CELL: carved solid floor + translucent water body above
           const floorTop = ground - LAKE.carveDepth;
-          const depth = LAKE.carveDepth + 0.4; // reach under the banks
+          const depth = LAKE.carveDepth + 0.4;
           mat.makeScale(step * 1.02, depth, step * 1.02);
-          mat.setPosition(gx, floorTop - depth / 2, gz);
+          mat.setPosition(x, floorTop - depth / 2, z);
           floor.setMatrixAt(fi, mat);
-          color.copy(bottom);
-          floor.setColorAt(fi, color);
+          floor.setColorAt(fi, color.copy(bottom));
           fi++;
-          // water body: floor -> surface (a step below the band top)
           const surf = ground - LAKE.surfaceDrop;
           const wh = Math.max(0.05, surf - floorTop);
           mat.makeScale(step * 0.98, wh, step * 0.98);
-          mat.setPosition(gx, floorTop + wh / 2, gz);
+          mat.setPosition(x, floorTop + wh / 2, z);
           water.setMatrixAt(wi, mat);
-          color.copy(waterCol);
-          water.setColorAt(wi, color);
+          water.setColorAt(wi, color.copy(waterCol));
           wi++;
-        } else if (d <= LAKE.radius + LAKE.shoreWidth) {
-          // SANDY BAND: terrain-height boxes (the un-carved banks), tinted
-          const depth = 1.4 + Math.max(0, ground) * 0.5;
-          mat.makeScale(step * 1.02, depth, step * 1.02);
-          mat.setPosition(gx, ground - depth * 0.5 + 0.01, gz);
-          band.setMatrixAt(bi, mat);
-          color.copy(sand).lerp(bottom, 0.15);
-          band.setColorAt(bi, color);
-          bi++;
+        } else {
+          // BAND CELL: granulate into sub x sub snapped sub-pieces.
+          // Sub-piece heights follow the heightfield at their own centers
+          // (sub-pieces are exact subdivisions — still on the parent
+          // lattice lines, zero offsets possible).
+          for (let sx = 0; sx < sub; sx++) {
+            for (let sz = 0; sz < sub; sz++) {
+              const px = x + (sx - (sub - 1) / 2) * subStep;
+              const pz = z + (sz - (sub - 1) / 2) * subStep;
+              const g = groundAt(px, pz).height;
+              const depth = 1.4 + Math.max(0, g) * 0.5;
+              mat.makeScale(subStep * 1.02, depth, subStep * 1.02);
+              mat.setPosition(px, g - depth * 0.5 + 0.01, pz);
+              band.setMatrixAt(bi, mat);
+              // slight per-piece tint variance for a gravelly read
+              const v = ((sx * 3 + sz * 5) % 4) * 0.04;
+              band.setColorAt(bi, color.copy(sand).lerp(bottom, 0.15 + v));
+              bi++;
+            }
+          }
         }
       }
     }
     band.count = bi;
     floor.count = fi;
     water.count = wi;
-    for (const [mesh] of [[band], [floor], [water]] as [THREE.InstancedMesh][]) {
+    for (const mesh of [band, floor, water]) {
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       mesh.computeBoundingSphere();
