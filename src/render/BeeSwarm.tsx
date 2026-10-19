@@ -18,14 +18,34 @@ interface BeeState {
   targetFlowerId: string | null;
   /** true while heading home to the hive */
   headingHome: boolean;
+  /** gentle forage-wander point near the hive when no bloom is reachable:
+   *  bees must keep flying, never park frozen at the hive entrance */
+  wanderTarget: THREE.Vector3 | null;
   phase: number;
   restingUntil: number;
 }
 
 const MAX_BEES = BEE_TUNING.maxBeesTotal;
 
-/** live swarm size, exposed for the test hook / perf harness */
-export const beeDebug = { count: 0 };
+/** live swarm telemetry, exposed for the test hook / P panel bee debug */
+export const beeDebug = {
+  count: 0,
+  /** cumulative: a bee acquired a flower target */
+  targetFound: 0,
+  /** cumulative: a bee's target vanished (removed / out of bloom) */
+  targetLost: 0,
+  /** this frame: bees steering to a flower / wandering / heading home */
+  foraging: 0,
+  wandering: 0,
+  homing: 0,
+  /** this frame: mean and max distance of bees from their hive */
+  avgDistFromHive: 0,
+  maxDistFromHive: 0,
+  /** this frame: mean flight speed (a parked swarm reads ~0) */
+  avgSpeed: 0,
+  /** cumulative: wander points picked (empty-meadow behavior) */
+  wanderPicked: 0,
+};
 const tmpMat = new THREE.Matrix4();
 const lookMat = new THREE.Matrix4();
 const scaleMat = new THREE.Matrix4();
@@ -85,6 +105,7 @@ export function BeeSwarm() {
     hiveIndex,
     targetFlowerId: null,
     headingHome: true,
+    wanderTarget: null,
     phase,
     restingUntil: 0,
   });
@@ -147,6 +168,12 @@ export function BeeSwarm() {
     }
 
     const t = state.clock.elapsedTime;
+    beeDebug.foraging = 0;
+    beeDebug.wandering = 0;
+    beeDebug.homing = 0;
+    let distSum = 0;
+    let distMax = 0;
+    let speedSum = 0;
     const blooming = s.items
       .filter((f) => foraging && inBloom(f.plantId, s.season))
       .map((f) => f.id);
@@ -169,15 +196,44 @@ export function BeeSwarm() {
       if (bee.targetFlowerId !== null && !flowerInfo) {
         bee.targetFlowerId = null;
         bee.headingHome = true;
+        bee.wanderTarget = null;
+        beeDebug.targetLost++;
       }
 
       if (bee.restingUntil <= t && bee.targetFlowerId === null) {
         // pick a new target: mostly flowers, sometimes home
         if (blooming.length > 0 && Math.random() > 0.15) {
           bee.targetFlowerId = blooming[Math.floor(Math.random() * blooming.length)];
-          bee.headingHome = false;
+          // re-resolve immediately: flowerInfo must match the new target this
+          // same frame, or steering below would aim at the hive while the bee
+          // sits inside the hive's arrive radius -> instant "arrive" -> rest ->
+          // forever parked at the entrance (the bees-idle-at-hive bug)
+          flowerInfo = flowerById.get(bee.targetFlowerId) ?? undefined;
+          if (flowerInfo && !inBloom(flowerInfo.plantId, s.season)) flowerInfo = undefined;
+          if (flowerInfo) {
+            bee.headingHome = false;
+            bee.wanderTarget = null;
+            beeDebug.targetFound++;
+          } else {
+            // lost between selection and resolution (removed this frame)
+            bee.targetFlowerId = null;
+            bee.headingHome = true;
+            beeDebug.targetLost++;
+          }
+        } else if (blooming.length > 0) {
+          bee.headingHome = true; // sometimes home
         } else {
-          bee.headingHome = true; // home
+          // no bloom reachable at all: forage-wander near the hive, keep
+          // flying — a swarm frozen at the entrance is a dead meadow
+          bee.headingHome = false;
+          if (!bee.wanderTarget) {
+            bee.wanderTarget = new THREE.Vector3(
+              hive.position[0] + (Math.random() - 0.5) * 14,
+              hive.position[1] + 1.2 + Math.random() * 1.6,
+              hive.position[2] + (Math.random() - 0.5) * 14,
+            );
+            beeDebug.wanderPicked++;
+          }
         }
       }
 
@@ -189,8 +245,13 @@ export function BeeSwarm() {
           flowerInfo.y + (def ? def.height * 0.8 : 0.6),
           flowerInfo.z,
         );
+        beeDebug.foraging++;
+      } else if (bee.wanderTarget && !bee.headingHome) {
+        target.copy(bee.wanderTarget);
+        beeDebug.wandering++;
       } else {
         target.set(hive.position[0], hive.position[1] + 1.5, hive.position[2]);
+        beeDebug.homing++;
       }
 
       if (bee.restingUntil <= t) {
@@ -204,6 +265,7 @@ export function BeeSwarm() {
             Math.random() * (BEE_TUNING.restSeconds[1] - BEE_TUNING.restSeconds[0]);
           bee.targetFlowerId = null;
           bee.headingHome = true;
+          bee.wanderTarget = null;
         } else {
           toTarget.normalize().multiplyScalar(BEE_TUNING.speed);
           // gentle wander so flight feels alive
@@ -213,6 +275,14 @@ export function BeeSwarm() {
           bee.pos.addScaledVector(bee.vel, delta);
         }
       }
+
+      // telemetry: distance from hive + flight speed (parked-swarm detector)
+      const hiveDx = bee.pos.x - hive.position[0];
+      const hiveDz = bee.pos.z - hive.position[2];
+      const hiveDist = Math.sqrt(hiveDx * hiveDx + hiveDz * hiveDz);
+      distSum += hiveDist;
+      if (hiveDist > distMax) distMax = hiveDist;
+      speedSum += bee.vel.length();
 
       // render (body + stripe share the transform)
       const bob = Math.sin(t * BEE_TUNING.bobSpeed + bee.phase) * BEE_TUNING.bobAmplitude;
@@ -231,6 +301,15 @@ export function BeeSwarm() {
       wings.setMatrixAt(bi, tmpMat);
     }
     beeDebug.count = bees.current.length;
+    if (beeDebug.count > 0) {
+      beeDebug.avgDistFromHive = distSum / beeDebug.count;
+      beeDebug.maxDistFromHive = distMax;
+      beeDebug.avgSpeed = speedSum / beeDebug.count;
+    } else {
+      beeDebug.avgDistFromHive = 0;
+      beeDebug.maxDistFromHive = 0;
+      beeDebug.avgSpeed = 0;
+    }
     if (bees.current.length > 0 && !firstSwarmFired) {
       firstSwarmFired = true;
       const s2 = usePlacementStore.getState();
