@@ -137,3 +137,111 @@ real play; verify the user-visible observable (click, then read rendered
 geometry: present + in-viewport + visible), never a proxy like
 innerHTML string-presence or handler invocation — the notebook hub passed
 two proxy "verifications" while invisible below the fold.
+
+### Session 3 — Polish & v0.1 (post-merge record, PR #3, merge 460b97b)
+Delivered: palette regroup (Flora & nature / Bee care) with voxel thumbnails
+rendered from actual models; bee hotel + wild corner with solitary bees and
+rare wool-carder pollinator; postcard capture (composer-aware PNG); ambient
+WebAudio (wind + bee buzz, off by default, gesture-started); 3-step onboarding
+(save v4, show-once); perf pass (sway LOD, gated instance-color writes); voxel
+water rework; subtle bloom + warm morning/evening light; 260 grass tufts;
+ghost fidelity fix (shared pending roll); save robustness (_backup, fresh boot
+on corrupt/unknown); 13 engine unit tests wired into test:smoke; CI
+(test:smoke on windows-latest, #5); embed/deploy readiness (vite base './',
+og tags + og-image, README embed section).
+Post-review fixes (the pond epic, #21–#29, four passes): floating demo flowers
+and black water traced to drift/seeder systems not sharing interactive
+placement's ground truth; water blackness traced to instance-color gating
+(0f65b5b) silently dropping water depth-tints; shoreline grass fringe (#26)
+and grass variety/allocation (#24–#27); final restructure by user decision —
+pond relocated outside the editable meadow into the hills, meadow made the
+terrain's low bowl (end of the separate-layer problem), flat single-level
+water, neat grid-aligned shoreline (jittered style reverted as off-brand).
+Lessons: visual bugs are verified visually — geometric surveys are supporting
+evidence, never proof; an audit's definition of the observable must match the
+user's, or perfect math answers the wrong question (cell-ownership vs
+topmost-surface); perf optimizations that gate writes are prime suspects when
+a visual feature silently dies; a vision-model readback of a screenshot is a
+low-fidelity judge — the user's eye wins; when human eye, geometric audit, and
+vision readback disagree, look at the ground truth (the mask) — the cell-map
+overlay (#30) exists because of this; "it never touches the pond" is not the
+same as "harmless" when a structural misalignment is the root cause.
+
+---
+
+# v2 — Meadowlight after v0.1 (sessions 4–6)
+
+Goal: v0.1 proved the loop and the process; v2 makes Meadowlight worth
+returning to and worth showing off. Working order by user decision: B → A → C.
+Each session independently shippable; all AGENTS.md rules and CI carry over.
+Deploy goes live at the END of session 6 — the first public look is the
+completed v2.
+
+## Session 4 (B) — Everything voxel, including the chrome
+
+Theme: the deployed artifact's chrome matches its world. Zero gameplay code.
+
+0. P-panel expansion first (#30): cell-map debug overlay (reads the same live
+   data structures placement queries — never a re-derivation), save-state
+   inspector, reload-current-save, live milestone checklist. Dev/test only.
+1. Voxel design language for all chrome (#16): one shared token/theme module —
+   font stack (Pixelify Sans, self-hosted woff2, no runtime font fetch),
+   sizes, colors, borders — switchable centrally, never hardcoded per panel.
+   Applied to notebook, reset dialog, palette, toasts, onboarding, ? popover.
+2. Postcard stats strip (#18): nature planted, bee care put up, bee count,
+   seasons passed — nature facts, not scores. og:image regenerated from a
+   real-GPU screenshot once new chrome lands.
+3. Embed final polish: verify at odd aspect ratios + iframe config; og tags
+   absolute-URL-ready.
+
+Success test: any dialog next to the meadow looks like one product.
+
+## Session 5 (A) — The living world
+
+Theme: a second visit looks different from the first. Splittable across two
+nights; units independent.
+
+1. Flower roster expansion (#8) first — unblocks session 6 recipes. Each
+   species: model, bloom season, appeal, EDUCATION.md facts, thumbnail,
+   reachability unit-tested (yearRoundBloom lesson).
+2. Bushes & ambient scatter (#7) on gentler edges — shares the outskirts ring
+   with grass drifts, interleaved not stacked.
+3. Terrain shaping (#31): flatter pond neighborhood (water safely below banks
+   everywhere), much gentler meadow rim; consider the second outer rim concept
+   (hills out there, calmer middle with trees/pond/shrubs/rocks).
+4. Voxel background (#6): graded sky, distant terrain variation, purposeful
+   clouds.
+5. Butterflies & hoverflies (#15): distinct species mapped to real pollinator
+   principles.
+6. Day/night cycle (#13): slow, golden-hour default, fireflies at dusk.
+7. Weather (#14): rain = bees home, glistening flowers; cozy, no fail state.
+
+Perf re-verified on real GPU (session-3 baseline: 93.8fps @ 229 items) — this
+session adds scene content.
+Success test: two screenshots of two visits show visibly different meadows.
+
+## Session 6 (C) — Depth mechanics
+
+Theme: the educational heart. Needs session 5's flower roster.
+
+1. Garden recipes / companion planting (#9): positive bonuses for companions,
+   neutral for others — antagonism must never read as punishment.
+2. Honey harvesting (#11): comb cells visibly fill; full hive click gives a
+   jar recorded in the notebook. Observation-and-reward, no economy.
+3. Auto-advancing seasons (#12): ~10–15 min/season; save stores season
+   position, paused while away; manual dial + P-harness jump retained.
+
+Verification heaviest of the three: balance traces (companion garden gently
+outperforms random), full loop traces, multi-session save round-trips with
+mid-season saves.
+Success test: a player who understands real companion planting does measurably
+better than one who doesn't.
+
+## Post-session-6: deploy (user-driven)
+
+Build dist/, upload, point portfolio subdomain, HTTPS. First public look =
+completed v2.
+
+## Parked until world + chrome final
+
+#19 mobile/PWA, #20 broader i18n & harness expansion beyond #30's scope.
