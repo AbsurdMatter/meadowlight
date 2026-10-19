@@ -89,15 +89,29 @@ function Hills() {
         // hills skips exactly that set. No straddling box can cut in.
         if (isPondBandCell(x, z)) continue;
         // no jitter near the band so hills boxes meet the band flush
-        const nearBand = Math.hypot(x - LAKE.center[0], z - LAKE.center[1]) < LAKE.radius + LAKE.shoreWidth + step * 1.5;
+        const lakeDB = Math.hypot(x - LAKE.center[0], z - LAKE.center[1]);
+        const nearBand = lakeDB < LAKE.radius + LAKE.shoreWidth + step * 1.5;
         const jitterScale = nearBand ? 0 : HILLS.jitter;
         const jx = x + (rng() - 0.5) * step * jitterScale;
         const jz = z + (rng() - 0.5) * step * jitterScale;
         const h = backgroundHeight(jx, jz);
+        // #29 pass 3 — feathered edge: green hills boxes in the boundary
+        // ring DIP below the band top (the sand lip), so from every angle
+        // the green reads as sliding UNDER the shoreline the way terrain
+        // meets a beach, never sitting on top of it. The feather fades
+        // from a full dip at the band edge to nothing 2.5 cells out.
+        let feather = 0;
+        const featherStart = LAKE.radius + LAKE.shoreWidth + step * 0.6;
+        const featherEnd = featherStart + step * 2.5;
+        if (lakeDB < featherEnd) {
+          const t = Math.max(0, Math.min(1, (featherEnd - lakeDB) / (featherEnd - featherStart)));
+          feather = t * 0.55;
+        }
         const size = step * (HILLS.minSize + rng() * (HILLS.maxSize - HILLS.minSize));
         const extraDepth = Math.max(0, h - backgroundHeight(0, 0)) + 4;
-        mat.makeScale(size, HILLS.boxHeight + extraDepth, size);
-        mat.setPosition(jx, h - (HILLS.boxHeight + extraDepth) * 0.55, jz);
+        const boxH = HILLS.boxHeight + extraDepth + feather;
+        mat.makeScale(size, boxH, size);
+        mat.setPosition(jx, h - feather - boxH * 0.55, jz);
         mesh.setMatrixAt(i, mat);
         const local = Math.hypot(jx, jz);
         const nearMeadow = local < HILLS.liftStartRadius + 4;
@@ -211,18 +225,27 @@ function Lake() {
           // Sub-piece heights follow the heightfield at their own centers
           // (sub-pieces are exact subdivisions — still on the parent
           // lattice lines, zero offsets possible).
+          // #29 pass 3: jittered placement + per-piece rotation + stronger
+          // tone variance, so the band reads as scattered gravel rather
+          // than aligned rows of identical blocks
+          const jr = makeRng(9001 + Math.round(x * 31 + z));
           for (let sx = 0; sx < sub; sx++) {
             for (let sz = 0; sz < sub; sz++) {
-              const px = x + (sx - (sub - 1) / 2) * subStep;
-              const pz = z + (sz - (sub - 1) / 2) * subStep;
+              const jx2 = (jr() - 0.5) * subStep * 0.55;
+              const jz2 = (jr() - 0.5) * subStep * 0.55;
+              const rot = (jr() - 0.5) * Math.PI * 0.6;
+              const px = x + (sx - (sub - 1) / 2) * subStep + jx2;
+              const pz = z + (sz - (sub - 1) / 2) * subStep + jz2;
               const g = groundAt(px, pz).height;
               const depth = 1.4 + Math.max(0, g) * 0.5;
-              mat.makeScale(subStep * 1.02, depth, subStep * 1.02);
-              mat.setPosition(px, g - depth * 0.5 + 0.01, pz);
+              const sizeJ = subStep * (0.9 + jr() * 0.2);
+              mat.makeRotationY(rot);
+              mat.multiply(new THREE.Matrix4().makeScale(sizeJ, depth, sizeJ));
+              mat.setPosition(px, g - depth * 0.5 + 0.01 + (jr() - 0.5) * 0.03, pz);
               band.setMatrixAt(bi, mat);
-              // slight per-piece tint variance for a gravelly read
-              const v = ((sx * 3 + sz * 5) % 4) * 0.04;
-              band.setColorAt(bi, color.copy(sand).lerp(bottom, 0.15 + v));
+              // per-piece tone variance strong enough to break the silhouette
+              const v = 0.05 + jr() * 0.22;
+              band.setColorAt(bi, color.copy(sand).lerp(bottom, v));
               bi++;
             }
           }
