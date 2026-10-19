@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -80,6 +80,8 @@ const { isRaining, setRaining } = require(OUT + '/engine/weather.js');
 const { skyPaletteAt, GOLDEN_HOUR, sunElevation, isDaylight, isDusk, DUSK_START, DUSK_END, DAY_CYCLE_SECONDS, dayPhase, setDayPhase, advanceDay, resumeDayCycle, dayCycleOverridden } = require(OUT + '/engine/dayCycle.js');
 const { SEASONS, SEASON_SECONDS } = require(OUT + '/data/seasons.js');
 const { seasonProgress, advanceSeasons, forceSeason, resumeSeasonClock, seasonClockOverridden, setSeasonProgressForTest, nextSeason } = require(OUT + '/engine/seasonClock.js');
+const { companionSet, newlyFormed, recipeBetween } = require(OUT + '/engine/companions.js');
+const { RECIPES, RECIPE_TUNING, recipeFor } = require(OUT + '/data/recipes.js');
 const { checkMilestones } = require(OUT + '/engine/milestones.js');
 const { variationFor, rollVariation, noVariation, VARIATION_TUNING } = require(OUT + '/engine/variation.js');
 const { choosePlantFact, chooseStructureFact, chooseMeadowFact } = require(OUT + '/engine/factSelection.js');
@@ -425,6 +427,45 @@ test('season clock: nextSeason ordering', () => {
   assert.strictEqual(nextSeason('summer'), 'autumn');
   assert.strictEqual(nextSeason('autumn'), 'winter');
   assert.strictEqual(nextSeason('winter'), 'spring');
+});
+
+// ---------- session 6 U2 (#9): companion recipes ----------
+test('recipes: adjacency forms a recipe, distance does not', () => {
+  const near = [mkItem('lavender', 0, 0), mkItem('thyme', 1.5, 0)];
+  const { blessed, active } = companionSet(near);
+  assert.ok(active.some((r) => r.id === 'recipe:lavender-thyme'), 'adjacent pair forms the recipe');
+  assert.ok(blessed.has(near[0].id) && blessed.has(near[1].id), 'both partners are blessed');
+  const far = [mkItem('lavender', 0, 0), mkItem('thyme', RECIPE_TUNING.adjacencyRadius + 0.5, 0)];
+  const farRes = companionSet(far);
+  assert.strictEqual(farRes.blessed.size, 0, 'too far = no recipe, and NO penalty (just neutral)');
+  assert.strictEqual(farRes.active.length, 0);
+});
+
+test('recipes: order-free lookup; non-recipe pairs are simply neutral', () => {
+  assert.strictEqual(recipeBetween('thyme', 'lavender')?.id, 'recipe:lavender-thyme');
+  assert.strictEqual(recipeBetween('lavender', 'thyme')?.id, 'recipe:lavender-thyme');
+  assert.strictEqual(recipeBetween('lavender', 'poppy'), undefined, 'not a recipe = neutral, never negative');
+  // a meadow of random non-recipe flowers must bless NOTHING (no ranking)
+  const random = [mkItem('lavender', 0, 0), mkItem('poppy', 0.5, 0), mkItem('sunflower', 1, 0)];
+  const res = companionSet(random);
+  assert.strictEqual(res.blessed.size, 0, 'non-recipe neighbors stay exactly neutral');
+});
+
+test('recipes: newlyFormed respects the adjacency radius and dedupes discoveries', () => {
+  const items = [mkItem('borage', 0, 0), mkItem('cosmos', 1, 1)];
+  const fresh1 = newlyFormed(items, []);
+  assert.ok(fresh1.some((r) => r.id === 'recipe:borage-cosmos'), 'first formation is new');
+  const fresh2 = newlyFormed(items, ['recipe:borage-cosmos']);
+  assert.strictEqual(fresh2.length, 0, 'already discovered = not re-announced');
+});
+
+test('recipes: every pairing references real roster species (buildable in play)', () => {
+  const ids = new Set(PLANTS.map((p) => p.id));
+  for (const r of RECIPES) {
+    assert.ok(ids.has(r.pair[0]) && ids.has(r.pair[1]), 'recipe ' + r.id + ' uses planted species');
+    assert.ok(r.fact.length > 20, 'recipe ' + r.id + ' has a warm fact');
+  }
+  assert.ok(RECIPE_TUNING.vigorScale > 1, 'vigor is a bonus multiplier');
 });
 
 // ---------- session 5 U7 (#14): weather — cozy, no fail state ----------

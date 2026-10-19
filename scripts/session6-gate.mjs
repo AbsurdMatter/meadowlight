@@ -8,7 +8,9 @@
  *   node scripts/session6-gate.mjs --url http://localhost:5199 \
  *     --checks seasons [--lib-path /path/to/libs]
  *
- * Checks:
+ *   recipes — #9: adjacency forms a recipe, discovery toast fires, notebook
+ *             section present + in viewport, non-recipes stay neutral (no
+ *             punishment by test), save round-trips foundRecipes.
  *   seasons — #11: calendar drifts when natural, dial/P-panel override
  *             holds it, rollover fires the gentle toast + updates the
  *             season label, save v6 round-trips seasonProgress (incl. the
@@ -210,7 +212,110 @@ async function checkSeasons() {
   }
 }
 
-const map = { seasons: checkSeasons };
+/** #9 recipes */
+async function checkRecipes() {
+  // 1. plant a recipe pair adjacent — discovery fires exactly once
+  {
+    const { page, errors } = await newPage(browser, url);
+    const r1 = await page.evaluate(() => {
+      const w = window.__meadowlight;
+      w.clear();
+      w.plant('lavender', 2, 2);
+      const before = w.foundRecipes().length;
+      w.plant('thyme', 2.6, 2); // completes the recipe
+      return { before, after: w.foundRecipes().length, ids: w.foundRecipes() };
+    });
+    rec.record(
+      'recipes.discovery-fires-once',
+      r1.before === 0 && r1.after === 1 && r1.ids.includes('recipe:lavender-thyme'),
+      JSON.stringify(r1),
+    );
+    // the gentle toast must be present AND visible in the viewport
+    await page.waitForTimeout(400);
+    const toast = await page.evaluate(() => {
+      const panels = [...document.querySelectorAll('div')].filter((d) =>
+        d.textContent.includes('A garden recipe!'),
+      );
+      if (panels.length === 0) return { found: false };
+      const rect = panels[panels.length - 1].getBoundingClientRect();
+      return { found: true, inViewport: rect.top >= 0 && rect.bottom <= innerHeight && rect.width > 0 };
+    });
+    rec.record(
+      'recipes.discovery-toast-in-viewport',
+      toast.found && toast.inViewport,
+      JSON.stringify(toast),
+    );
+    // replanting the same pair must NOT re-announce
+    const r2 = await page.evaluate(() => {
+      const w = window.__meadowlight;
+      w.plant('lavender', 1.5, 2);
+      w.checkCompanions();
+      return w.foundRecipes().length;
+    });
+    rec.record('recipes.no-reannounce', r2 === 1, `found=${r2}`);
+    // 2. non-recipe neighbors: nothing discovered, nothing blessed
+    const r3 = await page.evaluate(() => {
+      const w = window.__meadowlight;
+      w.plant('poppy', 5, 5);
+      w.plant('sunflower', 5.5, 5);
+      w.checkCompanions();
+      return { found: w.foundRecipes().length, active: w.activeRecipes().length };
+    });
+    rec.record(
+      'recipes.non-recipe-pairs-neutral',
+      r3.found === 1 && r3.active === 1,
+      JSON.stringify({ ...r3, note: 'poppy+sunflower is not a recipe: nothing new, nothing punished' }),
+    );
+    // 3. notebook: Garden recipes section present, discovered entry + cozy locked entries
+    const hub = await page.evaluate(() => {
+      const btns = [...document.querySelectorAll('button')];
+      const hubBtn = btns.find((b) => b.textContent.includes('\u{1F4D6}'));
+      if (!hubBtn) return { found: false };
+      hubBtn.click();
+      return { found: true };
+    });
+    await page.waitForTimeout(400);
+    const panel = await page.evaluate(() => {
+      const panels = [...document.querySelectorAll('div')].filter((d) =>
+        d.textContent.includes('GARDEN RECIPES'),
+      );
+      if (panels.length === 0) return { found: false };
+      const rect = panels[panels.length - 1].getBoundingClientRect();
+      return {
+        found: true,
+        inViewport: rect.top >= 0 && rect.bottom <= innerHeight,
+        hasDiscovered: document.body.textContent.includes('Lavender & Wild Thyme'),
+        hasLocked: document.body.textContent.includes('still undiscovered'),
+      };
+    });
+    rec.record(
+      'recipes.notebook-section-visible',
+      hub.found && panel.found && panel.inViewport && panel.hasDiscovered && panel.hasLocked,
+      JSON.stringify(panel),
+    );
+    // 4. save round-trip: foundRecipes persists (v6)
+    const saved = await page.evaluate(() => {
+      const w = window.__meadowlight;
+      w.plant('borage', 8, 8);
+      w.plant('cosmos', 8.6, 8);
+      w.checkCompanions();
+      return JSON.parse(localStorage.getItem('meadowlight.world.v2'));
+    });
+    rec.record(
+      'recipes.save-v6-round-trips-found',
+      saved.version === 6 &&
+        Array.isArray(saved.foundRecipes) &&
+        saved.foundRecipes.includes('recipe:lavender-thyme') &&
+        saved.foundRecipes.includes('recipe:borage-cosmos'),
+      `version=${saved.version} foundRecipes=${JSON.stringify(saved.foundRecipes)}`,
+    );
+    const re = realErrors(errors);
+    rec.record('recipes.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+    await page.close();
+  }
+}
+
+const map = { seasons: checkSeasons, recipes: checkRecipes };
 for (const c of checks.split(',')) {
   if (map[c]) await map[c]();
   else rec.record(`unknown-check:${c}`, false, 'no such check in session6-gate');
