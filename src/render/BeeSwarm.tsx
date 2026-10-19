@@ -7,6 +7,10 @@ import { usePlacementStore } from './placementStore';
 import { computeAppeal, beesForHive, inBloom, FORAGE_RADIUS, type PollinatorWorld } from '../engine/pollinator';
 import { isRaining, RAIN_TUNING } from '../engine/weather';
 import { dayPhase, isDaylight } from '../engine/dayCycle';
+import { advanceComb } from '../engine/honey';
+
+/** #10 honey telemetry, exposed for the P panel / test hook */
+export const honeyDebug = { lastForagingBees: 0, lastAppeal: 0 };
 import { noVariation } from '../engine/variation';
 import type { PlacedStructure } from '../engine/persistence';
 
@@ -153,6 +157,29 @@ export function BeeSwarm() {
       adaptiveCap.current,
       perHive.reduce((a, b) => a + b, 0),
     );
+    // #10: comb fill advances from REAL observed foraging effort —
+    // appeal-scaled, daylight- and season-gated (the same gates the bees'
+    // own foraging uses), through the ONE shared store field. Pure math in
+    // engine/honey.ts; this loop only supplies the observed inputs.
+    const daylight = isDaylight(dayPhase());
+    const foragingNow = beeDebug.foraging > 0 ? beeDebug.foraging : 0;
+    honeyDebug.lastForagingBees = foragingNow;
+    hives.forEach((hive, hi) => {
+      const store2 = usePlacementStore.getState();
+      const current = store2.hiveCombs[hive.id] ?? 0;
+      if (current >= 1) return;
+      // share this frame's foraging bees across hives by their bee count
+      const share = perHive[hi] > 0 ? foragingNow * (perHive[hi] / Math.max(1, targetTotal)) : 0;
+      const appealHere = computeAppeal(
+        { x: hive.position[0], z: hive.position[2] },
+        world,
+        FORAGE_RADIUS,
+      ).score;
+      honeyDebug.lastAppeal = appealHere;
+      const next = advanceComb(current, Math.min(delta, 0.1), share, appealHere, s.season, daylight);
+      if (next !== current) store2.setComb(hive.id, next);
+    });
+
 
     // reconcile bee list (add/remove gently, keep existing bees stable)
     const hivesKey = hives.map((h) => h.id).join(',') + '|' + perHive.join(',');

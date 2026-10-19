@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { STRUCTURES } from '../data/structures';
 import { usePlacementStore } from './placementStore';
 import { noVariation } from '../engine/variation';
+import { combReady } from '../engine/honey';
+import { HONEY_TUNING } from '../data/honey';
 
 /** Deterministic 0..1 hash from two integers (the grass pattern) — stable
  *  across reloads, no RNG state, saves stay byte-stable. */
@@ -14,7 +16,6 @@ function hash2(x: number, z: number, salt: number): number {
   return (h >>> 0) / 4294967296;
 }
 
-
 const tmpMat = new THREE.Matrix4();
 const rotYMat = new THREE.Matrix4();
 const tiltXMat = new THREE.Matrix4();
@@ -22,6 +23,8 @@ const tiltZMat = new THREE.Matrix4();
 const offsetMat = new THREE.Matrix4();
 const scaleMat = new THREE.Matrix4();
 const tmpColor = new THREE.Color();
+const combFloor = new THREE.Color(HONEY_TUNING.combColorFloor);
+const combFull = new THREE.Color(HONEY_TUNING.combColorFull);
 
 /** generous fixed capacity per structure type (never recreated on place/remove) */
 const CAPACITY_PER_STRUCTURE = 60;
@@ -32,23 +35,34 @@ export function PlacedStructures() {
   const refs = useRef<{ meshes: Partial<Record<string, THREE.InstancedMesh | null>> }>({
     meshes: {},
   });
+  /** instanceIndex -> placed-structure id, per structure type (for hive clicks) */
+  const idMaps = useRef<Partial<Record<string, string[]>>>({});
 
   const onClick = (e: ThreeEvent<MouseEvent>, structureId: string) => {
     e.stopPropagation();
     const s = usePlacementStore.getState();
     if (s.selectedPlantId || s.selectedStructureId) return;
+    // #10: a FULL hive gives a jar — the harvest ceremony (dip + toast)
+    // fires from the store; a not-yet-full hive still opens the notebook
+    if (structureId === 'hive') {
+      const hiveId = idMaps.current[structureId]?.[e.instanceId ?? -1];
+      if (hiveId && s.harvestHoney(hiveId)) return;
+    }
     openNotebook({ kind: 'structure', id: structureId });
   };
 
   useFrame(({ clock }) => {
     const r = refs.current;
     const t = clock.elapsedTime;
+    const store = usePlacementStore.getState();
     for (const def of STRUCTURES) {
       const mesh = r.meshes[def.id];
       if (!mesh) continue;
       let i = 0;
+      const ids: string[] = [];
       for (const s of structures) {
         if (s.structureId !== def.id) continue;
+        ids.push(s.id);
         const variation = s.variation ?? noVariation();
         const swayZ = Math.sin(t * 0.5 + i * 1.7) * 0.012;
         const swayX = Math.cos(t * 0.4 + i * 2.3) * 0.008;
@@ -65,10 +79,33 @@ export function PlacedStructures() {
           bushRotY = hash2(qx, qz, 901) * Math.PI * 2;
           bushScale = 0.88 + hash2(qx, qz, 902) * 0.28;
         }
-        for (const part of def.parts) {
+        // #10: the harvest ceremony — the hive dips and settles over
+        // harvestDipSeconds (a gentle thank-you bow, then back to rest)
+        let dip = 0;
+        if (s.structureId === 'hive') {
+          const startedAt = store.harvestDips[s.id];
+          if (typeof startedAt === 'number') {
+            const age = (performance.now() - startedAt) / 1000;
+            const dur = HONEY_TUNING.harvestDipSeconds;
+            if (age < dur) {
+              // smooth down-and-settle: sin ease in, settle back
+              const phase = age / dur;
+              dip = -Math.sin(phase * Math.PI) * HONEY_TUNING.harvestDip;
+            }
+          }
+        }
+        // #10: comb glow — the hive's honey parts warm with fill. The
+        // floor tint keeps even an empty comb warm ("settling in"); full
+        // reads as deep honey gold. Never dim, never sad.
+        const combFill = s.structureId === 'hive' ? store.hiveCombs[s.id] ?? 0 : 0;
+        const combColor = tmpColor.copy(combFloor).lerp(combFull, combFill);
+        for (let pi = 0; pi < def.parts.length; pi++) {
+          const part = def.parts[pi];
+          const isHoneyPart =
+            s.structureId === 'hive' && (pi === 2 || pi === 4) && part.color === '#e0bc78';
           tmpMat.makeTranslation(
             s.position[0],
-            s.position[1] + variation.heightJitter,
+            s.position[1] + variation.heightJitter + dip,
             s.position[2],
           );
           rotYMat.makeRotationY(s.rotationY + variation.rotationY + bushRotY);
@@ -86,16 +123,21 @@ export function PlacedStructures() {
           );
           tmpMat.multiply(scaleMat);
           mesh.setMatrixAt(i, tmpMat);
-          mesh.setColorAt(i, tmpColor.set(part.color));
+          if (isHoneyPart) {
+            mesh.setColorAt(i, combColor);
+          } else {
+            mesh.setColorAt(i, tmpColor.set(part.color));
+          }
           i++;
         }
       }
       mesh.count = i;
+      idMaps.current[def.id] = ids;
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
+    void combReady; // engine import kept for the click path's store check
   });
-
   return (
     <group>
       {STRUCTURES.map((def) => (

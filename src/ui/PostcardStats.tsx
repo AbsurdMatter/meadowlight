@@ -50,6 +50,14 @@ function statLines(): StatLine[] {
       label: 'Seasons passed',
       value: (s.wildSeasons?.length ?? 0) === 0 ? 'the dial has not turned yet' : `${s.wildSeasons.length}`,
     },
+    {
+      key: 'honey',
+      label: 'Jars of honey brought in',
+      value:
+        (s.honeyJars ?? 0) === 0
+          ? 'the comb is still filling'
+          : `${s.honeyJars}`,
+    },
   ];
 }
 

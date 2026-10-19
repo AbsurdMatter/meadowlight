@@ -87,6 +87,14 @@ export interface WorldData {
    * Absent = none discovered; old saves simply discover fresh.
    */
   foundRecipes?: string[];
+  /**
+   * #10 (session 6, v6, additive): per-hive comb fill 0..1, keyed by the
+   * hive structure's id. Absent/unknown = 0 (a fresh hive "settles in",
+   * never reads as failing). Removed hives' entries are harmless residue.
+   */
+  hiveCombs?: Record<string, number>;
+  /** #10 (session 6, v6, additive): lifetime jars of honey brought in */
+  honeyJars?: number;
 }
 
 function parseItems(parsed: unknown): PlacedItem[] {
@@ -164,6 +172,21 @@ function parseFoundRecipes(parsed: unknown): string[] {
   return parsed.filter((r): r is string => typeof r === 'string');
 }
 
+/** v6 additive: per-hive comb fill, clamped to 0..1 */
+function parseHiveCombs(parsed: unknown): Record<string, number> {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof k === 'string' && typeof v === 'number' && v >= 0 && v <= 1) out[k] = v;
+  }
+  return out;
+}
+
+/** v6 additive: lifetime honey jar count */
+function parseHoneyJars(parsed: unknown): number {
+  return typeof parsed === 'number' && parsed >= 0 ? Math.floor(parsed) : 0;
+}
+
 function freshWorld(): WorldData {
   return {
     version: 6,
@@ -235,6 +258,8 @@ export function loadWorld(): WorldData {
         dayPhase: parseDayPhase(data.dayPhase),
         seasonProgress: parseSeasonProgress(data.seasonProgress),
         foundRecipes: parseFoundRecipes(data.foundRecipes),
+        hiveCombs: parseHiveCombs(data.hiveCombs),
+        honeyJars: parseHoneyJars(data.honeyJars),
       };
     }
     // v1 shape: bare array of items

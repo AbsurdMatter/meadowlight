@@ -74,7 +74,21 @@ export function Notebook() {
     if (entry.kind === 'structure') {
       const choice = chooseStructureFact(entry.id, s.season, s.seenFacts);
       const name = entry.id.charAt(0).toUpperCase() + entry.id.slice(1);
-      return { title: name, choice, hint: null };
+      // #10: the hive carries its comb state — a warm hint, never pressure
+      let hint: string | null = null;
+      if (entry.id === 'hive') {
+        const fill = Object.entries(s.hiveCombs).find(([id]) =>
+          s.structures.some((st) => st.structureId === 'hive' && st.id === id),
+        )?.[1];
+        const v = fill ?? 0;
+        hint =
+          v >= 1
+            ? 'The comb is full and heavy — click the hive to bring a jar in. \u{1F36B}'
+            : v > 0.5
+              ? 'The comb is filling — you can see it warming in the straw.'
+              : 'The colony is settling in — the first drops of the season are already in the comb.';
+      }
+      return { title: name, choice, hint };
     }
     const choice = chooseMeadowFact(s.season, s.seenFacts);
     const blooming = PLANTS.filter((p) => p.bloom.includes(s.season)).map((p) => p.name);

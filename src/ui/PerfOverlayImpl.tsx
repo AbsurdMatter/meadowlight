@@ -342,6 +342,7 @@ function PerfOverlayPanel() {
       <Session5Triggers />
       <Session6SeasonTriggers />
       <Session6RecipeTriggers />
+      <Session6HoneyTriggers />
       <SaveInspector />
       <MilestoneChecklist />
     </div>
@@ -507,6 +508,58 @@ function Session6RecipeTriggers() {
         {btn('rescan', () => usePlacementStore.getState().checkCompanions(), 'recipe-rescan')}
         <span style={{ fontSize: 11, opacity: 0.7 }}>
           {' '}discovered {found.length}/5 · active {usePlacementStore.getState().activeRecipes().length}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** session 6 trigger section: honey (#10) — force comb fill, harvest a
+ *  ready hive, read the live foraging inputs. Dev-only (prod-excluded). */
+function Session6HoneyTriggers() {
+  const [, forceRender] = useState(0);
+  const refresh = () => forceRender((n) => n + 1);
+  const combs = usePlacementStore((s) => s.hiveCombs);
+  const jars = usePlacementStore((s) => s.honeyJars);
+  const btn = (label: string, onClick: () => void, key?: string) => (
+    <button
+      key={key}
+      data-perf-s6={key}
+      onClick={() => {
+        onClick();
+        refresh();
+      }}
+      style={{
+        margin: '2px 4px 2px 0',
+        padding: '5px 9px',
+        borderRadius: 8,
+        border: 'none',
+        background: '#666',
+        color: '#fff',
+        fontFamily: 'inherit',
+        fontSize: 12,
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+  const hives = usePlacementStore
+    .getState()
+    .structures.filter((st) => st.structureId === 'hive');
+  const firstHive = hives[0];
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>honey (#10)</div>
+      <div>
+        {btn('fill first hive', () => {
+          if (firstHive) usePlacementStore.getState().setComb(firstHive.id, 1);
+        }, 'honey-fill')}
+        {btn('harvest first hive', () => {
+          if (firstHive) usePlacementStore.getState().harvestHoney(firstHive.id);
+        }, 'honey-harvest')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {' '}jars {jars} · combs {hives.map((h) => (combs[h.id] ?? 0).toFixed(2)).join(',') || '-'}
         </span>
       </div>
     </div>

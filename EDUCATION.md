@@ -29,6 +29,13 @@ where possible. Never lecture; imagine a beekeeper friend chatting over a fence.
   tomatoes rely on this "buzz pollination."
 - A queen bumblebee starts the colony alone in spring, incubating her first
   eggs like a tiny bird.
+- Honeybee workers visit 50–100 flowers per foraging trip — a jar of
+  honey holds a whole season of those visits (verified, session 6 honey
+  unit: standard beekeeping figures; e.g. Live Science's honey explainer).
+- Bees turn nectar into honey by fanning it with their wings until the
+  water evaporates and it thickens — then they cap each cell with wax, a
+  little jar of summer saved for winter (verified, session 6 honey unit:
+  Live Science, Lappe's Bee Supply).
 
 ## Tone rules
 

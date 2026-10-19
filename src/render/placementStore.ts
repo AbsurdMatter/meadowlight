@@ -16,6 +16,8 @@ import {
 } from '../engine/seasonClock';
 import { SEASON_ARRIVAL } from '../data/seasons';
 import { newlyFormed, companionSet } from '../engine/companions';
+import { combReady, fillAfterHarvest } from '../engine/honey';
+import { HONEY_FACTS } from '../data/honey';
 import type { MilestoneId } from '../data/milestones';
 
 export interface Toast {
@@ -70,6 +72,16 @@ export interface PlacementState {
   checkCompanions: () => void;
   /** #9: P panel readback — which recipes are currently formed */
   activeRecipes: () => string[];
+  /** #10: per-hive comb fill 0..1 (ONE shared source; persisted v6) */
+  hiveCombs: Record<string, number>;
+  /** #10: set a hive's comb fill (the foraging loop + P panel write here) */
+  setComb: (hiveId: string, fill: number) => void;
+  /** #10: lifetime jars of honey brought in (persisted v6) */
+  honeyJars: number;
+  /** #10: harvest a ready hive — jar + ceremony state + warm fact toast */
+  harvestHoney: (hiveId: string) => boolean;
+  /** #10: hive ids currently mid-harvest-dip (the render reads this) */
+  harvestDips: Record<string, number>;
   earnMilestone: (id: MilestoneId, label: string, detail: string) => void;
   dismissToast: (id: number) => void;
   openNotebook: (entry: PlacementState['notebook']) => void;
@@ -199,6 +211,37 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
     get().save();
   },
   activeRecipes: () => companionSet(get().items).active.map((r) => r.id),
+  hiveCombs: initial.hiveCombs ?? {},
+  setComb: (hiveId, fill) => {
+    const s = get();
+    const next = Math.min(1, Math.max(0, fill));
+    if (s.hiveCombs[hiveId] === next) return;
+    set({ hiveCombs: { ...s.hiveCombs, [hiveId]: next } });
+  },
+  honeyJars: initial.honeyJars ?? 0,
+  harvestDips: {},
+  harvestHoney: (hiveId) => {
+    const s = get();
+    const fill = s.hiveCombs[hiveId] ?? 0;
+    if (!combReady(fill)) return false;
+    // the ceremony: the hive dips and settles (render reads harvestDips),
+    // the jar arrives with a toast carrying a real EDUCATION.md fact
+    set({
+      honeyJars: s.honeyJars + 1,
+      hiveCombs: { ...s.hiveCombs, [hiveId]: fillAfterHarvest() },
+      harvestDips: { ...s.harvestDips, [hiveId]: performance.now() },
+      toasts: [
+        ...s.toasts,
+        {
+          id: toastSeq++,
+          title: '\u{1F36B} A jar of honey!',
+          body: HONEY_FACTS.harvest,
+        },
+      ],
+    });
+    get().save();
+    return true;
+  },
   earnMilestone: (id, label, detail) => {
     const s = get();
     if (s.milestones.includes(id)) return;
@@ -225,6 +268,9 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       wildSeasons: [],
       onboardingDismissed: false,
       foundRecipes: [],
+      hiveCombs: {},
+      honeyJars: 0,
+      harvestDips: {},
     });
     forceSeason('summer');
     resumeSeasonClock();
@@ -258,6 +304,8 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       onboardingDismissed: w.onboardingDismissed ?? false,
       placementVariation: w.placementVariation,
       foundRecipes: w.foundRecipes ?? [],
+      hiveCombs: w.hiveCombs ?? {},
+      honeyJars: w.honeyJars ?? 0,
     });
     // #11: the reload must re-derive the calendar position from the blob —
     // same semantics as a fresh page load, not the live clock
@@ -278,6 +326,8 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       dayPhase: dayPhase(),
       seasonProgress: seasonProgress(),
       foundRecipes: s.foundRecipes,
+      hiveCombs: s.hiveCombs,
+      honeyJars: s.honeyJars,
     });
   },
 }));
