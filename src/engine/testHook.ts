@@ -1,6 +1,7 @@
 import { usePlacementStore } from '../render/placementStore';
 import { variationFor } from './variation';
 import { terrainHeight } from './terrain';
+import { isBuildable } from './ground';
 import type { PlacedItem, PlacedStructure } from './persistence';
 import type { StructureId } from '../data/structures';
 import type { PerspectiveCamera, WebGLRenderer } from 'three';
@@ -69,7 +70,12 @@ export function maybeSeedDemoWorld() {
       for (let k = 0; k < 5; k++) {
         const a = i * 2.399963;
         const r = 4 + Math.sqrt((i + 1) / 30) * 12;
-        w.plant(sp, Math.cos(a) * r, Math.sin(a) * r);
+        const x = Math.cos(a) * r;
+        const z = Math.sin(a) * r;
+        // the ground oracle answers "what's at this cell" — never seed into
+        // water or the shore band (drift-class fix #26)
+        if (!isBuildable(x, z)) { i++; continue; }
+        w.plant(sp, x, z);
         i++;
       }
     }

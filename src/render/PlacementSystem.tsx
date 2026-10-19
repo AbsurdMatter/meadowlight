@@ -7,6 +7,7 @@ import { STRUCTURE_BY_ID } from '../data/structures';
 import { usePlacementStore } from './placementStore';
 import { variationFor, type PlacementVariation } from '../engine/variation';
 import { flowerBlocked, structureBlocked } from '../engine/collision';
+import { isBuildable } from '../engine/ground';
 import type { StructureId } from '../data/structures';
 import { VoxelFlower } from './VoxelFlower';
 import { VoxelStructure } from './VoxelStructure';
@@ -168,8 +169,11 @@ export function PlacementSystem() {
     return [cx, terrainHeight(cx, cz), cz];
   };
 
-  /** Same occupancy check for ghost preview and actual placement. */
+  /** Same occupancy + ground check for ghost preview and actual placement —
+   *  the oracle answers "what's at this cell" for the click path too (#26):
+   *  water and the shore band are not buildable, ghost shows invalid there. */
   const placementBlocked = (x: number, z: number): boolean => {
+    if (!isBuildable(x, z)) return true;
     const s = usePlacementStore.getState();
     if (s.selectedPlantId) return flowerBlocked(x, z, s.structures);
     if (s.selectedStructureId)

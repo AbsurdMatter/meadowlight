@@ -59,13 +59,30 @@ export function waterSurfaceHeight(x: number, z: number): number {
 
 /**
  * Buffer zone: no grass tufts (or future ground clutter) may spawn within
- * this many units of the waterline — keeps the shoreline a clean sand band
- * (#26) and leaves water visually crisp.
+ * this many units of the OUTER edge of the brown shoreline band — a tuft
+ * hugging the waterline inside the band still looks wrong (#26).
  */
 export const SHORELINE_GRASS_BUFFER = 1.6;
 
-/** True when a point is legal ground for grass/drift spawning (#26). */
+/** True when a point is legal ground for grass/drift spawning (#26).
+ *  Excludes water cells, the full brown shore band, and a buffer ring
+ *  beyond it — computed against the CURRENT water state (post-#28 the
+ *  surface sinks below its banks; the band geometry is the same disc).
+ *  Used by the grass drift generator and every future scatter system. */
 export function isGrassSpawnable(x: number, z: number): boolean {
   const g = groundAt(x, z);
-  return g.kind === 'meadow' && g.lakeDistance > LAKE.radius + LAKE.shoreWidth * 0.4 + SHORELINE_GRASS_BUFFER;
+  if (g.kind !== 'meadow') return false;
+  return g.lakeDistance > LAKE.radius + LAKE.shoreWidth + SHORELINE_GRASS_BUFFER;
+}
+
+/**
+ * True when a point is legal ground for BUILDING (flowers, structures) —
+ * the interactive placement path and the demo seeder ask the same oracle,
+ * closing the drift-class family: one module answers "what's at this
+ * cell" for every placement system.
+ */
+export function isBuildable(x: number, z: number): boolean {
+  // no flowers/hives in the water or on the shore band; the meadow proper
+  // (and the buildable outskirts) are all fair game
+  return groundAt(x, z).kind === 'meadow';
 }
