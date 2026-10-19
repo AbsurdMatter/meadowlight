@@ -14,7 +14,29 @@
     <meta property="og:image:alt" content="A warm voxel meadow with flowers, a skep hive, and foraging bees" />
     <style>
       html, body, #root { margin: 0; height: 100%; overflow: hidden; }
-      body { font-family: ui-rounded, "SF Pro Rounded", system-ui, sans-serif; background: #f7d9a3; }
+      body { font-family: 'Pixelify Sans', ui-rounded, "SF Pro Rounded", system-ui, sans-serif; background: #f7d9a3; }
+      /* #16: self-hosted Pixelify Sans — the embed never fetches fonts at runtime */
+      @font-face {
+        font-family: 'Pixelify Sans';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('./fonts/pixelify-sans-latin-400-normal.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Pixelify Sans';
+        font-style: normal;
+        font-weight: 500;
+        font-display: swap;
+        src: url('./fonts/pixelify-sans-latin-500-normal.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Pixelify Sans';
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url('./fonts/pixelify-sans-latin-700-normal.woff2') format('woff2');
+      }
     </style>
   </head>
   <body>
