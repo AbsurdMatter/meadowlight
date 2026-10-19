@@ -152,6 +152,10 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   },
   reloadFromSave: () => {
     const w = loadWorld();
+    const n = w.items.length + w.structures.length;
+    console.log(
+      `[reload] reloaded from save — ${w.items.length} items, ${w.structures.length} structures (blob v${w.version})`,
+    );
     set({
       items: w.items,
       structures: w.structures,
@@ -160,7 +164,13 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       selectedPlantId: null,
       selectedStructureId: null,
       notebook: null,
-      toasts: [],
+      toasts: [
+        {
+          id: toastSeq++,
+          title: 'Reloaded from save',
+          body: `${n} piece${n === 1 ? '' : 's'} of the meadow came back from the saved blob.`,
+        },
+      ],
       modalOpen: false,
       seenFacts: w.seenFacts ?? [],
       wildSeasons: w.wildSeasons ?? [],

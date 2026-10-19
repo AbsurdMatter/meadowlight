@@ -91,7 +91,7 @@ function SaveInspector() {
       <button
         data-perf-reload-save
         onClick={() => { usePlacementStore.getState().reloadFromSave(); refresh(); }}
-        title="Discard in-memory state and rebuild the world from the localStorage blob (the same load path as a fresh page load — no save first)"
+        title="Discard in-memory state and rebuild the world from the localStorage blob (the same load path as a fresh page load — no save first). Manual test note: click within <3s of editing the blob in devtools — the app autosaves live state every 3s and would overwrite your edit."
         style={{ marginTop: 4, marginLeft: 6, padding: '4px 8px', borderRadius: 6, border: 'none', background: '#4a6a9a', color: '#fff', fontFamily: 'inherit', cursor: 'pointer' }}
       >
         reload current save
