@@ -20,6 +20,42 @@ function makeRng(seed: number) {
   };
 }
 
+/**
+ * #29 pass 2: the exact band/hills boundary on the shared lattice. A cell
+ * of the 1.6 grid with center-distance <= this value belongs to the pond
+ * system (band pieces); hills lays everything beyond. half-diagonal of a
+ * step*1.02 box means no hills box can straddle into the band, and no band
+ * gap opens: the edge is exact, not approximated.
+ */
+/** The single water-surface Y for the whole pond: flat, one level. */
+function pondWaterSurfaceY(): number {
+  return groundAt(LAKE.center[0], LAKE.center[1]).height - LAKE.surfaceDrop;
+}
+
+/**
+ * #29 pass 2: the EXACT band/hills boundary on the shared lattice. A cell
+ * belongs to the pond system (band pieces) iff any CORNER of its box
+ * touches the band region — corner distance, not center distance, because
+ * axis-aligned boxes approach the round pond diagonally: a center rule
+ * underestimates the near corner (source of the residual meadow cut-in).
+ * Hills skips exactly the same set: the two systems partition the lattice.
+ */
+function isPondBandCell(x: number, z: number): boolean {
+  // hills box sizes VARY (minSize..maxSize x step, plus jitter) — the
+  // classifier must use the maximum possible extent, or a big box can
+  // still poke into the band from a cell classified as hills
+  const half = (HILLS.step * HILLS.maxSize) / 2 + HILLS.step * HILLS.jitter * 0.5;
+  const dx = x - LAKE.center[0];
+  const dz = z - LAKE.center[1];
+  const maxD = LAKE.radius + LAKE.shoreWidth;
+  return (
+    Math.hypot(dx - half, dz - half) <= maxD ||
+    Math.hypot(dx + half, dz - half) <= maxD ||
+    Math.hypot(dx - half, dz + half) <= maxD ||
+    Math.hypot(dx + half, dz + half) <= maxD
+  );
+}
+
 function Hills() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
 
@@ -47,14 +83,13 @@ function Hills() {
       for (let z = -outer; z <= outer; z += step) {
         const r = Math.hypot(x, z);
         if (r < HILLS.innerRadius || r > outer) continue;
-        // pond-as-terrain, ONE cell map (#29): hills and pond share this
-        // exact lattice; a cell belongs to pond/band (laid by Lake) or to
-        // hills (laid here) — classified by center, so nothing overlaps
-        // and no sliver gaps exist at the boundary
-        const lakeD = Math.hypot(x - LAKE.center[0], z - LAKE.center[1]);
-        if (lakeD <= LAKE.radius + LAKE.shoreWidth) continue;
+        // pond-as-terrain, ONE cell map (#29 pass 2): the boundary is
+        // EXACT on the shared lattice — the band claims every cell whose
+        // box would touch it (center within maxD + half-diagonal), and
+        // hills skips exactly that set. No straddling box can cut in.
+        if (isPondBandCell(x, z)) continue;
         // no jitter near the band so hills boxes meet the band flush
-        const nearBand = lakeD < LAKE.radius + LAKE.shoreWidth + step * 1.5;
+        const nearBand = Math.hypot(x - LAKE.center[0], z - LAKE.center[1]) < LAKE.radius + LAKE.shoreWidth + step * 1.5;
         const jitterScale = nearBand ? 0 : HILLS.jitter;
         const jx = x + (rng() - 0.5) * step * jitterScale;
         const jz = z + (rng() - 0.5) * step * jitterScale;
@@ -112,17 +147,22 @@ function Lake() {
   const subStep = step / sub;
   const cx = LAKE.center[0];
   const cz = LAKE.center[1];
-  const maxD = LAKE.radius + LAKE.shoreWidth;
 
   const bandCount = useMemo(() => {
-    // band cells x sub^2 pieces, generous
-    const cells = Math.ceil((Math.PI * (maxD + step) ** 2) / (step * step));
-    return Math.ceil(cells * sub * sub * 1.3);
+    // band covers the FULL corner-extended ring, generously sized
+    const r = LAKE.radius + LAKE.shoreWidth + step * 1.6;
+    const cells = Math.ceil((Math.PI * (r + step) ** 2 - Math.PI * LAKE.radius ** 2) / (step * step));
+    return Math.ceil(cells * sub * sub * 1.5);
   }, []);
   const waterCount = useMemo(
     () => Math.ceil((Math.PI * (LAKE.radius + step) ** 2) / (step * step)),
     [],
   );
+
+  /** band cells: every lattice cell whose box touches the band region —
+   *  corner-exact (isPondBandCell), full ring, uniformly granulated */
+  const isBandCell = (x: number, z: number) =>
+    isPondBandCell(x, z) && Math.hypot(x - LAKE.center[0], z - LAKE.center[1]) > LAKE.radius;
 
   useEffect(() => {
     const band = bandRef.current;
@@ -146,7 +186,7 @@ function Lake() {
     for (let x = -outer; x <= outer; x += step) {
       for (let z = -outer; z <= outer; z += step) {
         const d = Math.hypot(x - cx, z - cz);
-        if (d > maxD + step * 0.75) continue;
+        if (d > LAKE.radius + LAKE.shoreWidth + step * 2) continue;
         const ground = groundAt(x, z).height;
         if (d <= LAKE.radius) {
           // POND CELL: carved solid floor + translucent water body above
@@ -157,14 +197,16 @@ function Lake() {
           floor.setMatrixAt(fi, mat);
           floor.setColorAt(fi, color.copy(bottom));
           fi++;
-          const surf = ground - LAKE.surfaceDrop;
-          const wh = Math.max(0.05, surf - floorTop);
+          // WATER FINDS ITS LEVEL (#29 pass 2): one constant surface Y
+          // for the entire pond — sampled once at the pond center, never
+          // per-cell. Every cube's top shares this exact Y.
+          const wh = Math.max(0.05, pondWaterSurfaceY() - floorTop);
           mat.makeScale(step * 0.98, wh, step * 0.98);
           mat.setPosition(x, floorTop + wh / 2, z);
           water.setMatrixAt(wi, mat);
           water.setColorAt(wi, color.copy(waterCol));
           wi++;
-        } else {
+        } else if (isBandCell(x, z)) {
           // BAND CELL: granulate into sub x sub snapped sub-pieces.
           // Sub-piece heights follow the heightfield at their own centers
           // (sub-pieces are exact subdivisions — still on the parent
