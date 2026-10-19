@@ -34,11 +34,20 @@ export const LONG_SHADOWS = {
 } as const;
 
 export const GRASS_TUFTS = {
-  /** sparse swaying voxel grass tufts scattered on the meadow */
+  /**
+   * #23: the 260 thin vertical blades read as bare stalks at voxel scale.
+   * Redesigned as wide, leafy clumps: each clump is a fan of short, wide
+   * blades (see GrassTufts.tsx) with a low profile — unmistakably grass,
+   * not sticks. Hard cap ~80 clumps (5 blades each = 400 instances, still
+   * one draw call).
+   */
   enabled: true,
-  count: 260,
-  /** tuft geometry: 2-3 thin blades per tuft */
-  bladeSize: [0.07, 0.45, 0.07] as [number, number, number],
+  count: 80,
+  /** blades per clump, fanned outward with varied tilt */
+  bladesPerClump: 5,
+  bladeSize: [0.16, 0.32, 0.05] as [number, number, number],
+  /** how far blades lean out from the clump center */
+  fanSpread: 0.45,
   colors: ['#7d9f54', '#8fae5f', '#94b364'],
   swaySpeed: 1.3,
   swayAmplitude: 0.16,
