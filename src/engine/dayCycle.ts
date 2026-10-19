@@ -141,14 +141,35 @@ export function skyPaletteAt(phase: number): SkyPalette {
   return KEYS[0].p;
 }
 
-/** sun/moon azimuth-elevation model: a soft circle path over the meadow.
- *  Elevation peaks at noon (0.5), dips below the horizon at night. */
+/**
+ * Sun/moon azimuth-elevation model: a soft circle path over the meadow.
+ * Elevation peaks at noon (0.5), dips below the horizon at night.
+ *
+ * PR #35 BLOCKER FIX: isDaylight previously used elevation > 0.05, which
+ * reads golden hour (0.82, the DEFAULT phase) and the whole lit evening as
+ * "night" — so the night-homing fix parked every bee at the hive from
+ * boot, and the saved phase (~0.82+) made it survive reload while the P
+ * panel printed "day/evening". Daylight must mean WHAT THE SKY SHOWS: the
+ * palette's own ambient keyframes are the visual source of truth — the
+ * day is lit from the dawn ramp (0.22) through the dusk ramp (0.88);
+ * between 0.88 and 1.0/0.22 the sky reads night.
+ */
 export function sunElevation(phase: number): number {
   const p = ((phase % 1) + 1) % 1;
   return Math.sin((p - 0.25) * Math.PI * 2) * 0.9;
 }
 
-/** true when the sun is meaningfully up (drives shadows/warmth later) */
+/** the lit window — matches the palette keyframes (dawn 0.22 .. dusk 0.88) */
+export const DAYLIGHT_START = 0.22;
+export const DAYLIGHT_END = 0.88;
+
+/** true when the sky reads as lit (day, incl. golden hour) — one source
+ *  for the bees' night-homing, the P panel, and any day-gated behavior.
+ *  Epsilon-tolerant boundaries: the phase wrap ((p % 1) + 1) % 1 is not
+ *  exact in float math (0.22 wraps to 0.21999...97), and a boundary that
+ *  flips on rounding would split the panel from the bees again. */
 export function isDaylight(phase: number): boolean {
-  return sunElevation(phase) > 0.05;
+  const p = ((phase % 1) + 1) % 1;
+  const eps = 1e-9;
+  return p >= DAYLIGHT_START - eps && p <= DAYLIGHT_END + eps;
 }

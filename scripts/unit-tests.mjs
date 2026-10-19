@@ -324,7 +324,21 @@ test('sun model: elevation peaks at noon, night is dark', () => {
   assert.ok(sunElevation(0.0) < -0.7, 'midnight should be low: ' + sunElevation(0.0).toFixed(2));
   assert.ok(isDaylight(0.5), 'noon is daylight');
   assert.ok(!isDaylight(0.0), 'midnight is not daylight');
-  assert.ok(!isDaylight(0.82) || sunElevation(0.82) > 0.05, 'golden hour check consistent');
+});
+
+test('daylight window matches the sky (PR #35 blocker regression test)', () => {
+  // the lit sky window per the palette keyframes: 0.22 dawn .. 0.88 dusk.
+  // The old elevation>0.05 test read golden hour (0.82) as NIGHT — that
+  // parked the whole swarm at the hive from the default boot phase.
+  assert.ok(isDaylight(0.82), 'golden hour DEFAULT must be daylight (bees forage)');
+  assert.ok(isDaylight(GOLDEN_HOUR), 'the boot phase must be daylight');
+  assert.ok(isDaylight(0.3) && isDaylight(0.5) && isDaylight(0.65), 'the day window is lit');
+  assert.ok(isDaylight(0.22) && isDaylight(0.88), 'window boundaries inclusive');
+  assert.ok(!isDaylight(0.21) && !isDaylight(0.89), 'outside the window reads night');
+  assert.ok(!isDaylight(0.95) && !isDaylight(0.0) && !isDaylight(0.1), 'deep night is night');
+  // the panel's day/evening buttons must land in daylight, night must not
+  assert.ok(isDaylight(0.3) && isDaylight(0.5) && isDaylight(0.82), 'panel day phases are lit');
+  assert.ok(!isDaylight(0.97), 'panel night phase is dark');
 });
 
 // ---------- session 5 U6 (#13): day/night clock ----------
