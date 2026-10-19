@@ -47,12 +47,15 @@ function Hills() {
       for (let z = -outer; z <= outer; z += step) {
         const r = Math.hypot(x, z);
         if (r < HILLS.innerRadius || r > outer) continue;
-        // #28: carve the pond basin — no hills ground inside the water
-        // disc, so the sunken water sits in a real depression with the
-        // brown shore ring reading above the waterline
-        if (Math.hypot(x - LAKE.center[0], z - LAKE.center[1]) <= LAKE.radius) continue;
-        const jx = x + (rng() - 0.5) * step * HILLS.jitter;
-        const jz = z + (rng() - 0.5) * step * HILLS.jitter;
+        // pond-as-terrain: the pond body + sandy band are laid by the pond
+        // system on THIS grid — hills boxes yield those cells entirely
+        const lakeD = Math.hypot(x - LAKE.center[0], z - LAKE.center[1]);
+        if (lakeD <= LAKE.radius + LAKE.shoreWidth) continue;
+        // no jitter near the band edge so terrain meets the band flush
+        const nearBand = lakeD < LAKE.radius + LAKE.shoreWidth + step * 1.5;
+        const jitterScale = nearBand ? 0 : HILLS.jitter;
+        const jx = x + (rng() - 0.5) * step * jitterScale;
+        const jz = z + (rng() - 0.5) * step * jitterScale;
         const h = backgroundHeight(jx, jz);
         const size = step * (HILLS.minSize + rng() * (HILLS.maxSize - HILLS.minSize));
         const extraDepth = Math.max(0, h - backgroundHeight(0, 0)) + 4;
@@ -89,132 +92,114 @@ function Hills() {
 }
 
 function Lake() {
+  /**
+   * Pond-as-terrain: the pond is part of the terrain grid, not a special
+   * object. On the SAME 1.6 step the hills use (snapped, unjittered here):
+   *  - SANDY BAND: terrain-height boxes in a ring around the carved area,
+   *    lightly sand-tinted — the un-carved banks (highest by construction)
+   *  - CARVED BASIN: inside the disc, terrain boxes DROPPED to the carved
+   *    floor depth, tinted blue-green — the solid pond bottom, no void
+   *  - WATER BODY: translucent boxes filling from the floor up to a
+   *    surface half a step below the band top (#28 closed by construction)
+   * Every piece snaps to the same grid the regular terrain follows, so
+   * edges meet in clean voxel steps: no gaps, no overlaps, no offsets.
+   */
+  const bandRef = useRef<THREE.InstancedMesh>(null);
+  const floorRef = useRef<THREE.InstancedMesh>(null);
   const waterRef = useRef<THREE.InstancedMesh>(null);
-  const shoreRef = useRef<THREE.InstancedMesh>(null);
 
-  const shoreCount = useMemo(() => {
-    const step = LAKE.voxelStep;
-    const ringArea = Math.PI * ((LAKE.radius + LAKE.shoreWidth) ** 2 - LAKE.radius ** 2);
-    return Math.ceil(ringArea / (step * step)) * 2;
+  const step = LAKE.voxelStep;
+  const cx = LAKE.center[0];
+  const cz = LAKE.center[1];
+  // capacity bounds per ring (generous, counts set after fill)
+  const bandCount = useMemo(() => {
+    const r = LAKE.radius + LAKE.shoreWidth;
+    return Math.ceil((Math.PI * (r + step) ** 2) / (step * step));
   }, []);
-
-  /**
-   * Voxel water capacity: every grid cell whose center lies within
-   * radius + one step (boundary cells included) — the same step grid the
-   * shore ring uses, snapped to cell centers. Generous upper bound.
-   */
-  const waterCount = useMemo(() => {
-    const step = LAKE.voxelStep;
-    const r = LAKE.radius + step;
-    return Math.ceil(Math.PI * (r * 1.2) ** 2 / (step * step)) + 8;
-  }, []);
+  const waterCount = useMemo(
+    () => Math.ceil((Math.PI * (LAKE.radius + step) ** 2) / (step * step)),
+    [],
+  );
 
   useEffect(() => {
-    const shore = shoreRef.current;
-    if (!shore) return;
-    const rng = makeRng(715517);
-    const mat = new THREE.Matrix4();
-    const color = new THREE.Color();
-    const fogColor = new THREE.Color(FOG.color);
-    const bed = new THREE.Color(LAKE.bedColor);
-    const sand = new THREE.Color(LAKE.shoreColor);
-    const step = LAKE.voxelStep;
-    let i = 0;
-    for (let x = -60; x <= 60; x += step) {
-      for (let z = -60; z <= 60; z += step) {
-        const dx = x - LAKE.center[0];
-        const dz = z - LAKE.center[1];
-        const d = Math.hypot(dx, dz);
-        if (d < LAKE.radius - 0.2 || d > LAKE.radius + LAKE.shoreWidth) continue;
-        const jx = x + (rng() - 0.5) * step * 0.6;
-        const jz = z + (rng() - 0.5) * step * 0.6;
-        const jd = Math.hypot(jx - LAKE.center[0], jz - LAKE.center[1]);
-        const h = backgroundHeight(jx, jz);
-        const sink = THREE.MathUtils.clamp((LAKE.radius + LAKE.shoreWidth - jd) / LAKE.shoreWidth, 0, 1);
-        const y = h - 0.35 * sink;
-        mat.makeScale(step * 1.15, 1.1, step * 1.15);
-        mat.setPosition(jx, y - 0.5, jz);
-        shore.setMatrixAt(i, mat);
-        color.copy(sand).lerp(bed, sink).lerp(fogColor, 0.18);
-        shore.setColorAt(i, color);
-        i++;
-      }
-    }
-    shore.count = i;
-    shore.instanceMatrix.needsUpdate = true;
-    if (shore.instanceColor) shore.instanceColor.needsUpdate = true;
-    shore.computeBoundingSphere();
-  }, []);
-
-  /**
-   * Voxel water surface: instanced cubes on the step grid, snapped to cell
-   * centers (no rounded disc). A cell is water when its center is within
-   * LAKE.radius; boundary cells whose center is just outside but whose
-   * area still overlaps the disc get a partial-width box, so the waterline
-   * steps cleanly into the shore. Each cube's top sits at
-   * LAKE.level + LAKE.surfaceHeight (a visible voxel lip above the old
-   * plane level); depth tint blends the two water colors so shallow edges
-   * read warmer.
-   */
-  useEffect(() => {
+    const band = bandRef.current;
+    const floor = floorRef.current;
     const water = waterRef.current;
-    if (!water) return;
+    if (!band || !floor || !water) return;
     const mat = new THREE.Matrix4();
     const color = new THREE.Color();
-    const colorA = new THREE.Color(LAKE.colorA);
-    const bed = new THREE.Color(LAKE.bedColor);
-    const step = LAKE.voxelStep;
-    const cx = LAKE.center[0];
-    const cz = LAKE.center[1];
-    let i = 0;
-    for (let gx = -60; gx <= 60; gx += step) {
-      for (let gz = -60; gz <= 60; gz += step) {
-        const x = cx + Math.round((gx - cx) / step) * step;
-        const z = cz + Math.round((gz - cz) / step) * step;
-        const d = Math.hypot(x - cx, z - cz);
-        if (d > LAKE.radius + step * 0.5) continue;
-        // fraction of the cell covered by the disc (0..1)
-        const cover = THREE.MathUtils.clamp((LAKE.radius - d) / step + 0.5, 0, 1);
-        if (cover <= 0.05) continue;
-        const size = step * Math.max(0.35, cover);
-        // #28: the surface sinks BELOW the terrain (half a voxel step);
-        // the basin is carved from the hills ground, so these sunken cubes
-        // line the depression. Depth covers the sink plus wall overlap so
-        // no gaps show between water and carved basin sides.
-        const cellTop = groundAt(x, z).height - LAKE.sinkDepth;
-        const bottom = cellTop - LAKE.cubeDepth - LAKE.sinkDepth;
-        const h = cellTop - bottom;
-        mat.makeScale(size, h, size);
-        mat.setPosition(x, bottom + h / 2, z);
-        water.setMatrixAt(i, mat);
-        // depth tint: full water blue at center, gentle warm bed tint at
-        // the rim so edges read shallow — never muddy, never dark
-        const depth = THREE.MathUtils.clamp((LAKE.radius - d) / LAKE.radius, 0, 1);
-        color.copy(colorA).lerp(bed, (1 - depth) * LAKE.rimTint);
-        water.setColorAt(i, color);
-        i++;
+    const sand = new THREE.Color(LAKE.shoreColor);
+    const bottom = new THREE.Color(LAKE.bottomColor);
+    const waterCol = new THREE.Color(LAKE.colorA);
+
+    let bi = 0; // band index
+    let fi = 0; // floor index
+    let wi = 0; // water index
+    // one deterministic pass over the pond's grid neighborhood — snapped,
+    // NO jitter: the pond pieces are grid-locked by definition
+    for (let gx = cx - (LAKE.radius + LAKE.shoreWidth) - step; gx <= cx + (LAKE.radius + LAKE.shoreWidth) + step; gx += step) {
+      for (let gz = cz - (LAKE.radius + LAKE.shoreWidth) - step; gz <= cz + (LAKE.radius + LAKE.shoreWidth) + step; gz += step) {
+        const d = Math.hypot(gx - cx, gz - cz);
+        const ground = groundAt(gx, gz).height;
+        if (d <= LAKE.radius) {
+          // CARVED BASIN: solid floor at the carved depth (blue-green,
+          // visible through the water), water body filling above it
+          const floorTop = ground - LAKE.carveDepth;
+          const depth = LAKE.carveDepth + 0.4; // reach under the banks
+          mat.makeScale(step * 1.02, depth, step * 1.02);
+          mat.setPosition(gx, floorTop - depth / 2, gz);
+          floor.setMatrixAt(fi, mat);
+          color.copy(bottom);
+          floor.setColorAt(fi, color);
+          fi++;
+          // water body: floor -> surface (a step below the band top)
+          const surf = ground - LAKE.surfaceDrop;
+          const wh = Math.max(0.05, surf - floorTop);
+          mat.makeScale(step * 0.98, wh, step * 0.98);
+          mat.setPosition(gx, floorTop + wh / 2, gz);
+          water.setMatrixAt(wi, mat);
+          color.copy(waterCol);
+          water.setColorAt(wi, color);
+          wi++;
+        } else if (d <= LAKE.radius + LAKE.shoreWidth) {
+          // SANDY BAND: terrain-height boxes (the un-carved banks), tinted
+          const depth = 1.4 + Math.max(0, ground) * 0.5;
+          mat.makeScale(step * 1.02, depth, step * 1.02);
+          mat.setPosition(gx, ground - depth * 0.5 + 0.01, gz);
+          band.setMatrixAt(bi, mat);
+          color.copy(sand).lerp(bottom, 0.15);
+          band.setColorAt(bi, color);
+          bi++;
+        }
       }
     }
-    water.count = i;
-    water.instanceMatrix.needsUpdate = true;
-    if (water.instanceColor) water.instanceColor.needsUpdate = true;
-    water.computeBoundingSphere();
+    band.count = bi;
+    floor.count = fi;
+    water.count = wi;
+    for (const [mesh] of [[band], [floor], [water]] as [THREE.InstancedMesh][]) {
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    }
   }, []);
 
   return (
     <group>
-      <instancedMesh ref={shoreRef} args={[undefined, undefined, shoreCount]} receiveShadow>
+      <instancedMesh ref={bandRef} args={[undefined, undefined, bandCount]} receiveShadow>
         <boxGeometry args={[1, 1, 1]} />
         <meshLambertMaterial />
       </instancedMesh>
-      <instancedMesh ref={waterRef} args={[undefined, undefined, waterCount]} receiveShadow>
+      <instancedMesh ref={floorRef} args={[undefined, undefined, waterCount]} receiveShadow>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshLambertMaterial />
+      </instancedMesh>
+      <instancedMesh ref={waterRef} args={[undefined, undefined, waterCount]}>
         <boxGeometry args={[1, 1, 1]} />
         <meshLambertMaterial transparent opacity={LAKE.opacity} />
       </instancedMesh>
     </group>
   );
 }
-
 function Forest() {
   const trunkRef = useRef<THREE.InstancedMesh>(null);
   const foliageRef = useRef<THREE.InstancedMesh>(null);

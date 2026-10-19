@@ -40,41 +40,30 @@ export const HILLS = {
 export const LAKE = {
   center: [26, -24] as [number, number],
   radius: 8,
-  level: -0.3,
-  /** light reflective pond blue (DESIGN.md sky-blue family) */
-  colorA: '#9ed2ec',
-  bedColor: '#d8c49a',
-  shoreColor: '#cbb98a',
+  /**
+   * Pond-as-terrain (final geometry): the pond is carved INTO the terrain
+   * grid (the Hills 1.6 step at this radius) — a depression like any
+   * terrain feature. Saves are untouched: the pond is world decoration,
+   * generated deterministically every load, so v1-v4 worlds, fresh worlds,
+   * and ?demo=1 all get the identical carved pond with zero migration.
+   */
+  /** grid step = the terrain's own step here (HILLS.step) — one grid */
+  voxelStep: 1.6,
+  /** carve depth: pond floor sits this far below the surrounding terrain */
+  carveDepth: 1.5,
+  /** water surface sits this far below the shoreline terrain top (#28) */
+  surfaceDrop: 0.8,
+  /** width of the sandy shoreline band around the carved area */
   shoreWidth: 2.6,
-  bobAmplitude: 0.03,
-  tintCycleSeconds: 9,
-  /**
-   * Voxel water rework (session 3): the surface is instanced cubes on this
-   * step grid (same cell size as the shore ring), snapped to cell centers —
-   * no rounded edges. Boundary cells become partial-width boxes so the
-   * waterline steps cleanly into the terrain instead of slicing it.
-   */
-  voxelStep: 1.4,
-  /**
-   * #28: the 0.22 voxel lip put water ABOVE the terrain. The surface now
-   * sits this far BELOW the ground height at each cell (about half a voxel
-   * step: 1.4/2 = 0.7 is too deep for the thin cubes, so a visible-but-
-   * sunken 0.35), with the pond basin carved out of the hills ground so
-   * sunken water stays visible.
-   */
-  sinkDepth: 0.35,
-  /**
-   * #22 fix: the pond read nearly black. Causes: deep cube sides under a
-   * mostly-opaque material, plus 55% bed-brown tint at the rim. Now the
-   * cubes are shallow (just the lip), the palette is a light reflective
-   * pond blue matching DESIGN.md's sky-blue, and the shallow tint is a
-   * gentle 0.25 toward the sandy bed so edges read warm, not muddy.
-   */
-  rimTint: 0.25,
-  /** thin water: only the visible lip matters; deep sides read black */
-  cubeDepth: 0.34,
+  /** floor tint: solid, blue-green, visible through the translucent water */
+  bottomColor: '#6b8f7a',
+  /** sandy band tint */
+  shoreColor: '#cbb98a',
+  /** water body color (the working #22 fix: light reflective pond blue) */
+  colorA: '#9ed2ec',
   opacity: 0.9,
 };
+
 
 export const TREES = {
   trunkColors: ['#8a5a2b', '#7a4c24', '#96683a'],
