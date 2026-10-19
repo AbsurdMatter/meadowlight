@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { usePlacementStore } from '../render/placementStore';
-import { theme } from './theme';
+import { theme, headingStyle } from './theme';
 
 const TOAST_MS = 7000;
 
@@ -24,7 +24,7 @@ function Toast({ id, title, body }: { id: number; title: string; body: string })
         pointerEvents: 'auto',
       }}
     >
-      <div style={{ fontWeight: 600, marginBottom: 2 }}>{title}</div>
+      <div style={{ ...headingStyle(theme.font.bodySize), marginBottom: 2 }}>{title}</div>
       <div style={{ fontSize: theme.font.smallSize, lineHeight: 1.4 }}>{body}</div>
       <button
         onClick={() => dismiss(id)}

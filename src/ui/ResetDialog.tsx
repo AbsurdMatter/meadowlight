@@ -1,6 +1,6 @@
 import { Component, useState, type ReactNode } from 'react';
 import { usePlacementStore } from '../render/placementStore';
-import { theme } from './theme';
+import { theme, headingStyle } from './theme';
 
 class DialogBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -79,7 +79,7 @@ function ResetDialogInner() {
               maxWidth: 380,
             }}
           >
-            <strong style={{ fontSize: theme.font.titleSize }}>Reset your meadow?</strong>
+            <strong style={headingStyle(theme.font.titleSize)}>Reset your meadow?</strong>
             <p style={{ fontSize: theme.font.bodySize, lineHeight: theme.font.lineHeight, margin: '10px 0 18px' }}>
               All placed flowers, structures, progress and milestones will be deleted.
               This cannot be undone.

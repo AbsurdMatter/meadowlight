@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { usePlacementStore } from '../render/placementStore';
-import { theme } from './theme';
+import { theme, headingStyle } from './theme';
 
 /**
  * Gentle 3-step onboarding: "plant a flower" -> "click it to learn" ->
@@ -57,7 +57,7 @@ export function Onboarding() {
       <div style={{ fontSize: theme.font.smallSize - 1, letterSpacing: 0.6, textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 4 }}>
         Welcome to your meadow · step {step + 1} of 3
       </div>
-      <div style={{ fontWeight: 600, fontSize: theme.font.bodySize + 1, marginBottom: 6 }}>{STEPS[step].title}</div>
+      <div style={{ ...headingStyle(theme.font.bodySize + 1), marginBottom: 6 }}>{STEPS[step].title}</div>
       <div style={{ fontSize: theme.font.smallSize + 1, lineHeight: theme.font.lineHeight, marginBottom: 10 }}>{STEPS[step].body}</div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <button

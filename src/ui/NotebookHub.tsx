@@ -12,7 +12,7 @@ import {
 } from '../data/facts';
 import { MILESTONES } from '../data/milestones';
 import { usePlacementStore } from '../render/placementStore';
-import { theme } from './theme';
+import { theme, headingStyle } from './theme';
 
 class HubBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -117,7 +117,7 @@ function HubInner() {
       {open && (
         <div style={hubPanelStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <strong style={{ fontSize: theme.font.titleSize }}>Field Notebook</strong>
+            <strong style={headingStyle(theme.font.titleSize)}>Field Notebook</strong>
             <button
               onClick={() => setOpen(false)}
               style={{ border: 'none', background: 'transparent', color: theme.color.textSoft, fontSize: 16, cursor: 'pointer', fontFamily: theme.font.family }}
@@ -126,7 +126,7 @@ function HubInner() {
             </button>
           </div>
 
-          <h4 style={{ margin: '14px 0 6px', fontSize: theme.font.headerSize, letterSpacing: 0.4 }}>LEARNED FACTS</h4>
+          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '14px 0 6px', letterSpacing: 0.4 }}>LEARNED FACTS</h4>
           {learnedByGroup.length === 0 && miscSeen.length === 0 && (
             <div style={{ fontSize: 13, opacity: 0.75 }}>
               Nothing yet — every flower, hive, and quiet corner of the meadow has a story. Click one with an empty hand and it will land here. 🐝
@@ -134,7 +134,7 @@ function HubInner() {
           )}
           {learnedByGroup.map((g) => (
             <div key={g.group} style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{g.group}</div>
+              <div style={headingStyle(13)}>{g.group}</div>
               {g.facts.map((f) => (
                 <div key={f.id} style={{ fontSize: 13, lineHeight: 1.5, opacity: 0.9 }}>
                   ✦ {f.text}
@@ -151,7 +151,7 @@ function HubInner() {
             ) : null;
           })}
 
-          <h4 style={{ margin: '16px 0 6px', fontSize: theme.font.headerSize, letterSpacing: 0.4 }}>MILESTONES</h4>
+          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>MILESTONES</h4>
           {MILESTONES.map((m) => {
             const unlocked = milestones.includes(m.id);
             return (

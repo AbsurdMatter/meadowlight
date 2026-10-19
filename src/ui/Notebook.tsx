@@ -6,7 +6,7 @@ import {
   chooseStructureFact,
   chooseMeadowFact,
 } from '../engine/factSelection';
-import { theme } from './theme';
+import { theme, headingStyle } from './theme';
 
 /**
  * Ambient info panel: shows a fact for the inspected object, varies content
@@ -112,7 +112,7 @@ export function Notebook() {
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <strong style={{ fontSize: theme.font.bodySize }}>
+        <strong style={headingStyle()}>
           {content.title}
           {content.choice.alreadySeen && (
             <span title="You've read this one before" style={{ fontSize: theme.font.smallSize, marginLeft: 6, opacity: 0.6 }}>

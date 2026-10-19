@@ -24,6 +24,12 @@ export const theme = {
     titleSize: 17,
     headerSize: 13,
     lineHeight: 1.5,
+    /** weight hierarchy: 700 for headings/fact titles/section labels,
+     *  500 for emphasis in body, 400 for plain body — part of the token
+     *  language, never bolted on per panel */
+    weightHeading: 700,
+    weightBody: 400,
+    weightEmphasis: 500,
   },
   color: {
     text: '#5a4322',
@@ -75,6 +81,19 @@ export const panelStyle: React.CSSProperties = {
   borderRadius: theme.border.radiusPanel,
   boxShadow: theme.border.shadowPanel,
 };
+
+/**
+ * Heading preset — the ONE way panels express hierarchy: Pixelify Sans 700
+ * (self-hosted), themed color, tight letter spacing. Section labels, fact
+ * titles, dialog headings all use this; body copy stays 400/500.
+ */
+export const headingStyle = (size?: number): React.CSSProperties => ({
+  fontFamily: theme.font.family,
+  fontWeight: theme.font.weightHeading,
+  color: theme.color.text,
+  fontSize: size ?? theme.font.bodySize,
+  letterSpacing: 0.2,
+});
 
 /** Standard control (buttons): chunky border, hard shadow, pressed feel. */
 export const controlStyle = (active = false, variant: 'default' | 'clay' | 'sage' = 'default'): React.CSSProperties => ({

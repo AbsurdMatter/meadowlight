@@ -3,7 +3,7 @@ import { PLANTS } from '../data/plants';
 import { STRUCTURES, type StructureId } from '../data/structures';
 import { usePlacementStore } from '../render/placementStore';
 import { renderVoxelThumb } from '../engine/thumbnails';
-import { theme } from './theme';
+import { theme, headingStyle } from './theme';
 
 const chipStyle = (active: boolean, enabled: boolean): React.CSSProperties => ({
   border: `${theme.border.chunk}px solid ${active ? theme.color.clay : 'transparent'}`,
@@ -20,7 +20,7 @@ const chipStyle = (active: boolean, enabled: boolean): React.CSSProperties => ({
 });
 
 const sectionLabelStyle: React.CSSProperties = {
-  fontSize: 11,
+  ...headingStyle(11),
   letterSpacing: 0.6,
   textTransform: 'uppercase',
   color: theme.color.textFaint,
