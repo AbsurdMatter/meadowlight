@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -73,6 +73,9 @@ const assert = require('node:assert');
 const OUT = require('node:path').join(__dirname, '..', 'out');
 const { computeAppeal, inBloom, plantedSpecies, hasBloom, yearRoundBloom, beesForHive, FORAGE_RADIUS } = require(OUT + '/engine/pollinator.js');
 const { PLANTS, PLANT_BY_ID } = require(OUT + '/data/plants.js');
+const { groundAt, waterSurfaceHeight, pondFloorHeight } = require(OUT + '/engine/ground.js');
+const { LAKE, TERRAIN_SHAPE, shapedHeight, POND_FLAT_HEIGHT } = require(OUT + '/data/environment.js');
+const { MEADOW_SIZE, terrainHeight } = require(OUT + '/engine/terrain.js');
 const { SEASONS } = require(OUT + '/data/seasons.js');
 const { checkMilestones } = require(OUT + '/engine/milestones.js');
 const { variationFor, rollVariation, noVariation, VARIATION_TUNING } = require(OUT + '/engine/variation.js');
@@ -167,6 +170,97 @@ test('reachability: every species is plantable and blooms in a traceable session
   for (const s of SEASONS) {
     assert.ok(hasBloom(all, s), 'no roster species blooms in ' + s);
   }
+});
+
+// ---------- session 5 U2 (#31): terrain shaping surveys ----------
+
+test('pond plateau: water sits below its banks everywhere on the flat zone', () => {
+  // bank margin: bank height minus water surface, sampled densely over the
+  // full 360° ring between the pond edge and the flat radius
+  const waterY = POND_FLAT_HEIGHT - LAKE.surfaceDrop;
+  let minMargin = Infinity;
+  let worst = null;
+  for (let a = 0; a < 360; a += 2) {
+    const rad = (a * Math.PI) / 180;
+    for (let d = LAKE.radius; d <= TERRAIN_SHAPE.pondFlatRadius; d += 0.5) {
+      const x = LAKE.center[0] + Math.cos(rad) * d;
+      const z = LAKE.center[1] + Math.sin(rad) * d;
+      const bank = groundAt(x, z).height;
+      const margin = bank - waterY;
+      if (margin < minMargin) { minMargin = margin; worst = { a, d: +d.toFixed(1), margin: +margin.toFixed(3) }; }
+    }
+  }
+  // #28: the bank must be above the water everywhere; on the plateau it is
+  // the constant surfaceDrop by construction
+  assert.ok(minMargin > 0, 'bank below water somewhere: ' + JSON.stringify(worst));
+  // and essentially the designed constant inside the flat zone
+  assert.ok(
+    Math.abs(minMargin - LAKE.surfaceDrop) < 0.05,
+    'flat-zone bank margin should equal surfaceDrop, got min ' + minMargin.toFixed(3),
+  );
+});
+
+test('pond plateau is actually flat: heights constant within the flat radius', () => {
+  let min = Infinity;
+  let max = -Infinity;
+  for (let a = 0; a < 360; a += 2) {
+    const rad = (a * Math.PI) / 180;
+    for (let d = 0; d <= TERRAIN_SHAPE.pondFlatRadius - 0.5; d += 0.5) {
+      const x = LAKE.center[0] + Math.cos(rad) * d;
+      const z = LAKE.center[1] + Math.sin(rad) * d;
+      const h = shapedHeight(x, z);
+      if (h < min) min = h;
+      if (h > max) max = h;
+    }
+  }
+  assert.ok(max - min < 1e-9, 'plateau varies ' + (max - min).toFixed(6));
+  assert.ok(Math.abs(max - POND_FLAT_HEIGHT) < 1e-9, 'plateau not at pond-center height');
+});
+
+test('meadow rim is gentler: max rim step down from terrain to meadow shrinks', () => {
+  // the #29 rim survey measured every meadow-square edge cell against the
+  // nearest terrain cell; the meadow must stay BELOW terrain everywhere
+  // (no floating meadow), and the rim rise (terrain - meadow) should now be
+  // smaller with the halved lift rate inside the calm ring
+  const half = MEADOW_SIZE / 2;
+  let rimMax = -Infinity;
+  let count = 0;
+  for (let x = -half; x <= half; x += 1.6) {
+    for (const edge of [-half, half]) {
+      const m = groundAt(x, edge).height;
+      const t = shapedHeight(x, edge + (edge < 0 ? -1.6 : 1.6));
+      const rise = t - m;
+      if (rise > rimMax) rimMax = rise;
+      count++;
+      assert.ok(rise > 0, 'meadow above terrain at ' + x + ',' + edge);
+    }
+  }
+  // pre-#31 the rim rose up to ~4.7 at the corners (lift 0.045 x ~105 +
+  // wave); with calmLiftPerRadius 0.02 the max rise is materially smaller
+  assert.ok(rimMax < 3.2, 'rim still steep: max rise ' + rimMax.toFixed(2));
+});
+
+test('second outer rim: terrain rises steeply beyond the calm ring', () => {
+  // the hills zone ends at r=50, so the second rim has ~15 units to rise
+  // (outerRimStartRadius 34 -> 50 at 0.12/unit = +1.8 lift over the old
+  // profile's tail). Invariants that matter:
+  // 1. the rim is clearly ABOVE the old profile at the horizon edge
+  const h = shapedHeight(49, 0);
+  const oldProfile = terrainHeight(49, 0) + Math.max(0, 49 - 22) * 0.045;
+  assert.ok(h > oldProfile, 'outer rim below old profile at r=49: ' + h.toFixed(2) + ' vs ' + oldProfile.toFixed(2));
+  // 2. it rises faster than the old profile per unit radius (a real shoulder)
+  const riseNew = shapedHeight(49, 0) - shapedHeight(35, 0);
+  const riseOld =
+    terrainHeight(49, 0) + 27 * 0.045 - (terrainHeight(35, 0) + 13 * 0.045);
+  assert.ok(
+    riseNew > riseOld + 0.8,
+    'second rim not steeper than old profile: ' + riseNew.toFixed(2) + ' vs ' + riseOld.toFixed(2),
+  );
+  // 3. the calm middle stays LOW: at r=30 the new profile sits below the old
+  assert.ok(
+    shapedHeight(30, 0) < terrainHeight(30, 0) + 8 * 0.045,
+    'calm middle not gentler than old profile',
+  );
 });
 
 test('plantedSpecies dedupes and ignores unknown ids', () => {

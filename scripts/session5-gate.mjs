@@ -194,9 +194,65 @@ async function checkRoster(browser) {
   }
 }
 
+/** U2 (#31): the renderer must draw the shaped terrain — flat single-level
+ *  water below constant banks, hills following the new radius profile */
+async function checkTerrain(browser) {
+  const { page, errors } = await newPage(browser, url);
+  const r = await page.evaluate(async () => {
+    const w = window.__meadowlight;
+    w.clear();
+    await new Promise((res) => setTimeout(res, 500));
+    const scene = w.__three.scene;
+    // water: the Lake water instanced mesh — all instances share one Y
+    // (single level) and sit below the plateau bank height
+    let waterYs = [];
+    let plateauBanks = [];
+    scene.traverse((o) => {
+      if (!o.isInstancedMesh || !o.instanceMatrix) return;
+      const m = o.instanceMatrix.array;
+      const count = o.count;
+      // water body: translucent material + many instances near the pond
+      const mat = o.material;
+      if (mat && mat.transparent && mat.opacity >= 0.85 && mat.opacity <= 0.95) {
+        for (let i = 0; i < count; i++) {
+          const off = i * 16;
+          waterYs.push(+m[off + 13].toFixed(4));
+        }
+      }
+    });
+    // measure terrain tops around the pond ring via the placement ray oracle:
+    // the hook's terrainHeightAt reads the same groundAt the renderers use
+    const cx = 36, cz = -14;
+    for (let a = 0; a < 360; a += 30) {
+      const rad = (a * Math.PI) / 180;
+      const x = cx + Math.cos(rad) * 9.5;
+      const z = cz + Math.sin(rad) * 9.5;
+      plateauBanks.push(+w.terrainHeightAt(x, z).toFixed(4));
+    }
+    const uniq = [...new Set(waterYs)];
+    const bankMin = Math.min(...plateauBanks);
+    const bankMax = Math.max(...plateauBanks);
+    return {
+      waterCount: waterYs.length,
+      waterLevels: uniq,
+      plateauBanks: { bankMin, bankMax, spread: +(bankMax - bankMin).toFixed(4) },
+    };
+  });
+  // single water level, and banks constant (the plateau) above it
+  const oneLevel = r.waterLevels.length === 1;
+  const banksFlat = r.plateauBanks.spread < 1e-6;
+  const banksAboveWater = oneLevel && r.plateauBanks.bankMin > r.waterLevels[0] + 0.2;
+  rec.record('terrain.water-single-level-below-flat-banks', oneLevel && banksFlat && banksAboveWater,
+    JSON.stringify(r));
+  const re = realErrors(errors);
+  rec.record('terrain.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
 const browser = await launchChromium(chromium, { libPath });
 for (const check of checks.split(',')) {
   if (check === 'roster') await checkRoster(browser);
+  else if (check === 'terrain') await checkTerrain(browser);
   else rec.record(`unknown-check:${check}`, false, 'no such check');
 }
 await browser.close();

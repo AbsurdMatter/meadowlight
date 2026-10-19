@@ -1,5 +1,5 @@
 import { terrainHeight } from './terrain';
-import { LAKE, HILLS, MEADOW_BOWL } from '../data/environment';
+import { LAKE, MEADOW_BOWL, shapedHeight } from '../data/environment';
 import { MEADOW_SIZE } from './terrain';
 
 /**
@@ -36,10 +36,12 @@ export function groundAt(x: number, z: number): GroundInfo {
   // re-derive heights from here, so the bowl can never drift from what
   // renders.
   const inMeadow = Math.abs(x) <= MEADOW_SIZE / 2 && Math.abs(z) <= MEADOW_SIZE / 2;
+  // #31: outside the meadow square the ground is the shared shaped profile
+  // (damped calm ring, second outer rim, flat pond plateau). The hills
+  // renderer's backgroundHeight() uses the same function — one source.
   const height = inMeadow
     ? terrainHeight(x, z) - MEADOW_BOWL.depth
-    : terrainHeight(x, z) +
-      Math.max(0, Math.hypot(x, z) - HILLS.liftStartRadius) * HILLS.liftPerRadius;
+    : shapedHeight(x, z);
   return { kind: isWater ? 'water' : isShore ? 'shore' : 'meadow', height, lakeDistance, isWater, isShore };
 }
 
