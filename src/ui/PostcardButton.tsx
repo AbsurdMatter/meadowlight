@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { capturePostcardPng, downloadPostcard } from '../engine/postcard';
+import { theme } from './theme';
 
 /**
  * Postcard button: one click saves the meadow as a PNG.
  * Plain DOM UI — never intercepts canvas pointer events (one-input-path rule).
+ * Styled from the theme module only (#16).
  */
 export function PostcardButton() {
   const [saved, setSaved] = useState(false);
@@ -23,17 +25,17 @@ export function PostcardButton() {
       title="Save a postcard of your meadow"
       style={{
         padding: '8px 12px',
-        borderRadius: 10,
-        border: '2px solid #d9b36a',
-        background: saved ? '#dcedc2' : '#fff4dc',
-        color: '#5a4322',
-        fontFamily: 'inherit',
-        fontSize: 13,
+        borderRadius: theme.border.radius,
+        border: `${theme.border.chunk}px solid ${saved ? theme.color.sage : theme.color.honey}`,
+        background: saved ? theme.color.sageLight : theme.color.parchment,
+        color: theme.color.text,
+        fontFamily: theme.font.family,
+        fontSize: theme.font.smallSize,
         cursor: 'pointer',
-        boxShadow: '0 2px 8px rgba(122, 90, 43, 0.15)',
+        boxShadow: theme.border.shadow,
       }}
     >
-      {saved ? 'saved \u2713' : '\u{1F4F7} Postcard'}
+      {saved ? 'saved ✓' : '📸 Postcard'}
     </button>
   );
 }

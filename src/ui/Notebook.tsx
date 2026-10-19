@@ -6,12 +6,14 @@ import {
   chooseStructureFact,
   chooseMeadowFact,
 } from '../engine/factSelection';
+import { theme } from './theme';
 
 /**
  * Ambient info panel: shows a fact for the inspected object, varies content
  * (season/context variants, preferring unseen), marks already-seen facts, and
  * dismisses leniently — click outside, Escape, or starting a placement.
  * Never blocks anything: pure pointer-events on the card itself only.
+ * Styled from the theme module only (#16).
  */
 export function Notebook() {
   const entry = usePlacementStore((s) => s.notebook);
@@ -20,7 +22,6 @@ export function Notebook() {
   const markFactSeen = usePlacementStore((s) => s.markFactSeen);
   const selectedPlantId = usePlacementStore((s) => s.selectedPlantId);
   const selectedStructureId = usePlacementStore((s) => s.selectedStructureId);
-
   // Escape dismisses
   useEffect(() => {
     if (!entry) return;
@@ -30,12 +31,10 @@ export function Notebook() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [entry, close]);
-
   // starting a placement dismisses
   useEffect(() => {
     if (entry && (selectedPlantId || selectedStructureId)) close();
   }, [entry, selectedPlantId, selectedStructureId, close]);
-
   // click outside dismisses — but only for world/canvas clicks. Clicks on UI
   // chrome (buttons, panels) must NOT close the card mid-click: re-rendering
   // between pointerdown and click would swallow that UI element's own click
@@ -55,7 +54,6 @@ export function Notebook() {
     return () =>
       window.removeEventListener('pointerdown', onPointerDown, { capture: true } as EventListenerOptions);
   }, [entry, close]);
-
   const content = useMemo(() => {
     if (!entry) return null;
     const s = usePlacementStore.getState();
@@ -89,14 +87,11 @@ export function Notebook() {
           : 'A quiet winter — the bees rest.',
     };
   }, [entry, seenFacts]);
-
   // mark the shown fact as seen
   useEffect(() => {
     if (content) markFactSeen(content.choice.fact.id);
   }, [content, markFactSeen]);
-
   if (!entry || !content) return null;
-
   return (
     <div
       id="notebook-card"
@@ -105,21 +100,22 @@ export function Notebook() {
         bottom: 120,
         left: '50%',
         transform: 'translateX(-50%)',
-        padding: '14px 20px',
-        borderRadius: 16,
-        background: 'rgba(255, 250, 235, 0.96)',
-        boxShadow: '0 6px 24px rgba(122, 90, 43, 0.25)',
-        color: '#5a4322',
-        fontFamily: 'inherit',
+        padding: theme.spacing.panelPadding,
+        borderRadius: theme.border.radiusPanel,
+        background: theme.color.panel,
+        border: `${theme.border.chunk}px solid ${theme.color.honey}`,
+        boxShadow: theme.border.shadowPanel,
+        color: theme.color.text,
+        fontFamily: theme.font.family,
         maxWidth: 420,
         pointerEvents: 'auto',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <strong style={{ fontSize: 15 }}>
+        <strong style={{ fontSize: theme.font.bodySize }}>
           {content.title}
           {content.choice.alreadySeen && (
-            <span title="You've read this one before" style={{ fontSize: 12, marginLeft: 6, opacity: 0.6 }}>
+            <span title="You've read this one before" style={{ fontSize: theme.font.smallSize, marginLeft: 6, opacity: 0.6 }}>
               ✦
             </span>
           )}
@@ -129,17 +125,18 @@ export function Notebook() {
           style={{
             border: 'none',
             background: 'transparent',
-            color: '#7a5a2b',
+            color: theme.color.textSoft,
             fontSize: 16,
             cursor: 'pointer',
+            fontFamily: theme.font.family,
           }}
         >
           ✕
         </button>
       </div>
-      <div style={{ fontSize: 14, lineHeight: 1.5, marginTop: 4 }}>{content.choice.fact.text}</div>
+      <div style={{ fontSize: theme.font.bodySize, lineHeight: theme.font.lineHeight, marginTop: 4 }}>{content.choice.fact.text}</div>
       {content.hint && (
-        <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>{content.hint}</div>
+        <div style={{ fontSize: theme.font.smallSize, opacity: 0.7, marginTop: 6 }}>{content.hint}</div>
       )}
     </div>
   );

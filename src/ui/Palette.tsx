@@ -3,18 +3,19 @@ import { PLANTS } from '../data/plants';
 import { STRUCTURES, type StructureId } from '../data/structures';
 import { usePlacementStore } from '../render/placementStore';
 import { renderVoxelThumb } from '../engine/thumbnails';
+import { theme } from './theme';
 
 const chipStyle = (active: boolean, enabled: boolean): React.CSSProperties => ({
-  border: active ? '2px solid #d24a43' : '2px solid transparent',
-  borderRadius: 12,
+  border: `${theme.border.chunk}px solid ${active ? theme.color.clay : 'transparent'}`,
+  borderRadius: theme.border.radius,
   padding: '6px 8px',
-  background: active ? '#ffe9b8' : '#fff8e8',
+  background: active ? theme.color.honeyActive : theme.color.parchmentLight,
   cursor: enabled ? 'pointer' : 'not-allowed',
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
   gap: 2,
-  fontFamily: 'inherit',
+  fontFamily: theme.font.family,
   opacity: enabled ? 1 : 0.45,
 });
 
@@ -22,7 +23,7 @@ const sectionLabelStyle: React.CSSProperties = {
   fontSize: 11,
   letterSpacing: 0.6,
   textTransform: 'uppercase',
-  color: '#9a7a45',
+  color: theme.color.textFaint,
   alignSelf: 'flex-start',
   marginBottom: 2,
 };
@@ -33,17 +34,17 @@ const sectionStyle = (tint: string): React.CSSProperties => ({
   flexDirection: 'column',
   gap: 6,
   padding: '6px 10px 8px',
-  borderRadius: 12,
+  borderRadius: theme.border.radius,
   background: tint,
 });
 
 const buttonStyle = (active: boolean): React.CSSProperties => ({
   padding: '2px 10px',
-  borderRadius: 8,
-  border: `2px solid ${active ? '#7a9d54' : '#b0a58c'}`,
-  background: active ? '#dcedc2' : '#f0ead9',
-  color: '#5a4322',
-  fontFamily: 'inherit',
+  borderRadius: theme.border.radius,
+  border: `${theme.border.chunk}px solid ${active ? theme.color.sage : theme.color.honeyDark}`,
+  background: active ? theme.color.sageLight : theme.color.parchment,
+  color: theme.color.text,
+  fontFamily: theme.font.family,
   cursor: 'pointer',
 });
 
@@ -70,12 +71,10 @@ export function Palette() {
   const placementVariation = usePlacementStore((s) => s.placementVariation);
   const toggleVariation = usePlacementStore((s) => s.toggleVariation);
   const milestones = usePlacementStore((s) => s.milestones);
-
   const bathUnlocked = milestones.includes('fiveSpecies') || milestones.includes('beeBath');
   const hedgeUnlocked = milestones.includes('firstHive') || milestones.includes('hedgesUnlocked');
   const hotelUnlocked = milestones.includes('tenSpecies');
   const wildUnlocked = milestones.includes('hotelGuests');
-
   const unlocked: Record<StructureId, boolean> = {
     hive: true,
     bath: bathUnlocked,
@@ -83,7 +82,6 @@ export function Palette() {
     hedge: hedgeUnlocked,
     wildcorner: wildUnlocked,
   };
-
   // voxel thumbnails rendered once at startup, cached (no per-frame cost)
   const [thumbs, setThumbs] = useState<Record<string, string | null>>({});
   useEffect(() => {
@@ -97,7 +95,6 @@ export function Palette() {
     }
     setThumbs(t);
   }, []);
-
   const flora: PaletteEntry[] = useMemo(
     () => [
       ...PLANTS.map((p) => ({
@@ -131,12 +128,10 @@ export function Palette() {
       })),
     [thumbs],
   );
-
   const isActive = (e: PaletteEntry) =>
     e.kind === 'plant' ? selectedPlantId === e.id : selectedStructureId === e.id;
   const isEnabled = (e: PaletteEntry) =>
     e.kind === 'plant' ? true : unlocked[e.id as StructureId];
-
   const renderEntry = (e: PaletteEntry) => {
     const active = isActive(e);
     const enabled = isEnabled(e);
@@ -161,15 +156,14 @@ export function Palette() {
               height: 18,
               borderRadius: 5,
               background: e.swatch,
-              border: '2px solid #7a9d54',
+              border: `${theme.border.chunk}px solid ${theme.color.sage}`,
             }}
           />
         )}
-        <span style={{ fontSize: 12, color: '#7a5a2b', whiteSpace: 'nowrap' }}>{e.name}</span>
+        <span style={{ fontSize: theme.font.smallSize, color: theme.color.textSoft, whiteSpace: 'nowrap' }}>{e.name}</span>
       </button>
     );
   };
-
   return (
     <div
       style={{
@@ -182,15 +176,17 @@ export function Palette() {
         alignItems: 'center',
         gap: 8,
         padding: '10px 12px',
-        borderRadius: 16,
-        background: 'rgba(255, 244, 220, 0.9)',
-        boxShadow: '0 4px 16px rgba(122, 90, 43, 0.18)',
+        borderRadius: theme.border.radiusPanel,
+        background: theme.color.panel,
+        border: `${theme.border.chunk}px solid ${theme.color.honey}`,
+        boxShadow: theme.border.shadowPanel,
+        fontFamily: theme.font.family,
       }}
     >
       <div
         style={{
-          fontSize: 12,
-          color: '#7a5a2b',
+          fontSize: theme.font.smallSize,
+          color: theme.color.textSoft,
           display: 'flex',
           alignItems: 'center',
           gap: 6,

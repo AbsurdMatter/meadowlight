@@ -1,5 +1,6 @@
 import { Component, useState, type ReactNode } from 'react';
 import { usePlacementStore } from '../render/placementStore';
+import { theme } from './theme';
 
 class DialogBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -33,13 +34,14 @@ function ResetDialogInner() {
         onClick={() => show(true)}
         style={{
           padding: '4px 12px',
-          borderRadius: 10,
-          border: '2px solid #b0a58c',
-          background: '#f0ead9',
-          color: '#8a4a3a',
-          fontFamily: 'inherit',
-          fontSize: 12,
+          borderRadius: theme.border.radius,
+          border: `${theme.border.chunk}px solid ${theme.color.honeyDark}`,
+          background: theme.color.parchment,
+          color: theme.color.clayText,
+          fontFamily: theme.font.family,
+          fontSize: theme.font.smallSize,
           cursor: 'pointer',
+          boxShadow: theme.border.shadow,
         }}
         title="Start the meadow over"
       >
@@ -52,7 +54,7 @@ function ResetDialogInner() {
             // backdrop must cover and center over the whole window
             position: 'fixed',
             inset: 0,
-            background: 'rgba(74, 53, 34, 0.45)',
+            background: theme.color.scrim,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -67,17 +69,18 @@ function ResetDialogInner() {
             role="dialog"
             aria-modal="true"
             style={{
-              padding: '20px 24px',
-              borderRadius: 16,
-              background: 'rgba(255, 250, 235, 0.98)',
-              boxShadow: '0 8px 32px rgba(122, 90, 43, 0.35)',
-              color: '#5a4322',
-              fontFamily: 'inherit',
+              padding: theme.spacing.dialogPadding,
+              borderRadius: theme.border.radiusPanel,
+              background: theme.color.panelSolid,
+              border: `${theme.border.chunky}px solid ${theme.color.honey}`,
+              boxShadow: theme.border.shadowPanel,
+              color: theme.color.text,
+              fontFamily: theme.font.family,
               maxWidth: 380,
             }}
           >
-            <strong style={{ fontSize: 16 }}>Reset your meadow?</strong>
-            <p style={{ fontSize: 14, lineHeight: 1.5, margin: '10px 0 18px' }}>
+            <strong style={{ fontSize: theme.font.titleSize }}>Reset your meadow?</strong>
+            <p style={{ fontSize: theme.font.bodySize, lineHeight: theme.font.lineHeight, margin: '10px 0 18px' }}>
               All placed flowers, structures, progress and milestones will be deleted.
               This cannot be undone.
             </p>
@@ -86,12 +89,13 @@ function ResetDialogInner() {
                 onClick={() => show(false)}
                 style={{
                   padding: '6px 16px',
-                  borderRadius: 10,
-                  border: '2px solid #b0a58c',
-                  background: '#f0ead9',
-                  color: '#5a4322',
-                  fontFamily: 'inherit',
+                  borderRadius: theme.border.radius,
+                  border: `${theme.border.chunk}px solid ${theme.color.honeyDark}`,
+                  background: theme.color.parchment,
+                  color: theme.color.text,
+                  fontFamily: theme.font.family,
                   cursor: 'pointer',
+                  boxShadow: theme.border.shadow,
                 }}
               >
                 Cancel
@@ -100,12 +104,13 @@ function ResetDialogInner() {
                 onClick={onReset}
                 style={{
                   padding: '6px 16px',
-                  borderRadius: 10,
-                  border: '2px solid #a04a3a',
-                  background: '#c9584a',
+                  borderRadius: theme.border.radius,
+                  border: `${theme.border.chunk}px solid ${theme.color.clayDark}`,
+                  background: theme.color.clay,
                   color: '#fff6ec',
-                  fontFamily: 'inherit',
+                  fontFamily: theme.font.family,
                   cursor: 'pointer',
+                  boxShadow: theme.border.shadow,
                 }}
               >
                 Reset
@@ -119,7 +124,7 @@ function ResetDialogInner() {
 }
 
 /** Reset button + confirmation dialog, wrapped in an error boundary so a bug
- *  here can never blank the app (dev-UI hygiene). */
+ * here can never blank the app (dev-UI hygiene). */
 export function ResetDialog() {
   return (
     <DialogBoundary>
