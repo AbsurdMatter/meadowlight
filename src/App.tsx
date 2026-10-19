@@ -12,7 +12,7 @@ import { BloomPipeline } from './render/BloomPipeline';
 import { GrassTufts } from './render/GrassTufts';
 import { PlacementSystem } from './render/PlacementSystem';
 import { DebugBridge } from './render/DebugBridge';
-import { CellMapLayer } from './render/CellMapOverlay';
+import { CellMapLayer } from './ui/CellMap';
 import { OrbitControlsLite } from './render/OrbitControlsLite';
 import { Palette } from './ui/Palette';
 import { SeasonDial } from './ui/SeasonDial';
@@ -97,7 +97,7 @@ function Scene() {
       <BeeSwarm />
       <SolitaryBees />
       <BloomPipeline />
-      <CellMapLayer />
+      {CellMapLayer && <CellMapLayer />}
       <PlacementSystem />
       <DebugBridge />
       <OrbitControlsLite />
