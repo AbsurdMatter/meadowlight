@@ -309,7 +309,11 @@ Session-7 planning refines this against the real deployed meadow.
    fact earns its visual). Hard constraint: winter reads as winter, never as
    loss or decline.
 4. Pond & tree habitat scenery (#new): dragonflies over the pond, pond-edge
-   plants (forget-me-not already in roster), cozy ground detail around trees.
+   plants (forget-me-not already in roster), cozy ground detail around trees,
+   and habitat corners — scenery (bush clusters, rocks, a log, fern-like
+   detail) covering the corner fold regions where the hills intrude into the
+   placement box and nothing can be planted (user decision, session 6): the
+   unplantable folds read as intentional wild corners, never empty seams.
    Scenery first; no placement mechanics in scope. Facts verified, in-file
    sources.
 5. Night sky & cloud translucency (#new): (a) clouds more translucent —
