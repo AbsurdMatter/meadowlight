@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { dayPhase, isDusk } from '../engine/dayCycle';
 import { usePlacementStore } from './placementStore';
 import { groundAt } from '../engine/ground';
+import { FIREFLY_SUMMER_TUNING } from '../data/seasonalVisitors';
+import { recordVisitorWindow } from './visitorLog';
 
 /**
  * #13 (session 5): fireflies at dusk. They appear only in the dusk window
@@ -66,7 +68,7 @@ export function Fireflies() {
     const mesh = meshRef.current;
     if (!mesh) return;
     const park = new THREE.Matrix4().makeScale(0, 0, 0);
-    for (let i = 0; i < FIREFLY_TUNING.max; i++) mesh.setMatrixAt(i, park);
+    for (let i = 0; i < FIREFLY_SUMMER_TUNING.summerMax; i++) mesh.setMatrixAt(i, park);
     mesh.count = 0;
     mesh.instanceMatrix.needsUpdate = true;
   }, []);
@@ -79,14 +81,22 @@ export function Fireflies() {
     const dusk = fireflyForced() ?? isDusk(dayPhase());
     fireflyDebug.active = dusk;
 
+    // U2: summer evening bloom — more per-corner fireflies in summer, the
+    // SAME system (never a second swarm): the population boost composes
+    // with the dusk window, it does not replace it.
+    const summerBloom = FIREFLY_SUMMER_TUNING.seasons.includes(s.season);
+    if (summerBloom && dusk) recordVisitorWindow('fireflies', s.season);
     // rebuild only when the corner set changes
     const corners = s.structures.filter((st) => st.structureId === 'wildcorner');
-    const key = corners.map((c) => c.id).join(',');
+    const key = corners.map((c) => c.id).join(',') + (summerBloom ? ':summer' : '');
     if (key !== lastKey.current) {
       lastKey.current = key;
       const list: Firefly[] = [];
+      const perCorner = summerBloom
+        ? Math.min(FIREFLY_SUMMER_TUNING.summerMax, FIREFLY_TUNING.perCorner + FIREFLY_SUMMER_TUNING.extraPerCorner)
+        : FIREFLY_TUNING.perCorner;
       for (const c of corners) {
-        const n = Math.min(FIREFLY_TUNING.max, FIREFLY_TUNING.perCorner);
+        const n = Math.min(FIREFLY_TUNING.max, perCorner);
         for (let i = 0; i < n; i++) {
           const a = (i / n) * Math.PI * 2;
           const home = new THREE.Vector3(
@@ -140,7 +150,7 @@ export function Fireflies() {
   });
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, FIREFLY_TUNING.max]} frustumCulled={false}>
+    <instancedMesh ref={meshRef} args={[undefined, undefined, FIREFLY_SUMMER_TUNING.summerMax]} frustumCulled={false}>
       <boxGeometry args={[FIREFLY_TUNING.bodySize, FIREFLY_TUNING.bodySize, FIREFLY_TUNING.bodySize]} />
       <meshBasicMaterial color={FIREFLY_TUNING.color} transparent opacity={0.9} />
     </instancedMesh>
