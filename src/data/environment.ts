@@ -159,16 +159,25 @@ export const TREES = {
     { x: 30, z: 12, count: 16, spread: 9 },
     { x: -27, z: -21, count: 14, spread: 8 },
     /**
-     * U4 revision 3/3 (PROPOSAL, #6297184564): trees behind the pond —
-     * the pond is at (36,-14); a small deterministic cluster on its far
-     * side (from the meadow-center viewing angle) frames the water and
-     * gives the scene depth. Positions are derived from the cluster rule
-     * (deterministic layout), not hand-placed; behind = beyond the pond
-     * center along the meadow->pond axis. COMMIT ONLY AFTER the user's
-     * proposal-screenshot pass (taste-first).
+     * U4 revision 3/3, DECIDED (verdicts #6297695941 + #6297851661): trees
+     * beside the pond, framing the water from the meadow-center vantage.
+     * The first proposal (behind, 45/-21) rendered canopy in the pond —
+     * a FOOTPRINT bug, not taste: the cluster rule had no water exclusion
+     * (the dependent-rule audit miss). Re-sited deterministically LEFT of
+     * the pond, decisively outside the water: the exclusion check in the
+     * renderer uses the FULL rendered tree footprint (canopy bounds, the
+     * session-6 exact-footprint lesson) against the pond footprint with
+     * the clearance below — tree cells can never kiss the shoreline.
      */
-    { x: 45, z: -21, count: 9, spread: 6 },
+    { x: 22, z: -21, count: 9, spread: 5 },
   ],
+  /**
+   * Water clearance for tree placement (the exact-footprint rule): a tree
+   * whose CANOPY bounds come within this distance of the pond footprint
+   * (radius + edge cells) is excluded from the cluster layout. Deterministic;
+   * unit-tested (no tree footprint cell overlaps any pond cell).
+   */
+  pondClearance: 1.2,
   variants: [
     {
       name: 'round',

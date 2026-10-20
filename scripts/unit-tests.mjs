@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -94,6 +94,7 @@ const { colonyIntensityTarget, LIFECYCLE_LINES } = require(OUT + '/data/lifecycl
 const { HABITAT_TUNING, cornerFoldCells, cornerKey, pondSegments, fringeCells } = require(OUT + '/data/habitatScenery.js');
 const { NIGHT_SKY_TUNING, CLOUDS_OPACITY_BEFORE } = require(OUT + '/data/nightSky.js');
 const { starVisibility } = require(OUT + '/engine/nightSky.js');
+const { treePlacements, pondExclusionRadius } = require(OUT + '/engine/treeLayout.js');
 const { advanceColony, colonyIntensity: colonyIntensityExport, colonyReadback: colonyReadbackExport, setColonyIntensityForTest } = require(OUT + '/engine/lifecycle.js');
 const { SEEDING_TUNING, SEEDING_FACTS } = require(OUT + '/data/seeding.js');
 const { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, FIREFLY_SUMMER_TUNING, HOVERFLY_AUTUMN_TUNING, isEarlySpring } = require(OUT + '/data/seasonalVisitors.js');
@@ -1021,6 +1022,26 @@ test('fringe: the named extension rule — outside the box, dry land, dissolving
   for (const c of cornerFoldCells()) {
     assert.ok(!isPlantableCell(c.x, c.z), 'inside the box, scenery still only on unplantable cells');
   }
+});
+
+// ---------- session 7 U4 revision: trees never stand in the pond ----------
+test('trees: no tree footprint cell overlaps any pond cell (exact-footprint rule)', () => {
+  const placements = treePlacements();
+  assert.ok(placements.length > 20, 'the forest still stands: ' + placements.length);
+  const exclusion = pondExclusionRadius();
+  assert.ok(exclusion > 9, 'the exclusion radius covers water + edge cells + clearance: ' + exclusion.toFixed(2));
+  // the decided pond-side cluster exists and sits LEFT of the pond, dry
+  const pondSide = placements.filter((p) => p.x < 30 && p.z < -5);
+  assert.ok(pondSide.length >= 3, 'the pond-framing cluster renders: ' + pondSide.length + ' trees');
+  for (const p of placements) {
+    const d = Math.hypot(p.x - 36 + 0, p.z - (-14)); // pond center (36,-14)
+    assert.ok(
+      d >= exclusion + p.footprint - 1e-9,
+      'tree at (' + p.x.toFixed(1) + ',' + p.z.toFixed(1) + ') footprint ' + p.footprint.toFixed(2) + ' clears the pond: dist ' + d.toFixed(2),
+    );
+  }
+  // deterministic: same layout every call
+  assert.deepStrictEqual(treePlacements(), placements, 'the tree layout is stable');
 });
 
 // ---------- collision ----------
