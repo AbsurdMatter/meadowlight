@@ -4,7 +4,7 @@ import { MEADOW_SIZE } from '../engine/terrain';
 import { groundAt } from '../engine/ground';
 import { usePlacementStore } from '../render/placementStore';
 import { beeDebug } from '../render/BeeSwarm';
-import { isRaining, setRaining } from '../engine/weather';
+import { isRaining, setRaining, releaseRainOverride } from '../engine/weather';
 import { dayPhase, setDayPhase, resumeDayCycle, dayCycleOverridden } from '../engine/dayCycle';
 import { fireflyDebug, setFireflyForce, fireflyForced } from '../render/Fireflies';
 import { setCellMapVisible, cellMapVisible } from '../render/CellMapOverlay';
@@ -390,8 +390,10 @@ function Session5Triggers() {
       <div>
         {btn('rain ON', () => setRaining(true), isRaining(), 'rain-on')}
         {btn('rain OFF', () => setRaining(false), !isRaining(), 'rain-off')}
+        {btn('rain natural', () => releaseRainOverride(), false, 'rain-natural')}
         <span style={{ fontSize: 11, opacity: 0.7 }}>
-          {' '}toggle only — no natural rain trigger exists yet (noted in commit)
+          {' '}ON/OFF override the natural season-weighted schedule (N1);
+          'natural' releases the override back to the schedule
         </span>
       </div>
       <div style={{ fontSize: 12, marginTop: 4 }}>time of day (override; natural clock pauses)</div>

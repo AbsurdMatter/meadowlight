@@ -7,6 +7,7 @@ import { skyPaletteAt, dayPhase, advanceDay } from '../engine/dayCycle';
 import { advanceSeasons, seasonClockOverridden } from '../engine/seasonClock';
 import { timeMultiplier } from '../engine/timeControl';
 import { tickScaledTime } from '../engine/scaledTime';
+import { tickRainSchedule } from '../engine/rainSchedule';
 import { usePlacementStore } from './placementStore';
 
 /**
@@ -74,6 +75,16 @@ export function Sky() {
     // phase/season) still hold their clocks exactly as before.
     const scaled = delta * timeMultiplier();
     advanceDay(scaled);
+    // N1 (session 8): the natural rain schedule advances at the SAME single
+    // time site with the SAME scaled delta — pause fully freezes rain
+    // planning (multiplier 0) and the 1x-8x control scales the weather with
+    // everything else. A forced season holds the calendar at progress 0,
+    // so the schedule holds the season's opening verdict while held — one
+    // time system, not a second clock.
+    {
+      const store = usePlacementStore.getState();
+      tickRainSchedule(scaled, store.season, store.worldSeed);
+    }
     if (!seasonClockOverridden()) {
       const store = usePlacementStore.getState();
       const crossed = advanceSeasons(scaled, store.season);

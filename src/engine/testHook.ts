@@ -10,7 +10,8 @@ import { beeDebug } from '../render/BeeSwarm';
 import { wildDebug } from '../render/WildPollinators';
 import { fireflyDebug } from '../render/Fireflies';
 import { setDayPhase } from './dayCycle';
-import { setRaining } from './weather';
+import { setRaining, releaseRainOverride } from './weather';
+import { naturalRainNow, tickRainScheduleForTest } from './rainSchedule';
 import { dayPhase } from './dayCycle';
 import { seasonProgress, seasonClockOverridden } from './seasonClock';
 import { honeyDebug } from '../render/BeeSwarm';
@@ -108,6 +109,9 @@ declare global {
     fireflyDebug: () => unknown;
     setDayPhase: (p: number) => void;
     setRaining: (v: boolean) => void;
+    releaseRainOverride: () => void;
+    naturalRainNow: () => boolean;
+    tickRainScheduleForTest: (delta: number, season: string, worldSeed: number) => void;
     setFireflyForce: (v: boolean | null) => void;
     dayPhaseReadback: () => number;
     rainDebug: () => unknown;
@@ -258,6 +262,9 @@ export function installTestHook() {
     fireflyDebug: () => ({ ...fireflyDebug }),
     setDayPhase,
     setRaining,
+    releaseRainOverride,
+    naturalRainNow: () => naturalRainNow(),
+    tickRainScheduleForTest: (delta, season, worldSeed) => tickRainScheduleForTest(delta, season as never, worldSeed),
     setFireflyForce,
     dayPhaseReadback: () => dayPhase(),
     rainDebug: () => ({ ...rainDebug }),

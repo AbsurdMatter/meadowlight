@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -100,6 +100,8 @@ const { SEEDING_TUNING, SEEDING_FACTS } = require(OUT + '/data/seeding.js');
 const { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, FIREFLY_SUMMER_TUNING, HOVERFLY_AUTUMN_TUNING, isEarlySpring } = require(OUT + '/data/seasonalVisitors.js');
 const { isPlantableCell, groundAt: groundAtReadback } = require(OUT + '/engine/ground.js');
 const { hillsCover: hillsCoverReadback } = require(OUT + '/engine/hillsLayout.js');
+const { tickRainSchedule, naturalRainNow, rainManualOverride, resolveNaturalRain, setManualRain, clearManualRain } = require(OUT + '/engine/rainSchedule.js');
+const { RAIN_SCHEDULE_TUNING } = require(OUT + '/data/rain.js');
 
 const mkItem = (plantId, x = 0, z = 0) => ({ id: plantId + ':' + x + ':' + z, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
 const mkStruct = (structureId, x = 0, z = 0) => ({ id: structureId + ':' + x + ':' + z, structureId, position: [x, 0, z], rotationY: 0 });
@@ -1082,6 +1084,76 @@ test('placement collision: flowers respect structure footprints; structures resp
   assert.ok(!flowerBlocked(6, 6, [hive]), 'far flower must be free');
   assert.ok(structureBlocked(1, 0, 'bath', [hive], []), 'bath on hive footprint must be blocked');
   assert.ok(!structureBlocked(8, 8, 'bath', [hive], []), 'far bath must be free');
+});
+
+// ---------- session 8 N1: natural, seasonally-weighted rain ----------
+// Deterministic windows on the shared season clock: the same (worldSeed,
+// season, progress-quantum) always weathers the same; winter weights wetter
+// than summer structurally (the wetShare ceiling IS the weighting); the P
+// override masks the schedule while it holds and releases cleanly.
+test('N1 rain schedule: deterministic — the same world+season+quantum weathers the same', () => {
+  resumeSeasonClock();
+  setSeasonProgressForTest(0.5);
+  tickRainSchedule(1, 'winter', 1234);
+  const a = naturalRainNow();
+  tickRainSchedule(1, 'winter', 1234);
+  assert.strictEqual(naturalRainNow(), a, 'same inputs give the same verdict');
+  tickRainSchedule(1, 'winter', 1235);
+  const b = naturalRainNow();
+  assert.ok(typeof b === 'boolean');
+  // a DIFFERENT world may weather differently — determinism is per-world
+  setSeasonProgressForTest(0.5);
+  tickRainSchedule(1, 'winter', 999999);
+  assert.ok(typeof naturalRainNow() === 'boolean');
+});
+
+test('N1 rain schedule: seasonal weighting is structural — winter wets more than summer', () => {
+  // across many worlds and the whole season, winter's expected wet share
+  // exceeds summer's by the tuned weights (the RNG parity lesson: assert
+  // the SOURCE's structure, one shared source, no reimplementation)
+  const share = (season, seedLo, seedHi) => {
+    let wet = 0;
+    let n = 0;
+    for (let seed = seedLo; seed <= seedHi; seed++) {
+      for (let q = 0; q < RAIN_SCHEDULE_TUNING.quantum; q++) {
+        setSeasonProgressForTest((q + 0.5) / RAIN_SCHEDULE_TUNING.quantum);
+        tickRainSchedule(1, season, seed);
+        wet += naturalRainNow() ? 1 : 0;
+        n++;
+      }
+    }
+    return wet / n;
+  };
+  const winterShare = share('winter', 1, 30);
+  const summerShare = share('summer', 1, 30);
+  assert.ok(
+    winterShare > summerShare + 0.15,
+    'winter wetter than summer by structure (winter ' + winterShare.toFixed(2) + ' vs summer ' + summerShare.toFixed(2) + ')',
+  );
+  assert.ok(summerShare < 0.35, 'summer stays mostly dry (cozy, never a washout)');
+});
+
+test('N1 rain schedule: pause holds — zero delta never flips the verdict', () => {
+  resumeSeasonClock();
+  setSeasonProgressForTest(0.5);
+  tickRainSchedule(5, 'autumn', 42);
+  const held = naturalRainNow();
+  tickRainSchedule(0, 'autumn', 42);
+  assert.strictEqual(naturalRainNow(), held, 'a zero (paused) delta is a no-op');
+});
+
+test('N1 rain schedule: P-panel override masks the schedule and releases cleanly', () => {
+  resumeSeasonClock();
+  setSeasonProgressForTest(0.5);
+  tickRainSchedule(1, 'summer', 7);
+  const natural = naturalRainNow();
+  setManualRain(true);
+  assert.strictEqual(resolveNaturalRain(), true, 'ON override forces rain regardless of schedule');
+  setManualRain(false);
+  assert.strictEqual(resolveNaturalRain(), false, 'OFF override forces dry regardless of schedule');
+  clearManualRain();
+  assert.strictEqual(resolveNaturalRain(), natural, 'release drops back to the schedule verdict, no step');
+  assert.strictEqual(rainManualOverride(), null, 'no override remains');
 });
 `;
   mkdirSync(join(work, 'tests'), { recursive: true });
