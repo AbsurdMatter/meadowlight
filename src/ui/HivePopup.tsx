@@ -51,14 +51,30 @@ export function HivePopup() {
       // comings-and-goings at the entrance) stays visible under it. The
       // lift is the hive's MEASURED screen height: project the hive's top
       // AND base, take the pixel span, clear it plus headroom.
-      const b = v.clone().set(hive.position[0], hive.position[1], hive.position[2]).project(cam);
-      const baseYpx = ((-b.y + 1) / 2) * rect.height;
       const topYpx = ((-p.y + 1) / 2) * rect.height;
-      const hivePx = THREE.MathUtils.clamp(baseYpx - topYpx, 40, 220);
+      // #36 zoom-out residual: the lift must be CAMERA-INDEPENDENT. The
+      // hive's projected span shrinks with distance while the popup's
+      // pixel height is constant — a span-based lift collapsed at full
+      // zoom-out and the popup covered the hive. The lift is now
+      // (popup's own rendered height + 20px clearance), floored below
+      // by the hive's span for zoomed-in views: the popup's BOTTOM edge
+      // clears the hive's projected top at every zoom level.
+      const popupEl = document.querySelector('[data-hive-popup]') as HTMLElement | null;
+      const popupPx = popupEl ? popupEl.offsetHeight : 150;
+      // the x clamp must account for the popup's FULL rendered width
+      // (content-box width + chunky borders + padding) — a fixed 135
+      // margin under-clamped and the panel could overflow the edge
+      const popupW = popupEl ? popupEl.offsetWidth : 290;
+      const halfW = popupW / 2;
+      const hiveSpan = (() => {
+        const b = v.clone().set(hive.position[0], hive.position[1], hive.position[2]).project(cam);
+        return Math.max(0, topYpx - ((-b.y + 1) / 2) * rect.height);
+      })();
+      const lift = Math.max(popupPx + 20, hiveSpan + 20);
       // clamp keeps the whole popup in-viewport with chrome margins —
       // including far hives whose projection lands near the fold
-      const x = THREE.MathUtils.clamp(((p.x + 1) / 2) * rect.width, 135, rect.width - 135);
-      const y = THREE.MathUtils.clamp(topYpx - hivePx - 24, 90, rect.height - 185);
+      const x = THREE.MathUtils.clamp(((p.x + 1) / 2) * rect.width, halfW + 10, rect.width - halfW - 10);
+      const y = THREE.MathUtils.clamp(topYpx - lift, 90, rect.height - popupPx - 12);
       setScreen({ x, y });
       rafRef.current = requestAnimationFrame(project);
     };
@@ -80,7 +96,7 @@ export function HivePopup() {
   // style layer must not apply a second offset
   const panelStyle: CSSProperties = {
     position: 'fixed',
-    left: Math.max(10, screen.x - 130),
+    left: Math.max(10, screen.x - 144),
     top: Math.max(10, screen.y),
     width: 250,
     padding: theme.spacing.panelPadding,

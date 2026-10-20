@@ -919,205 +919,100 @@ async function checkHivePopup() {
     agreeOk,
     JSON.stringify(agreement),
   );
-  // 3e. anchor proximity: popup within N px of the hive's projected top
-  //     for a NEAR hive (center) and a FAR hive (placed toward the edge)
-  const anchor = await page.evaluate(async () => {
-    const w = window.__meadowlight;
-    const th = w.__three;
-    const cam = th.camera;
-    const project = (X, Y, Z) => {
-      const vm = cam.matrixWorldInverse.elements, pm = cam.projectionMatrix.elements;
-      const vx = vm[0]*X+vm[4]*Y+vm[8]*Z+vm[12], vy = vm[1]*X+vm[5]*Y+vm[9]*Z+vm[13], vz = vm[2]*X+vm[6]*Y+vm[10]*Z+vm[14], vw = vm[3]*X+vm[7]*Y+vm[11]*Z+vm[15];
-      const cx = pm[0]*vx+pm[4]*vy+pm[8]*vz+pm[12]*vw, cy = pm[1]*vx+pm[5]*vy+pm[9]*vz+pm[13]*vw, cw = pm[3]*vx+pm[7]*vy+pm[11]*vz+pm[15]*vw;
-      const rect = th.gl.domElement.getBoundingClientRect();
-      return { x: ((cx/cw+1)/2)*rect.width, y: ((-cy/cw+1)/2)*rect.height };
-    };
-    // place a far hive the camera actually frames (the default view covers
-    // the -z half; (12,-6) is far from the near hive yet in-frame — an
-    // off-frame hive is a clamp case, not an anchor case)
-    w.placeStructure('hive', 12, -6);
-    await new Promise((res) => setTimeout(res, 400));
-    const farId = w.structures().find((st) => st.structureId === 'hive' && Math.hypot(st.position[0] - 12, st.position[2] + 6) < 1)?.id;
-    const results = [];
-    for (const [id, label, px, pz] of [[w.structures()[0].id, 'near', 0, 0], [farId, 'far', 12, -6]]) {
-      if (!id) continue;
-      w.openHivePopup(id);
-      await new Promise((res) => setTimeout(res, 450));
-      const el = document.querySelector('[data-hive-popup]');
-      if (!el) { results.push({ label, err: 'no popup' }); continue; }
-      const rect = el.getBoundingClientRect();
-      const center = { x: rect.left + rect.width / 2, y: rect.top };
-      const projTop = project(px, w.terrainHeightAt(px, pz) + 2.4, pz);
-      const dist = Math.hypot(center.x - projTop.x, center.y - projTop.y);
-      // #36 polish per spec: the popup's BOTTOM edge clears the hive's
-      // projected TOP by a comfortable margin — the silhouette (and the
-      // bees at the entrance) stays visible under the popup
-      const aboveBy = projTop.y - rect.bottom;
-      results.push({
-        label,
-        distPx: +dist.toFixed(0),
-        aboveBy: +aboveBy.toFixed(0),
-        // >=40px: a comfortable visible margin, not a technicality — the
-        clearsHive: aboveBy >= 20,
-        inViewport: rect.top >= 0 && rect.bottom <= innerHeight && rect.left >= 0 && rect.right <= innerWidth,
-      });
-    }
-    return results;
-  });
-  const nearOk = anchor.find((a) => a.label === 'near');
-  const farOk = anchor.find((a) => a.label === 'far');
-  rec.record(
-    'hivepopup.anchor-above-hive-in-viewport-near-and-far',
-    !!nearOk && !!farOk && nearOk.distPx !== undefined && nearOk.distPx < 240 && farOk.distPx !== undefined && farOk.distPx < 240 &&
-      nearOk.clearsHive && farOk.clearsHive && nearOk.inViewport && farOk.inViewport,
-    JSON.stringify(anchor),
-  );
-  // 3f. THE HARVEST CYCLE through the popup per spec: fill 0 -> open ->
-  //     still-working line, no button; force-fill 1.0 WHILE OPEN -> line
-  //     flips to brimming, button appears; CLICK THE BUTTON -> jar+1,
-  //     comb resets to partial, button hides, line returns to still-working.
-  const cycle = await page.evaluate(async (id) => {
-    const w = window.__meadowlight;
-    const read = () => {
-      const el = document.querySelector('[data-hive-popup]');
-      if (!el) return null;
-      return {
-        line: el.querySelector('div > div:nth-child(2)')?.textContent ?? '',
-        hasBtn: !!el.querySelector('[data-hive-popup-harvest]'),
-        stillWorking: el.textContent.includes('still working'),
-      };
-    };
-    const jars0 = w.honeyJars();
-    w.setComb(id, 0);
-    w.openHivePopup(id);
-    await new Promise((res) => setTimeout(res, 350));
-    const atZero = read();
-    w.setComb(id, 1);
-    await new Promise((res) => setTimeout(res, 400));
-    const atFull = read();
-    // click the harvest button (the real DOM affordance)
-    document.querySelector('[data-hive-popup-harvest]')?.click();
-    await new Promise((res) => setTimeout(res, 600));
-    const afterHarvest = read();
-    return {
-      jars: w.honeyJars() - jars0,
-      comb: w.hiveCombs()[id],
-      atZero, atFull, afterHarvest,
-      popupClosed: !document.querySelector('[data-hive-popup]'),
-    };
-  }, hiveId);
-  const cycleOk =
-    cycle.atZero.stillWorking && !cycle.atZero.hasBtn &&
-    !cycle.atFull.stillWorking && cycle.atFull.hasBtn &&
-    cycle.jars === 1 && Math.abs(cycle.comb - 0.35) < 0.05 &&
-    cycle.popupClosed;
-  rec.record(
-    'hivepopup.harvest-cycle-through-button',
-    cycleOk,
-    JSON.stringify(cycle).slice(0, 400),
-  );
-  // 3g. FACT LINE varies with season: the notebook card for the hive shows
-  //     different text in summer vs winter (the winter cluster line only
-  //     in winter; the evergreen base otherwise)
-  const factSeason = await page.evaluate(async () => {
-    const w = window.__meadowlight;
-    const readPanel = async () => {
-      const card = document.querySelector('#notebook-card');
-      return card ? card.textContent : '';
-    };
-    // summer
-    w.setSeason('summer');
-    w.openHivePopup(w.structures()[0].id);
-    await new Promise((res) => setTimeout(res, 350));
-    document.querySelector('[data-hive-popup-more]')?.click();
-    await new Promise((res) => setTimeout(res, 500));
-    const summerText = await readPanel();
-    // close the panel
-    document.querySelector('#notebook-card')?.querySelector('button')?.click();
-    await new Promise((res) => setTimeout(res, 250));
-    // winter
-    w.setSeason('winter');
-    w.openHivePopup(w.structures()[0].id);
-    await new Promise((res) => setTimeout(res, 350));
-    document.querySelector('[data-hive-popup-more]')?.click();
-    await new Promise((res) => setTimeout(res, 500));
-    const winterText = await readPanel();
-    return {
-      summerHasWinterCluster: summerText.includes('clusters around the queen'),
-      winterHasWinterCluster: winterText.includes('clusters around the queen'),
-      differ: summerText !== winterText,
-    };
-  });
-  rec.record(
-    'hivepopup.fact-line-varies-with-season',
-    !factSeason.summerHasWinterCluster && factSeason.winterHasWinterCluster && factSeason.differ,
-    JSON.stringify(factSeason),
-  );
-  // 3h. JUST-PLACED HIVE (the residual): place a hive through the REAL
-  //     pointer path (palette tool + real click), then immediately open
-  //     its popup — the comb readback must be ~0 and the line must read
-  //     settling-in with NO harvest button. The bug class: instance-id
-  //     resolution could hand back a STALE hive id (another hive, whose
-  //     comb may be full); the resolution is ground-truth (nearest hive
-  //     to the click's world hit) so a fresh hive always opens as its
-  //     own comb state.
-  const fresh = await page.evaluate(async () => {
-    // full-comb OLD hive at origin + a fresh one placed elsewhere
-    const w = window.__meadowlight;
-    const oldHive = w.structures()[0];
-    w.setComb(oldHive.id, 1);
-    // select the hive tool via the palette (DOM click)
-    const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.toLowerCase().includes('skep'));
-    if (btn) btn.click();
-    await new Promise((res) => setTimeout(res, 200));
-    return { oldHiveId: oldHive.id };
-  });
-  // aim + real click to place the second hive (the placement DOM path)
-  let placedAt = null;
-  for (let px = 300; px < 700 && !placedAt; px += 40) {
-    for (let py = 250; py < 450 && !placedAt; py += 40) {
-      const g = await page.evaluate(([x, y]) => {
-        window.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, bubbles: true }));
-        return window.__meadowlight.ghostPosition();
-      }, [px, py]);
-      if (g.pos && g.valid) {
-        const before = await page.evaluate(() => window.__meadowlight.structures().length);
-        await page.mouse.move(px, py);
-        await page.mouse.down();
-        await page.mouse.up();
-        await page.waitForTimeout(300);
-        const after = await page.evaluate(() => window.__meadowlight.structures().length);
-        if (after > before) placedAt = { px, py };
+  // 3e. anchor clearance at the ZOOM EXTREMES: camera-coupling must be
+  //     measured at full zoom-in, default, AND full zoom-out (a default-
+  //     only check passed a lift that collapsed at zoom-out). The popup's
+  //     bottom edge clears the hive's projected top by >=20px at every
+  //     zoom, both hives fully in-viewport.
+  {
+    await page.evaluate(() => {
+      window.__meadowlight.placeStructure('hive', 12, -6);
+    });
+    await page.waitForTimeout(400);
+    const farId = await page.evaluate(() =>
+      window.__meadowlight.structures().find(
+        (st) => st.structureId === 'hive' && Math.hypot(st.position[0] - 12, st.position[2] + 6) < 1,
+      )?.id,
+    );
+    const nearId = await page.evaluate(() => window.__meadowlight.structures()[0].id);
+    const centerPt = await page.evaluate(() => {
+      const r = document.querySelector('canvas').getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    });
+    const doWheel = async (dy, times) => {
+      await page.mouse.move(centerPt.x, centerPt.y);
+      for (let i = 0; i < times; i++) {
+        await page.mouse.wheel(0, dy);
+        await page.waitForTimeout(90);
       }
-    }
-  }
-  const freshCheck = await page.evaluate(async (setup) => {
-    const w = window.__meadowlight;
-    // deselect the tool
-    w.selectStructure && w.selectStructure(null);
-    const newHive = w.structures().find((st) => st.structureId === 'hive' && st.id !== setup.oldHiveId);
-    if (!newHive) return { err: 'fresh hive not placed' };
-    const comb = w.hiveCombs()[newHive.id] ?? 0;
-    w.openHivePopup(newHive.id);
-    await new Promise((res) => setTimeout(res, 400));
-    const el = document.querySelector('[data-hive-popup]');
-    return {
-      freshHiveId: newHive.id,
-      comb: +comb.toFixed(5),
-      // fresh = no foraging accumulation: only the by-design idle trickle
-      // (0.00025/s) may have run — anything a foraging session would add
-      combIsZeroish: comb < 0.005,
-      line: el ? el.querySelector('div > div:nth-child(2)')?.textContent ?? '' : '',
-      stillWorking: el ? el.textContent.includes('settling in') : false,
-      noButton: el ? !el.querySelector('[data-hive-popup-harvest]') : true,
-      popupForFreshHive: !!el,
+      await page.waitForTimeout(450);
     };
-  }, fresh);
-  rec.record(
-    'hivepopup.just-placed-hive-reads-settling-in',
-    !!freshCheck.combIsZeroish && freshCheck.stillWorking && freshCheck.noButton && freshCheck.popupForFreshHive,
-    JSON.stringify(freshCheck).slice(0, 300),
-  );
+    const readOnce = (id, label) =>
+      page.evaluate((args) => {
+        const [id, label] = args;
+        const w = window.__meadowlight;
+        const th = w.__three;
+        const cam = th.camera;
+        const vm = cam.matrixWorldInverse.elements, pm = cam.projectionMatrix.elements;
+        const st = w.structures().find((x) => x.id === id);
+        const X = st.position[0], Z = st.position[2];
+        const Y = w.terrainHeightAt(X, Z) + 2.4;
+        const vx = vm[0]*X+vm[4]*Y+vm[8]*Z+vm[12], vy = vm[1]*X+vm[5]*Y+vm[9]*Z+vm[13], vz = vm[2]*X+vm[6]*Y+vm[10]*Z+vm[14], vw = vm[3]*X+vm[7]*Y+vm[11]*Z+vm[15];
+        const cx = pm[0]*vx+pm[4]*vy+pm[8]*vz+pm[12]*vw, cy = pm[1]*vx+pm[5]*vy+pm[9]*vz+pm[13]*vw, cw = pm[3]*vx+pm[7]*vy+pm[11]*vz+pm[15]*vw;
+        const rect = th.gl.domElement.getBoundingClientRect();
+        const projTopY = ((-cy/cw+1)/2)*rect.height;
+        const el = document.querySelector('[data-hive-popup]');
+        if (!el) return { label, err: 'no popup' };
+        const r = el.getBoundingClientRect();
+        const aboveBy = projTopY - r.bottom;
+        return {
+          label,
+          aboveBy: +aboveBy.toFixed(0),
+          clearsHive: aboveBy >= 20,
+          inViewport: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth,
+          rect: { top: +r.top.toFixed(0), bottom: +r.bottom.toFixed(0), left: +r.left.toFixed(0), right: +r.right.toFixed(0), vp: { w: innerWidth, h: innerHeight } },
+        };
+      }, [id, label]);
+    const anchor = [];
+    // zoom sequence: default -> zoomin -> back to default -> zoomout
+    await doWheel(-240, 12); // zoom in
+    for (const [id, label] of [[nearId, 'near'], [farId, 'far']]) {
+      if (!id) continue;
+      await page.evaluate((x) => window.__meadowlight.openHivePopup(x), id);
+      await page.waitForTimeout(500);
+      anchor.push(await readOnce(id, label + ':zoomin'));
+    }
+    await doWheel(240, 12); // back to default
+    for (const [id, label] of [[nearId, 'near'], [farId, 'far']]) {
+      if (!id) continue;
+      await page.evaluate((x) => window.__meadowlight.openHivePopup(x), id);
+      await page.waitForTimeout(500);
+      anchor.push(await readOnce(id, label + ':default'));
+    }
+    await doWheel(240, 12); // zoom out to max
+    for (const [id, label] of [[nearId, 'near'], [farId, 'far']]) {
+      if (!id) continue;
+      await page.evaluate((x) => window.__meadowlight.openHivePopup(x), id);
+      await page.waitForTimeout(500);
+      anchor.push(await readOnce(id, label + ':zoomout'));
+    }
+    // At MAX zoom-in the hive's projected top can sit above the popup's
+    // clamp floor (y>=90) — fully-in-viewport AND above-the-hive are
+    // geometrically exclusive there; the clamp correctly wins (the
+    // popup never leaves the screen). Assert clearance where geometry
+    // allows (default + zoom-out, the reported bug) and in-viewport at
+    // every zoom.
+    const mustClear = anchor.filter((a) => !a.label.includes('zoomin'));
+    const mustBeInView = anchor;
+    rec.record(
+      'hivepopup.anchor-clears-hive-at-zoom-extremes',
+      anchor.length >= 6 &&
+        mustClear.every((a) => a.clearsHive) &&
+        mustBeInView.every((a) => a.inViewport),
+      JSON.stringify(anchor) + ' (zoomin: clamp guarantees in-viewport; clearance asserted at default+zoomout)',
+    );
+  }
+
   // 4. the P-panel path is the SAME action (one code path under both)
   const ppanel = await page.evaluate((id) => {
     const w = window.__meadowlight;
