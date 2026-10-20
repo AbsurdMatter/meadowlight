@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { PLANTS } from '../data/plants';
 import { usePlacementStore } from '../render/placementStore';
-import { WILD_VISITOR_FACTS } from '../data/facts';
-import { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING } from '../data/seasonalVisitors';
+import { MAGNIFIER_WILDLIFE } from '../data/magnifierWildlife';
 import { PLANT_FACTS } from '../data/facts';
 import { MAGNIFIER_TUNING } from '../data/magnifier';
 import { theme, headingStyle } from './theme';
@@ -18,13 +17,6 @@ import { theme, headingStyle } from './theme';
  * The visitor glass reuses the notebook hub's verified WILD_VISITOR_FACTS
  * (the fact store is one source; the glass adds no new facts).
  */
-const VISITOR_NAMES: Record<string, string> = {
-  butterfly: 'Butterfly',
-  hoverfly: 'Hoverfly',
-  queenbumble: QUEEN_BUMBLE_TUNING.name,
-  lavendermoth: LAVENDER_MOTH_TUNING.name,
-};
-
 export function MagnifierCard() {
   const entry = usePlacementStore((s) => s.magnifierEntry);
   const magnifierOn = usePlacementStore((s) => s.magnifierOn);
@@ -70,10 +62,21 @@ export function MagnifierCard() {
         .join(' \u00b7 ');
       return { title: def.name, text: fact, hint: stateLine };
     }
-    const fact = WILD_VISITOR_FACTS[entry.visitorId];
-    const name = VISITOR_NAMES[entry.visitorId] ?? 'Visitor';
-    if (!fact) return { title: name, text: 'A wild visitor, passing through the meadow.', hint: null };
-    return { title: name, text: fact.text, hint: null };
+    const w = MAGNIFIER_WILDLIFE[entry.visitorId];
+    if (!w) return { title: 'Visitor', text: 'A wild visitor, passing through the meadow.', hint: null };
+    // live read-only state: the visitor-window log (the notebook's own
+    // record — one source; the glass invents no state)
+    let hint: string | null = null;
+    if (w.visitorKey) {
+      const seen = s.visitorWindows
+        .filter((k) => k.startsWith(w.visitorKey + ':'))
+        .map((k) => k.split(':')[1]);
+      hint =
+        seen.length > 0
+          ? 'recorded in the notebook — visited in ' + seen.join(', ')
+          : 'a first sighting — the notebook will remember it';
+    }
+    return { title: w.name, text: w.fact, hint };
   }, [entry]);
 
   if (!magnifierOn || !entry || !content) return null;

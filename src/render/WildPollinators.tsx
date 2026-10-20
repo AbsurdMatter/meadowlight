@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
@@ -17,6 +17,7 @@ import {
 } from '../data/seasonalVisitors';
 import { PLANT_BY_ID } from '../data/plants';
 import { usePlacementStore } from './placementStore';
+import { registerWildlifeProbe, type WildlifeKind } from './magnifierProbes';
 import { inBloom } from '../engine/pollinator';
 import { noVariation } from '../engine/variation';
 import { dayPhase } from '../engine/dayCycle';
@@ -140,6 +141,15 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
   const wingRef = useRef<THREE.InstancedMesh>(null);
   const accentRef = useRef<THREE.InstancedMesh>(null);
   const visitors = useRef<VisitorState[]>([]);
+  // N3 coverage: read-only live positions — kind per species (butterfly,
+  // hoverfly, queenbumble, lavendermoth all render through this component)
+  useEffect(
+    () =>
+      registerWildlifeProbe(tuning.id as WildlifeKind, () =>
+        visitors.current.map((v) => ({ kind: tuning.id as WildlifeKind, x: v.pos.x, y: v.pos.y, z: v.pos.z })),
+      ),
+    [tuning.id],
+  );
   const lastCount = useRef(-1);
 
   const bodyGeo = useMemo(() => new THREE.BoxGeometry(...tuning.bodySize), [tuning]);

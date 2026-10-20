@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { dayPhase, isDusk } from '../engine/dayCycle';
 import { scaledDelta, scaledElapsed } from '../engine/scaledTime';
 import { usePlacementStore } from './placementStore';
+import { registerWildlifeProbe } from './magnifierProbes';
 import { groundAt } from '../engine/ground';
 import { FIREFLY_SUMMER_TUNING } from '../data/seasonalVisitors';
 import { recordVisitorWindow } from './visitorLog';
@@ -60,6 +61,14 @@ interface Firefly {
 export function Fireflies() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const flies = useRef<Firefly[]>([]);
+  // N3 coverage: read-only live positions for the magnifier
+  useEffect(
+    () =>
+      registerWildlifeProbe('fireflies', () =>
+        flies.current.map((f) => ({ kind: 'fireflies' as const, x: f.pos.x, y: f.pos.y, z: f.pos.z })),
+      ),
+    [],
+  );
   const lastKey = useRef('');
 
   // park on mount (same class as the rain ghost-voxel fix): an unparked

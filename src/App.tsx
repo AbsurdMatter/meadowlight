@@ -28,6 +28,7 @@ import { Onboarding } from './ui/Onboarding';
 import { Toasts } from './ui/Toasts';
 import { Notebook } from './ui/Notebook';
 import { MagnifierCard } from './ui/MagnifierCard';
+import { MagnifierInspector } from './render/MagnifierInspector';
 import { HivePopup } from './ui/HivePopup';
 import { MilestoneWatcher } from './ui/MilestoneWatcher';
 import { PerfOverlay } from './ui/PerfOverlay';
@@ -171,6 +172,7 @@ export default function App() {
       {loaded && <Toasts />}
       {loaded && <Notebook />}
       {loaded && <MagnifierCard />}
+      {loaded && <MagnifierInspector />}
       {loaded && <HivePopup />}
       <MilestoneWatcher />
       {PerfOverlay && <PerfOverlay />}

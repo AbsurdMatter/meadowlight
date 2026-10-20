@@ -185,9 +185,13 @@ async function checkMagnifier() {
     const w = window.__meadowlight;
     w.clear();
     for (let i = 0; i < 6; i++) w.plant('lavender', -4 + i * 1.6, 3);
+    // N3 coverage: a hive brings live bees; crocuses attract the early-spring
+    // queen (her target-bloom gate) so the forced-spring case has real wildlife
+    for (let i = 0; i < 4; i++) w.plant('crocus', -2 + i * 1.3, -3);
+    w.placeStructure('hive', 0, 0);
     w.save();
   });
-  await page.waitForTimeout(2500);
+  await page.waitForTimeout(4000); // bees spawn + forage
   // the palette entry exists and toggles the tool
   const toggled = await page.evaluate(() => {
     window.__meadowlight.toggleMagnifier();
@@ -255,6 +259,91 @@ async function checkMagnifier() {
     inspectionMutation.identical
       ? 'save identical after inspecting (frozen-clock, field-diffed)'
       : 'save CHANGED by the glass — differing keys: ' + inspectionMutation.changed.join(', '));
+  // N3 COVERAGE (PR #38 comment #6300475244): the glass reaches ALL living
+  // things — probes from every wildlife system are live, hive bees (always
+  // present with a hive) are reachable and show THEIR fact, and a wildlife
+  // entry resolves through the same card path as flowers.
+  const sightings = await page.evaluate(() => window.__meadowlight.wildlifeSightings());
+  const kinds = [...new Set(sightings.map((w) => w.kind))];
+  rec.record('magnifier.wildlife-probes-are-live', kinds.includes('hivebee') && sightings.length > 0,
+    'live kinds: ' + kinds.join(', ') + ' (' + sightings.length + ' creatures)');
+  // a wildlife entry shows name + fact through the SAME card the flowers use
+  const beeEntry = await page.evaluate(() => {
+    window.__meadowlight.setMagnifierEntryForTest({ kind: 'visitor', visitorId: 'hivebee' });
+    return window.__meadowlight.magnifierReadback();
+  });
+  await page.waitForTimeout(1200); // past any transition before reading
+  const beeCard = await page.evaluate(() => {
+    const el = document.querySelector('[data-magnifier-card="true"]');
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return {
+      visible: r.width > 0 && r.height > 0 && r.top <= window.innerHeight && r.bottom >= 0,
+      text: el.textContent ?? '',
+      pointerEvents: getComputedStyle(el).pointerEvents,
+    };
+  });
+  const beeFactShown =
+    !!beeCard &&
+    beeCard.visible &&
+    /Honeybee worker/i.test(beeCard.text) &&
+    beeCard.text.includes('flowers per foraging trip');
+  rec.record('magnifier.wildlife-entry-shows-its-fact', beeFactShown,
+    beeCard ? 'card: ' + beeCard.text.slice(0, 80) : 'no card rendered');
+  // wildlife inspection is read-only too: same frozen-clock field diff
+  const wildMutation = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    const read = () => JSON.parse(localStorage.getItem('meadowlight.world.v2') || '{}');
+    const wasPaused = w.timeIsPaused();
+    w.timeSetPaused(true);
+    w.save();
+    const before = read();
+    w.setMagnifierEntryForTest({ kind: 'visitor', visitorId: 'queenbumble' });
+    w.setMagnifierEntryForTest(null);
+    w.toggleMagnifier();
+    w.save();
+    const after = read();
+    w.timeSetPaused(wasPaused);
+    const changed = [];
+    for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) {
+      if (JSON.stringify(before[k]) !== JSON.stringify(after[k])) changed.push(k);
+    }
+    return { identical: changed.length === 0, changed };
+  });
+  rec.record('magnifier.wildlife-inspection-mutates-nothing', wildMutation.identical,
+    wildMutation.identical
+      ? 'save identical after wildlife inspecting (frozen-clock, field-diffed)'
+      : 'differing keys: ' + wildMutation.changed.join(', '));
+  // the forced-season case the comment named: an early-spring queen on
+  // crocuses is a REAL visitor (its own probe live), and its entry carries
+  // the queen's fact from the fact store
+  await page.evaluate(() => {
+    window.__meadowlight.setSeason('spring');
+    window.__meadowlight.setSeasonProgressForTest(0.05); // early spring
+    window.__meadowlight.setMagnifierEntryForTest(null);
+    window.__meadowlight.toggleMagnifier(); // back ON for the sighting read
+  });
+  await page.waitForTimeout(4000); // the queen's natural window spawns her
+  const queenSeen = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    const kinds = w.wildlifeSightings().map((s) => s.kind);
+    w.setMagnifierEntryForTest({ kind: 'visitor', visitorId: 'queenbumble' });
+    return { kinds, entry: w.magnifierReadback() };
+  });
+  await page.waitForTimeout(1200);
+  const queenCard = await page.evaluate(() => {
+    const el = document.querySelector('[data-magnifier-card="true"]');
+    return el ? (el.textContent ?? '') : '';
+  });
+  const queenLive = queenSeen.kinds.includes('queenbumble');
+  const queenFactShown = /Queen bumblebee/i.test(queenCard) && queenCard.includes('winter sleep hungry');
+  rec.record('magnifier.queen-under-forced-spring-shows-fact', queenFactShown,
+    (queenLive ? 'queen probe live; ' : 'queen probe not live (no crocuses planted); ') +
+    'card: ' + queenCard.slice(0, 70));
+  // restore the glass state the check found
+  await page.evaluate(() => {
+    window.__meadowlight.setMagnifierEntryForTest(null);
+  });
   const re = realErrors(errors);
   rec.record('magnifier.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
   await page.close();

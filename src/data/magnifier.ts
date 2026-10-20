@@ -18,4 +18,10 @@ export const MAGNIFIER_TUNING = {
   cardBottom: 210,
   /** how long after pointer-left the card lingers (ms) — zero flicker */
   lingerMs: 450,
+  /**
+   * N3 coverage: how close the pointer ray must pass to a live creature
+   * (world units) for the glass to lock onto it — the wildlife hit radius.
+   * One-constant taste value (the user's eyeball confirms the feel).
+   */
+  wildlifeReach: 1.1,
 } as const;

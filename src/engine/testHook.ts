@@ -12,6 +12,7 @@ import { fireflyDebug } from '../render/Fireflies';
 import { setDayPhase } from './dayCycle';
 import { precipitationVisual } from './weather';
 import { precipReadback, tickPrecipScheduleForTest } from './rainSchedule';
+import { allWildlife } from '../render/magnifierProbes';
 import { dayPhase } from './dayCycle';
 import { seasonProgress, seasonClockOverridden } from './seasonClock';
 import { honeyDebug } from '../render/BeeSwarm';
@@ -62,6 +63,8 @@ declare global {
       magnifierReadback: () => { on: boolean; entry: unknown };
       toggleMagnifier: () => void;
       setMagnifierEntryForTest: (e: unknown) => void;
+      /** N3 coverage: live wildlife sightings the glass can reach (read-only) */
+      wildlifeSightings: () => unknown[];
       /** U2: visitor-window log — (visitorId, season) pairs, one per window */
       visitorWindowsReadback: () => string[];
       /** U3: the colony breath — live intensity + the season's line (one source) */
@@ -233,6 +236,7 @@ export function installTestHook() {
       return { on: s.magnifierOn, entry: s.magnifierEntry };
     },
     toggleMagnifier: () => usePlacementStore.getState().toggleMagnifier(),
+    wildlifeSightings: () => allWildlife().map((w) => ({ ...w })),
     setMagnifierEntryForTest: (e) =>
       usePlacementStore.getState().setMagnifierEntry(e as never),
     volunteersReadback: () =>

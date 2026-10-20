@@ -1,10 +1,11 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { scaledDelta, scaledElapsed } from '../engine/scaledTime';
 import * as THREE from 'three';
 import { SOLITARY_BEE_TUNING, RARE_POLLINATOR_TUNING } from '../data/bees';
 import { PLANT_BY_ID } from '../data/plants';
 import { usePlacementStore } from './placementStore';
+import { registerWildlifeProbe } from './magnifierProbes';
 import { inBloom } from '../engine/pollinator';
 import { noVariation } from '../engine/variation';
 import type { PlacedStructure } from '../engine/persistence';
@@ -94,6 +95,19 @@ export function SolitaryBees() {
   const rareWingRef = useRef<THREE.InstancedMesh>(null);
   const bees = useRef<SoloBeeState[]>([]);
   const rareBees = useRef<RareBeeState[]>([]);
+  // N3 coverage: read-only live positions (solitary + rare wool-carder)
+  useEffect(() => {
+    const u1 = registerWildlifeProbe('solitarybee', () =>
+      bees.current.map((b) => ({ kind: 'solitarybee' as const, x: b.pos.x, y: b.pos.y, z: b.pos.z })),
+    );
+    const u2 = registerWildlifeProbe('rarebee', () =>
+      rareBees.current.map((b) => ({ kind: 'rarebee' as const, x: b.pos.x, y: b.pos.y, z: b.pos.z })),
+    );
+    return () => {
+      u1();
+      u2();
+    };
+  }, []);
   const lastKey = useRef('');
   const lastRareKey = useRef('');
 
