@@ -332,6 +332,76 @@ steps.)
 
 ---
 
+## v3 (session 7)
+
+### Session 7 — Seed & life (post-merge record, PR #37, merge c30081a)
+Delivered: self-seeding (U1 — one seededHash source; worldSeed/seedingEpoch
+join dayPhase/season as named state, save v7 additive with v6 blobs deriving
+a stable per-blob seed; one seeding site riding the season-boundary
+crossings; roster-compatible neighbors, per-season caps asserted on the
+DELTA, and the cumulative 15% volunteer brake — pause-not-remove, planting
+resumes it); seasonal wild visitors (U2 — early-spring queen bumbles on
+crocuses, evening lavender moths, the summer firefly bloom COMPOSING with
+the dusk fireflies (one system), autumn hoverfly stragglers; trigger-first
+held — no spawn force exists; the visitor-window log, one entry per window,
+persisted and rendered in the notebook); bee lifecycles gently (U3 — the
+colony breath: one population semantic with an eased live state, so
+populations never step at boundaries; the popup, notebook, and P inspector
+render one colonyReadback; the decline-framing scan is a permanent unit
+test — winter reads "clustered snug around the queen… 21°C"); pond, tree &
+habitat-corner scenery (U4 + revision — fold scenery sits only on cells the
+classifier proves unplantable; the named fringeCells() organic extension
+(4.5u band, ground-oracle dry-land check, seeded soft falloff); the pond
+edge retuned to CLUSTER-FIRST (seeded centers, tight 3–5 member groups,
+calm gaps — controlled variance, never jitter); trees re-sited beside the
+pond with the canopy-footprint water exclusion + pondClearance; dragonflies
+over the pond on the shared scaled clock); night sky & cloud translucency
+(U5 — 120-star dome at 3600s barely-perceptible drift, visibility through
+the ONE shared lit-window predicate in engine/nightSky.ts (the same
+DAYLIGHT constants as isDaylight), winter-brightest; composed clouds
+softened to 0.55). The animation-dt fix unit: ONE shared scaled dt
+(engine/scaledTime) ticked at Sky's single time site — the sim scaled but
+ten animation consumers read raw delta, and pause was an invisible state;
+full freeze is now named in AGENTS.md with an observable resting indicator.
+Perf: user real-GPU, 27/27 behavioral gate checks green end-to-end.
+Detector-only rounds throughout — three rounds of FAILs where the BEHAVIOR
+was verified correct and only probes were fixed (cumulative-count vs delta
+sampling; a probe inheriting the previous check's resetWorld; a threshold
+reading the curve at p=0.1 mid-ease; a detector sampling before a 0.25s CSS
+opacity transition began — and unpausing before reading).
+Lessons: stale probe worlds — a check that inherits a prior check's world
+tests the prior check's residue; probes must build their own fixtures and
+read ground truth (the saved blob), never in-memory proxies. Detectors race
+real UI: a re-render cadence plus a CSS transition means a "present" element
+can still be mid-transition — wait past tick+transition and read before
+mutating. Detector thresholds must sample a curve at a representative point
+(p=0.1 sits on the wake ramp by design; assert at p=0.5) and, when a value
+lags its target, assert convergence through the shared site rather than
+inventing a second path to blame. The dependent-rule oracle audit miss:
+fringeCells() got the ground-oracle dry-land check, the tree cluster rule
+didn't — trees rendered in the pond; EVERY ground-touching rule needs the
+oracle, and a rule-family change demands auditing the family, not the
+touched file. RNG sequence parity: when a restructure moves or skips rolls,
+two copies of "the same" deterministic layout drift apart — the tree layout
+now has ONE source (engine/treeLayout.ts) that the renderer and the unit
+test consume, so the test asserts the same trees the player sees. The
+sandbox render limit held all session: no browser launch (glib), so
+behavioral gates ran on the user's real machine while unit tests stayed
+agent-side — the split worked, and the gates' honest failures were worth
+the round-trips. Port-default foot-guns: gate and shots scripts now fail
+with a clean "[GATE]/[SHOTS] dev server not reachable at <url>" + exit 2
+instead of a raw ERR_CONNECTION_REFUSED stack. Taste-first proposals held:
+one-constant retunes (star drift/density, cloud opacity, fold fill, brake
+share) with NO gate pinning of taste values; proposal flags in data with
+user-run capture scripts (the OrbitControls-proof manual-camera path) when
+the sandbox cannot render; vision-model readbacks of screenshots stayed
+overruled by the user's direct eye (session-3 rule, twice).
+Deferred (carried on v3, never dropped): N1 natural seasonally-weighted
+rain, N2 pollinator-visit seeding precondition, N3 magnifying-glass
+inspector; deploy (Pages one-click ready; the user's subdomain, later
+session). The U4 tree proposal resolved as the decided layout (canopy-
+footprint exclusion, cb44aa5).
+
 # v3 — The meadow grows (proposed, sessions 7–8)
 
 Goal: v2 made the world alive, deep, and public; v3 makes the meadow grow on
@@ -377,14 +447,14 @@ the hive waking — and the night sky gives the slow phases something to look at
 
 ### Session 7 deferred scope (carried, not dropped — the repo is the backlog)
 
-- N1 — natural rain trigger: rain currently toggles/holds via the P panel
-  (the session-5 trigger suite); a NATURAL weather driver (seasonal odds,
-  gentle showers from their own conditions) is planned v3 work.
-- N2 — pollinator-gate: a dedicated behavioral gate asserting the full
-  pollinator chain (appeal -> comb -> harvest) end-to-end; today it is
-  covered piecewise by the honey/colony checks.
-- N3 — magnifier: an inspect-mode zoom for close reads of small visitors
-  (moth, hoverfly) and the winter cluster; planned as a chrome/UI nicety.
+- N1 — natural, seasonally-weighted rain: rain currently toggles/holds
+  via the P panel (the session-5 trigger suite); a natural weather driver
+  is planned v3 work.
+- N2 — pollinator-visit seeding precondition: visitors' presence as a
+  precondition (or gentle boost) to volunteer seeding — the two living
+  systems currently roll independently.
+- N3 — magnifying-glass inspector: an inspect-mode zoom for close reads of
+  small visitors (moth, hoverfly) and the winter cluster; a chrome nicety.
 
 ## Session 8 — Sharing & the wider door
 
