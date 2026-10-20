@@ -41,6 +41,18 @@ export const SEEDING_TUNING = {
   maxPerSeason: 5,
   /** volunteers never land closer than this to an existing flower's cell */
   minSpacing: 0.85,
+  /**
+   * THE CUMULATIVE BRAKE (#37 review, finding 2 — the encroachment lesson):
+   * the per-season caps alone let volunteers compound season over season
+   * (the user's gate run: 5+5+5+5 = 20 volunteers on a 36-flower meadow —
+   * a third self-grown, exactly the encroachment the constitution warns
+   * against). The meadow-wide constraint the returning visitor FEELS is
+   * the cumulative fraction: volunteers may never exceed this share of
+   * the total meadow. Above the fraction, seeding pauses (never reverses
+   * — a volunteer is never removed, no fail state) until the player
+   * clears some or plants more of their own.
+   */
+  maxVolunteerFraction: 0.15,
 } as const;
 
 /**

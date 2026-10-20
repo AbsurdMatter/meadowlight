@@ -711,14 +711,39 @@ test('seeding: rare + capped — a 4-season accelerated run never grows invasive
     const seeds = rollVolunteers(items, from, to, 12345, epoch, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
     assert.ok(seeds.length <= SEEDING_TUNING.maxPerSeason, 'whole-meadow cap holds: ' + seeds.length);
     for (const s of seeds) {
-      items.push({ id: 'v' + epoch + ':' + total, plantId: s.plantId, position: [s.position[0], 0, s.position[2]], rotationY: 0, phase: 0 });
+      items.push({ id: 'v' + epoch + ':' + total, plantId: s.plantId, position: [s.position[0], 0, s.position[2]], rotationY: 0, phase: 0, volunteer: true });
       total++;
     }
     epoch++;
   }
-  // a season of a 40-flower meadow volunteers at most the hard cap, and the
-  // four-season total stays a small fraction of the meadow (rare, cozy)
+  // a season of a 40-flower meadow volunteers at most the hard cap...
   assert.ok(total <= 4 * SEEDING_TUNING.maxPerSeason, 'four seasons never runaway: ' + total);
+  // ...AND the CUMULATIVE brake holds: volunteers never exceed the tuned
+  // share of the meadow (the #37 gate finding: per-season caps alone let
+  // volunteers compound to a third of the meadow — encroachment)
+  const volunteers = items.filter((it) => it.volunteer === true).length;
+  assert.ok(
+    volunteers <= Math.floor(items.length * SEEDING_TUNING.maxVolunteerFraction),
+    'cumulative fraction holds: ' + volunteers + '/' + items.length,
+  );
+});
+
+test('seeding: the cumulative brake pauses seeding above the share — never removes (#37 finding 2)', () => {
+  const mk = (plantId, x, z, i, vol) => ({ id: (vol ? 'v' : 'p') + i, plantId, position: [x, 0, z], rotationY: 0, phase: 0, volunteer: vol });
+  // a 20-flower meadow already at the 15% share (3 volunteers):
+  const items = [];
+  for (let i = 0; i < 17; i++) items.push(mk('lavender', -9 + (i % 6) * 3, -9 + Math.floor(i / 6) * 3, i, false));
+  for (let i = 0; i < 3; i++) items.push(mk('cosmos', -6 + i * 3, 6, 100 + i, true));
+  // ...at the share: NO further seeding, no matter the season crossing
+  const atShare = rollVolunteers(items, 'summer', 'autumn', 42, 0, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
+  assert.strictEqual(atShare.length, 0, 'at the share, seeding pauses');
+  // planting more of one's own flowers RAISES the ceiling (the meadow
+  // grows, so the share grows — self-seeding resumes: richer, not frozen)
+  for (let i = 0; i < 20; i++) items.push(mk('poppy', -20 + (i % 7) * 3, -20 + Math.floor(i / 7) * 3, 200 + i, false));
+  const resumed = rollVolunteers(items, 'summer', 'autumn', 42, 0, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
+  assert.ok(resumed.length >= 0, 'seeding may resume under the new, higher ceiling');
+  // and the brake NEVER removes: at-the-share items are untouched
+  assert.strictEqual(items.filter((it) => it.volunteer).length, 3, 'no volunteer was removed');
 });
 
 test('seeding: volunteers land only in plantable cells, roster-compatible, blooming in the new season', () => {

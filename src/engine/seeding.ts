@@ -84,13 +84,21 @@ export function rollVolunteers(
   flowerBlockedFn: (x: number, z: number) => boolean,
 ): VolunteerSeed[] {
   if (items.length === 0) return [];
+  // #37 finding 2 — the cumulative brake: volunteers may never exceed the
+  // tuned share of the whole meadow. Seeding PAUSES above the share (never
+  // removes anything — no fail state); planting more or clearing some
+  // resumes it. This is the constraint the returning visitor actually feels.
+  const existingVolunteers = items.filter((it) => it.volunteer === true).length;
+  const maxVolunteers = Math.floor(items.length * SEEDING_TUNING.maxVolunteerFraction);
+  if (existingVolunteers >= maxVolunteers) return [];
   // parents: flowers that bloomed during the season just ended
   const parents = items.filter((it) => inBloom(it.plantId, endedSeason));
   if (parents.length === 0) return [];
+  const budget = maxVolunteers - existingVolunteers;
   const out: VolunteerSeed[] = [];
   const regionCount = new Map<string, number>();
   for (const parent of parents) {
-    if (out.length >= SEEDING_TUNING.maxPerSeason) break;
+    if (out.length >= Math.min(SEEDING_TUNING.maxPerSeason, budget)) break;
     const rk = regionKey(parent.position[0], parent.position[2]);
     if ((regionCount.get(rk) ?? 0) >= SEEDING_TUNING.maxPerRegionPerSeason) continue;
     // one deterministic roll per (worldSeed, epoch, parent id)
