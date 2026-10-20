@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -92,6 +92,8 @@ const { computeCaptionLayout, fallbackMetrics } = require(OUT + '/engine/postcar
 const { rollVolunteers, compatibleSeedling } = require(OUT + '/engine/seeding.js');
 const { colonyIntensityTarget, LIFECYCLE_LINES } = require(OUT + '/data/lifecycle.js');
 const { HABITAT_TUNING, cornerFoldCells, cornerKey } = require(OUT + '/data/habitatScenery.js');
+const { NIGHT_SKY_TUNING, CLOUDS_OPACITY_BEFORE } = require(OUT + '/data/nightSky.js');
+const { starVisibility } = require(OUT + '/engine/nightSky.js');
 const { advanceColony, colonyIntensity: colonyIntensityExport, colonyReadback: colonyReadbackExport, setColonyIntensityForTest } = require(OUT + '/engine/lifecycle.js');
 const { SEEDING_TUNING, SEEDING_FACTS } = require(OUT + '/data/seeding.js');
 const { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, FIREFLY_SUMMER_TUNING, HOVERFLY_AUTUMN_TUNING, isEarlySpring } = require(OUT + '/data/seasonalVisitors.js');
@@ -927,6 +929,39 @@ test('habitat: the scenery palette comes from the world families (the band-palet
   assert.ok(HABITAT_TUNING.log.color.startsWith('#'), 'the log has a color');
   assert.ok(HABITAT_TUNING.dragonflies.count >= 2, 'a few dragonflies over the pond');
   assert.ok(HABITAT_TUNING.dragonflies.fact.length > 20, 'the dragonfly fact exists (verified, cited in-file)');
+});
+
+// ---------- session 7 U5: night sky & cloud translucency ----------
+test('stars: visibility derives from the ONE lit window — night yes, day no, ramps between', () => {
+  // deep night: fully visible
+  assert.ok(Math.abs(starVisibility(0.0) - 1) < 1e-9, 'midnight: full stars');
+  assert.ok(Math.abs(starVisibility(0.95) - 1) < 1e-9, 'deep night: full stars');
+  // day: gone
+  assert.ok(starVisibility(0.5) === 0, 'noon: no stars');
+  assert.ok(starVisibility(0.35) === 0, 'morning: no stars');
+  // the dusk ramp: golden hour (0.82) -> dark (0.88): 0 -> 1 monotonic
+  const g = starVisibility(0.82), d = starVisibility(0.88);
+  assert.ok(g > 0 && g < 1 && Math.abs(d - 1) < 1e-9, 'dusk ramp fades stars in');
+  assert.ok(starVisibility(0.85) > g, 'ramp is monotonic');
+  // the dawn ramp: 0.22 full -> 0.30 gone
+  assert.ok(Math.abs(starVisibility(0.22) - 1) < 1e-9, 'dawn edge: still full');
+  assert.ok(starVisibility(0.26) < 1 && starVisibility(0.30) === 0, 'dawn ramp fades stars out');
+  // the boundary epsilon lesson: the lit window's edges are inclusive the
+  // same way isDaylight is — no rounding flip between surfaces
+  assert.ok(starVisibility(0.2199) > 0.99, 'just before dawn edge: night');
+});
+
+test('stars: winter nights are the brightest (the long-night pairing)', () => {
+  const b = NIGHT_SKY_TUNING.stars.brightnessBySeason;
+  assert.ok(b.winter === 1.0 && b.summer < b.winter, 'winter peaks, summer softest');
+  assert.ok(b.spring < b.autumn, 'autumn (longer nights) beats spring');
+  assert.ok(NIGHT_SKY_TUNING.stars.count >= 100, 'a real sky, not a sprinkle');
+});
+
+test('clouds: translucent — softer than the composed original, never gone', () => {
+  const now = NIGHT_SKY_TUNING.clouds.opacity;
+  assert.ok(now < CLOUDS_OPACITY_BEFORE, 'more translucent than the 0.92 original');
+  assert.ok(now >= 0.35 && now <= 0.75, 'softly veiled, not gone and not a ghost: ' + now);
 });
 
 // ---------- collision ----------

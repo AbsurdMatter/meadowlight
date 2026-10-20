@@ -19,6 +19,9 @@ import { scaledElapsed } from './scaledTime';
 import { colonyReadback } from './lifecycle';
 import { cornerFoldCells } from '../data/habitatScenery';
 import { dragonflyDebug } from '../render/HabitatScenery';
+import { starsDebug } from '../render/NightSky';
+import { starVisibility } from './nightSky';
+import { NIGHT_SKY_TUNING } from '../data/nightSky';
 import { isPlantableCell } from './ground';
 import { hillsBoxes } from './hillsLayout';
 import { setFireflyForce } from '../render/Fireflies';
@@ -58,6 +61,10 @@ declare global {
       colonyReadback: () => { line: string; intensity: number; target: number };
       /** U4: habitat scenery — fold-cell census + dragonfly telemetry */
       habitatReadback: () => { foldCells: { x: number; z: number }[]; dragonflies: number };
+      /** U5: stars — the shared visibility predicate (pure, per phase) + live telemetry */
+      starsReadback: () => { visible: number; opacity: number; visibilityAt: (phase: number) => number };
+      /** U5: the composed-cloud material opacity (the asserted tuning value) */
+      cloudOpacityReadback: () => number;
       /** write the save NOW (the same store save() the autosave uses) */
       save: () => void;
       /** #9: discovered recipe ids (persisted) */
@@ -212,6 +219,12 @@ export function installTestHook() {
       foldCells: cornerFoldCells(),
       dragonflies: dragonflyDebug.count,
     }),
+    starsReadback: () => ({
+      visible: starsDebug.visible,
+      opacity: starsDebug.opacity,
+      visibilityAt: starVisibility,
+    }),
+    cloudOpacityReadback: () => NIGHT_SKY_TUNING.clouds.opacity,
     save: () => usePlacementStore.getState().save(),
     foundRecipes: () => usePlacementStore.getState().foundRecipes,
     checkCompanions: () => usePlacementStore.getState().checkCompanions(),

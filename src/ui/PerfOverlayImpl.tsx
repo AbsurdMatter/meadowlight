@@ -347,6 +347,7 @@ function PerfOverlayPanel() {
       <Session7VisitorTriggers />
       <Session7ColonyReadback />
       <Session7HabitatReadback />
+      <Session7NightSkyReadback />
       <SaveInspector />
       <MilestoneChecklist />
     </div>
@@ -746,6 +747,42 @@ function Session7HabitatReadback() {
         >
           refresh
         </button>
+      </div>
+    </div>
+  );
+}
+
+/** session 7 readback section: night sky (#U5) — force the day phase
+ *  (the natural input), read the shared visibility predicate + live star
+ *  opacity + the cloud material value. */
+function Session7NightSkyReadback() {
+  const [, forceRender] = useState(0);
+  const refresh = () => forceRender((n) => n + 1);
+  const btn = (label: string, onClick: () => void, key?: string) => (
+    <button
+      key={key}
+      data-perf-s7={key}
+      onClick={() => {
+        onClick();
+        refresh();
+      }}
+      style={{ margin: '2px 4px 2px 0', padding: '5px 9px', borderRadius: 8, border: 'none', background: '#666', color: '#fff', fontFamily: 'inherit', fontSize: 12, cursor: 'pointer' }}
+    >
+      {label}
+    </button>
+  );
+  const w = (window as unknown as { __meadowlight?: { setDayPhase: (p: number) => void; starsReadback: () => { visible: number; opacity: number }; cloudOpacityReadback: () => number } }).__meadowlight;
+  const stars = w?.starsReadback();
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>night sky (U5)</div>
+      <div>
+        {btn('night', () => w?.setDayPhase(0.0), 'sky-night')}
+        {btn('evening', () => w?.setDayPhase(0.84), 'sky-evening')}
+        {btn('morning', () => w?.setDayPhase(0.3), 'sky-morning')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {' '}stars {stars ? stars.visible : '?'} @ opacity {stars ? stars.opacity.toFixed(2) : '?'} · clouds {w ? w.cloudOpacityReadback() : '?'}
+        </span>
       </div>
     </div>
   );

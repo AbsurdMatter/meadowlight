@@ -609,7 +609,52 @@ async function checkHabitat() {
   await page.close();
 }
 
-const map = { seeding: checkSeeding, visitors: checkVisitors, timecontrols: checkTimeControlsUI, colony: checkColony, habitat: checkHabitat };
+/** U5: night sky & cloud translucency */
+async function checkNightSky() {
+  const { page, errors } = await newPage(browser, url);
+  // 1. stars appear under forced phases (night yes, day no, evening ramping)
+  {
+    const r = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      const out = {};
+      // night
+      w.setDayPhase(0.0);
+      await new Promise((res) => setTimeout(res, 600));
+      out.night = { ...w.starsReadback(), pred: w.starsReadback().visibilityAt(0.0) };
+      // evening (golden hour — the dusk ramp, partially visible)
+      w.setDayPhase(0.84);
+      await new Promise((res) => setTimeout(res, 600));
+      out.evening = { opacity: w.starsReadback().opacity, pred: w.starsReadback().visibilityAt(0.84) };
+      // morning (full day)
+      w.setDayPhase(0.3);
+      await new Promise((res) => setTimeout(res, 600));
+      out.morning = { opacity: w.starsReadback().opacity, pred: w.starsReadback().visibilityAt(0.3) };
+      return out;
+    });
+    const nightOk = r.night.visible > 100 && r.night.opacity > 0.7 && Math.abs(r.night.pred - 1) < 1e-9;
+    const eveningOk = r.evening.opacity > 0.3 && r.evening.pred > 0.3 && r.evening.pred < 1;
+    const morningOk = r.morning.opacity < 0.05 && r.morning.pred === 0;
+    rec.record(
+      'nightsky.stars-per-phase',
+      nightOk && eveningOk && morningOk,
+      JSON.stringify(r) + ' (night full; golden-hour ramping; morning none)',
+    );
+  }
+  // 2. cloud translucency: the composed-cloud material value (the tuning)
+  {
+    const cloud = await page.evaluate(() => window.__meadowlight.cloudOpacityReadback());
+    rec.record(
+      'nightsky.clouds-translucent',
+      cloud >= 0.35 && cloud <= 0.75,
+      'composed cloud opacity ' + cloud + ' (softly veiled, never blocking, never gone)',
+    );
+  }
+  const re = realErrors(errors);
+  rec.record('nightsky.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
+const map = { seeding: checkSeeding, visitors: checkVisitors, timecontrols: checkTimeControlsUI, colony: checkColony, habitat: checkHabitat, nightsky: checkNightSky };
 for (const c of checks.split(',')) {
   if (map[c]) await map[c]();
   else rec.record(`unknown-check:${c}`, false, 'no such check in session7-gate');
