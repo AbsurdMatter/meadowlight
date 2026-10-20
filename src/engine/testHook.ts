@@ -50,6 +50,8 @@ declare global {
       volunteersReadback: () => { id: string; plantId: string; volunteer: boolean }[];
       /** U2: visitor-window log — (visitorId, season) pairs, one per window */
       visitorWindowsReadback: () => string[];
+      /** write the save NOW (the same store save() the autosave uses) */
+      save: () => void;
       /** #9: discovered recipe ids (persisted) */
       foundRecipes: () => string[];
       /** #9: rescans for newly formed recipes (the plant() path calls it) */
@@ -193,6 +195,7 @@ export function installTestHook() {
         volunteer: it.volunteer === true,
       })),
     visitorWindowsReadback: () => usePlacementStore.getState().visitorWindows,
+    save: () => usePlacementStore.getState().save(),
     foundRecipes: () => usePlacementStore.getState().foundRecipes,
     checkCompanions: () => usePlacementStore.getState().checkCompanions(),
     activeRecipes: () => usePlacementStore.getState().activeRecipes(),
