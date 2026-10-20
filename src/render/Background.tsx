@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { scaledDelta } from '../engine/scaledTime';
+import { NIGHT_SKY_TUNING } from '../data/nightSky';
 import * as THREE from 'three';
 import { MEADOW_SIZE } from '../engine/terrain';
 import {
@@ -413,7 +414,7 @@ function Clouds() {
                 <meshLambertMaterial
                   color={new THREE.Color(CLOUDS.color).multiplyScalar(shade)}
                   transparent
-                  opacity={CLOUDS.opacity}
+                  opacity={NIGHT_SKY_TUNING.clouds.opacity}
                   depthWrite={false}
                 />
               </mesh>
