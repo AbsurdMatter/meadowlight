@@ -91,9 +91,21 @@ export const HABITAT_TUNING = {
     ringOuter: LAKE.radius + LAKE.shoreWidth * 0.9,
     /** the ring is split into this many angular segments */
     segments: 12,
-    /** per-segment plant density (plants per segment) — seeded, varied */
+    /**
+     * CLUSTER-FIRST placement (verdict #6297695941: the 12-segment variance
+     * read as scattered singles): each segment now carries seeded CLUSTER
+     * CENTERS (1-2 per segment) with 3-5 TIGHT members each — visible
+     * groups with calm gaps between them, variance between segments AND
+     * clustered-within-segment, never per-item dithering.
+     */
     density: { min: 1, max: 5 } as { min: number; max: number },
-    /** cluster sizes: some segments carry tight clusters, some lone plants */
+    /** clusters per segment (seeded) */
+    clustersPerSegment: { min: 1, max: 2 } as { min: number; max: number },
+    /** members per cluster — tight groups of 3-5 */
+    membersPerCluster: { min: 3, max: 5 } as { min: number; max: number },
+    /** how tight a cluster reads (radius around its center, world units) */
+    clusterRadius: { min: 0.35, max: 0.8 } as { min: number; max: number },
+    /** cluster sizes: some segments carry tight clusters, some loose */
     clusterSpread: { min: 0.35, max: 1.4 } as { min: number; max: number },
     /** the band's width/depth drift along the shore via a seeded noise
      *  curve: fraction of the ring that is "wet fringe" vs "dry grass" */
@@ -232,6 +244,15 @@ export interface PondSegment {
   bandWidth: number;
 }
 
+export interface PondCluster {
+  /** the cluster's seeded center angle within the segment (radians) */
+  angle: number;
+  /** the cluster's seeded radial position (world units from pond center) */
+  distance: number;
+  /** members (3-5), each a seeded tight offset from the center */
+  members: { x: number; z: number }[];
+}
+
 export function pondSegments(): PondSegment[] {
   const t = HABITAT_TUNING.pondEdge;
   const out: PondSegment[] = [];
@@ -247,6 +268,50 @@ export function pondSegments(): PondSegment[] {
       bandDepth: t.bandDrift.min + depthRoll * (t.bandDrift.max - t.bandDrift.min),
       bandWidth: 0.3 + widthRoll * 0.6,
     });
+  }
+  return out;
+}
+
+/**
+ * The cluster-first shore layout (the verdict's model): seeded cluster
+ * centers per segment, each with a tight 3-5 member group. Deterministic;
+ * the renderer consumes exactly this. Cluster centers spread within the
+ * segment; members spread within clusterRadius of their center — groups
+ * read as groups, gaps stay calm.
+ */
+export function pondClusters(): PondCluster[] {
+  const t = HABITAT_TUNING.pondEdge;
+  const segs = pondSegments();
+  const out: PondCluster[] = [];
+  for (const seg of segs) {
+    const a0 = (seg.index / t.segments) * Math.PI * 2;
+    const a1 = ((seg.index + 1) / t.segments) * Math.PI * 2;
+    const bandLo = t.ringInner + (t.ringOuter - t.ringInner) * seg.bandDepth * (1 - seg.bandWidth);
+    const bandHi =
+      t.ringInner + (t.ringOuter - t.ringInner) * Math.min(1, seg.bandDepth + seg.bandWidth * 0.5);
+    const nClusters =
+      t.clustersPerSegment.min +
+      Math.floor(sceneryHash(seg.index, 113, 959) * (t.clustersPerSegment.max - t.clustersPerSegment.min + 1));
+    for (let c = 0; c < nClusters; c++) {
+      const angle = a0 + ((c + 0.5) / nClusters) * (a1 - a0) +
+        (sceneryHash(seg.index, c + 3, 960) - 0.5) * (a1 - a0) * 0.3;
+      const distance = bandLo + sceneryHash(seg.index, c + 7, 961) * Math.max(0.001, bandHi - bandLo);
+      const members: { x: number; z: number }[] = [];
+      const nMembers =
+        t.membersPerCluster.min +
+        Math.floor(sceneryHash(seg.index, c + 11, 962) * (t.membersPerCluster.max - t.membersPerCluster.min + 1));
+      const radius =
+        t.clusterRadius.min + sceneryHash(seg.index, c + 13, 963) * (t.clusterRadius.max - t.clusterRadius.min);
+      for (let m = 0; m < nMembers; m++) {
+        const ma = sceneryHash(seg.index, c * 31 + m, 964) * Math.PI * 2;
+        const mr = Math.sqrt(sceneryHash(seg.index, c * 17 + m, 965)) * radius;
+        members.push({
+          x: LAKE.center[0] + Math.cos(angle) * distance + Math.cos(ma) * mr,
+          z: LAKE.center[1] + Math.sin(angle) * distance + Math.sin(ma) * mr,
+        });
+      }
+      out.push({ angle, distance, members });
+    }
   }
   return out;
 }

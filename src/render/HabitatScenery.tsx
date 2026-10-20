@@ -7,7 +7,7 @@ import {
   cornerFoldCells,
   cornerKey,
   sceneryHash,
-  pondSegments,
+  pondClusters,
   fringeCells,
 } from '../data/habitatScenery';
 import { groundAt } from '../engine/ground';
@@ -136,32 +136,27 @@ function buildPondEdgePieces(): Piece[] {
   // their segment's angular span and band slice, so clusters read as
   // clusters and gaps as gaps (no per-plant jitter — the session-3 rule).
   const t = HABITAT_TUNING.pondEdge;
-  const segments = pondSegments();
+  // cluster-first (verdict #6297695941): the layout key is pondClusters —
+  // seeded centers with tight member groups, calm gaps between groups
+  const clusters = pondClusters();
   const out: Piece[] = [];
-  for (const seg of segments) {
-    const a0 = (seg.index / t.segments) * Math.PI * 2;
-    const a1 = ((seg.index + 1) / t.segments) * Math.PI * 2;
-    const bandLo = t.ringInner + (t.ringOuter - t.ringInner) * seg.bandDepth * (1 - seg.bandWidth);
-    const bandHi = t.ringInner + (t.ringOuter - t.ringInner) * Math.min(1, seg.bandDepth + seg.bandWidth * 0.5);
-    for (let p = 0; p < seg.plants; p++) {
-      // within-segment coherence: positions derive from the segment's own
-      // cluster center + spread, not a fresh uniform roll per plant
-      const ca = (a0 + a1) / 2 + (sceneryHash(seg.index, p * 31 + 3, 955) - 0.5) * seg.spread * (a1 - a0) * 2.2;
-      const cd = bandLo + sceneryHash(seg.index, p * 17 + 5, 956) * Math.max(0.001, bandHi - bandLo);
-      const x = LAKE.center[0] + Math.cos(ca) * cd;
-      const z = LAKE.center[1] + Math.sin(ca) * cd;
+  let gi = 0;
+  for (const cluster of clusters) {
+    for (let m = 0; m < cluster.members.length; m++) {
+      const { x, z } = cluster.members[m];
       const g = groundAt(x, z);
       if (g.isWater) continue;
-      const s = 0.35 + sceneryHash(seg.index, p * 13 + 7, 957) * 0.3;
+      const s = 0.35 + sceneryHash(cluster.angle * 100 | 0, m * 13 + gi, 967) * 0.3;
       out.push({
         x,
         z,
         y: g.height + s * 0.4,
         size: [s, s * 0.9, s],
-        color: t.colors[Math.floor(sceneryHash(seg.index, p * 19 + 11, 958) * t.colors.length)],
+        color: t.colors[Math.floor(sceneryHash(cluster.distance * 100 | 0, m * 19 + gi, 968) * t.colors.length)],
         rotY: 0,
       });
     }
+    gi++;
   }
   return out;
 }

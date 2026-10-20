@@ -91,7 +91,7 @@ const { flowerBlocked, structureBlocked } = require(OUT + '/engine/collision.js'
 const { computeCaptionLayout, fallbackMetrics } = require(OUT + '/engine/postcardLayout.js');
 const { rollVolunteers, compatibleSeedling } = require(OUT + '/engine/seeding.js');
 const { colonyIntensityTarget, LIFECYCLE_LINES } = require(OUT + '/data/lifecycle.js');
-const { HABITAT_TUNING, cornerFoldCells, cornerKey, pondSegments, fringeCells } = require(OUT + '/data/habitatScenery.js');
+const { HABITAT_TUNING, cornerFoldCells, cornerKey, pondSegments, fringeCells, pondClusters } = require(OUT + '/data/habitatScenery.js');
 const { NIGHT_SKY_TUNING, CLOUDS_OPACITY_BEFORE } = require(OUT + '/data/nightSky.js');
 const { starVisibility } = require(OUT + '/engine/nightSky.js');
 const { treePlacements, pondExclusionRadius } = require(OUT + '/engine/treeLayout.js');
@@ -1042,6 +1042,37 @@ test('trees: no tree footprint cell overlaps any pond cell (exact-footprint rule
   }
   // deterministic: same layout every call
   assert.deepStrictEqual(treePlacements(), placements, 'the tree layout is stable');
+});
+
+// ---------- session 7 U4 revision: pond edge — CLUSTERED GROUPS ----------
+test('pond edge: cluster-first — tight 3-5 member groups with calm gaps between', () => {
+  const clusters = pondClusters();
+  const t = HABITAT_TUNING.pondEdge;
+  assert.ok(clusters.length >= 12, 'every segment carries at least one cluster: ' + clusters.length);
+  for (const c of clusters) {
+    assert.ok(
+      c.members.length >= t.membersPerCluster.min && c.members.length <= t.membersPerCluster.max,
+      'cluster sizes within bounds: ' + c.members.length,
+    );
+    // tight: every member within the max cluster radius of the group's centroid
+    const cx = c.members.reduce((a, m) => a + m.x, 0) / c.members.length;
+    const cz = c.members.reduce((a, m) => a + m.z, 0) / c.members.length;
+    for (const m of c.members) {
+      assert.ok(
+        Math.hypot(m.x - cx, m.z - cz) <= t.clusterRadius.max + 0.15,
+        'member within the tight radius of its group',
+      );
+    }
+  }
+  // calm gaps: consecutive cluster CENTERS (angularly sorted) are separated
+  const sorted = [...clusters].sort((a, b) => a.angle - b.angle);
+  let gapCount = 0;
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].angle - sorted[i - 1].angle > (2 * Math.PI) / t.segments * 0.45) gapCount++;
+  }
+  assert.ok(gapCount >= 3, 'inter-cluster gaps present: ' + gapCount + ' calm gaps');
+  // deterministic
+  assert.deepStrictEqual(pondClusters(), clusters, 'the shore clusters are stable');
 });
 
 // ---------- collision ----------
