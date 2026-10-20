@@ -11,6 +11,12 @@ export interface PlacedItem {
   /** deterministic per-item phase for idle sway, so instances stay stable */
   phase: number;
   /**
+   * Session 7 U1: true when this flower volunteered itself (self-seeding).
+   * Purely informational — a seedling is an ordinary plant (clearable like
+   * any other, same render) that happens to have arrived on its own.
+   */
+  volunteer?: boolean;
+  /**
    * Placement-variation jitter, decided once at placement time and frozen
    * into the save. Items saved before session 2 have undefined fields and
    * are NEVER re-randomized: loaders backfill neutral values (jitter 0).
@@ -43,16 +49,21 @@ export interface PlacedStructure {
  *   v4: { version: 4, ..., wildSeasons, onboardingDismissed }
  *         (seasons a wild corner has survived; onboarding show-once;
  *         both additive — existing saves see no onboarding retroactively)
+ *   v7: { version: 7, ..., worldSeed, seedingEpoch }
+ *         (session 7 U1: the world's named seed state joins dayPhase/season
+ *         as deterministic seeding keys — additive; old saves derive their
+ *         seed from their own contents so the same blob always seeds the
+ *         same meadow, and items may carry volunteer: true)
  */
 const STORAGE_KEY = 'meadowlight.world.v2';
 const LEGACY_KEY = 'meadowlight.world.v1';
 /** corrupt/unknown-version saves are preserved here before booting fresh */
 const BACKUP_KEY = 'meadowlight.world._backup';
 /** versions this build understands (anything else = unknown, backed up) */
-const KNOWN_VERSIONS = new Set([1, 2, 3, 4, 5, 6]);
+const KNOWN_VERSIONS = new Set([1, 2, 3, 4, 5, 6, 7]);
 
 export interface WorldData {
-  version: 4 | 5 | 6;
+  version: 4 | 5 | 6 | 7;
   items: PlacedItem[];
   structures: PlacedStructure[];
   milestones: MilestoneId[];
@@ -95,6 +106,15 @@ export interface WorldData {
   hiveCombs?: Record<string, number>;
   /** #10 (session 6, v6, additive): lifetime jars of honey brought in */
   honeyJars?: number;
+  /**
+   * Session 7 U1 (v7, additive): the world's deterministic seed state —
+   * the named counterpart of dayPhase/season (exactly one definition;
+   * every seeding roll keys on it). Absent = derived from the save's own
+   * contents at load, so an old blob always seeds the same meadow.
+   */
+  worldSeed?: number;
+  /** v7: how many season rollovers have seeded this world (rolls never repeat) */
+  seedingEpoch?: number;
 }
 
 function parseItems(parsed: unknown): PlacedItem[] {
@@ -187,9 +207,26 @@ function parseHoneyJars(parsed: unknown): number {
   return typeof parsed === 'number' && parsed >= 0 ? Math.floor(parsed) : 0;
 }
 
+function parseWorldSeed(parsed: unknown, items: unknown): number {
+  // v7 named state; absent (v6 and earlier) = derived from the save's own
+  // contents — stable per-blob, so an old meadow always seeds the same way
+  if (typeof parsed === 'number' && Number.isFinite(parsed)) return parsed;
+  let h = 2166136261;
+  const src = JSON.stringify(items ?? []);
+  for (let i = 0; i < src.length; i++) {
+    h = ((h ^ src.charCodeAt(i)) * 16777619) | 0;
+  }
+  return (h >>> 0) % 2147483647 || 12345;
+}
+
+/** v7 additive: the seeding epoch (season rollovers this world has seeded) */
+function parseSeedingEpoch(parsed: unknown): number {
+  return typeof parsed === 'number' && parsed >= 0 ? Math.floor(parsed) : 0;
+}
+
 function freshWorld(): WorldData {
   return {
-    version: 6,
+    version: 7,
     items: [],
     structures: [],
     milestones: [],
@@ -245,7 +282,7 @@ export function loadWorld(): WorldData {
             ? data.randomRotation
             : DEFAULT_PLACEMENT_VARIATION;
       return {
-        version: 6,
+        version: 7,
         items: parseItems(data.items),
         structures: parseStructures(data.structures),
         milestones: parseMilestones(data.milestones),
@@ -260,6 +297,8 @@ export function loadWorld(): WorldData {
         foundRecipes: parseFoundRecipes(data.foundRecipes),
         hiveCombs: parseHiveCombs(data.hiveCombs),
         honeyJars: parseHoneyJars(data.honeyJars),
+        worldSeed: parseWorldSeed(data.worldSeed, data.items),
+        seedingEpoch: parseSeedingEpoch(data.seedingEpoch),
       };
     }
     // v1 shape: bare array of items
@@ -289,7 +328,7 @@ export function clearSavedWorld(): void {
 
 export function saveWorld(data: Omit<WorldData, 'version'>): void {
   try {
-    const payload: WorldData = { version: 6, ...data };
+    const payload: WorldData = { version: 7, ...data };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     localStorage.removeItem(LEGACY_KEY);
   } catch {
