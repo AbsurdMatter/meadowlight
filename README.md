@@ -45,13 +45,14 @@ entirely in your browser and saves your meadow to localStorage.
 Extras in the corner: 🔊 sound toggle (off by default), 📷 postcard (saves a
 PNG of your meadow), and **?** for the controls reminder. The season dial
 (spring → winter) shows bloom succession — a single-species meadow visibly
-runs out of food.
+runs out of food. The time row beneath it pauses the world (a ⏸ chip shows
+when) or runs it at 1×–8×.
 
 ## The living meadow (v2)
 
 - **Seasons drift by on their own** (spring → winter, ~12 minutes each).
   Leave for the afternoon and you'll come back mid-season — never
-  punished, never “you missed it.” The manual dial stays if you want to
+  punished, never "you missed it." The manual dial stays if you want to
   jump ahead, and a soft underline shows how far the season has come.
 - **Some flowers love company.** Plant the right pair as neighbors and
   the notebook learns a garden recipe — borage beside cosmos, lavender
@@ -63,6 +64,28 @@ runs out of food.
   they're residents, not machines.
 - **A day passes while you garden** — golden hour fades to dusk, fireflies
   rise, and rain sends the bees home to wait it out.
+
+## The wild meadow (v3)
+
+- **The meadow seeds itself.** Well-fed flowers quietly volunteer
+  seedlings nearby, easing off at about 15% self-grown so your plantings
+  always matter. Saves from earlier versions load exactly as they were.
+- **The same world replays the same way.** What grew today grows the same
+  tomorrow — the meadow keeps its own calendar.
+- **Wild visitors drop by in season.** A great big queen bumble hums
+  through spring, lavender moths flutter at summer dusk, fireflies crowd
+  warm evenings, and dragonflies dart over the pond — each with its own
+  notebook page and a real fact behind it.
+- **The hive breathes with the year.** The swarm rises through spring,
+  holds its gentle summer hum, and settles into a snug winter cluster
+  around the queen — cozy, never in decline.
+- **Habitat grows where flowers can't.** Bushes, rocks, ferns and a
+  fallen log claim the stony ground beyond the plantable meadow and fade
+  out toward the hills — the corners aren't empty anymore.
+- **Time waits for you.** Pause and the world truly holds its breath;
+  run at 1×–8× if you'd rather watch the seasons turn.
+- **The sky turns.** Stars fade in with dusk — brightest in winter, when
+  the nights are longest — and clouds veil softly, never blocking the light.
 
 ## Developing
 
@@ -110,14 +133,14 @@ npm run build
   frames narrower than ~700px (#33) — mobile/touch layout is parked until
   the world + chrome finalize.
 
-## Deploying (bare minimum this session)
+## Deploying
 
 The repo ships a GitHub Pages workflow (`.github/workflows/deploy-pages.yml`):
 on every push to `main` it runs the smoke gate, builds `dist/`, and publishes
 it to GitHub Pages. Enable it once in **Settings → Pages → Source: GitHub
 Actions**; the site then serves at the default Pages URL.
 
-**Post-deploy step (documented, not done this session):** point the portfolio
+**Post-deploy step (documented, not done yet):** point the portfolio
 subdomain at the Pages URL (a `CNAME` file in `dist` + your DNS CNAME record),
 then swap the og:image placeholder origin in `index.html` and drop the
 real-GPU `/og-image.png` at the deploy origin.
