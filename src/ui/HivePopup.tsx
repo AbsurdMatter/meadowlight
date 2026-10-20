@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { usePlacementStore } from '../render/placementStore';
 import { STRUCTURE_BY_ID } from '../data/structures';
 import { combReady } from '../engine/honey';
+import { combStateLine } from '../data/honey';
 import { theme, headingStyle } from './theme';
 
 /**
@@ -36,13 +37,19 @@ export function HivePopup() {
     if (!th?.camera || !th?.gl) return;
     const cam = th.camera;
     const canvas = th.gl.domElement;
-    const v = new THREE.Vector3(hive.position[0], hive.position[1] + 2.6, hive.position[2]);
+    // project the hive's TOP (a fixed world point just above the hive) —
+    // the popup anchors there; per #36 round-5 the anchor is clamped to
+    // the viewport with voxel-chrome margins, because a world-unit offset
+    // (the old +2.6u) perspective-blows for near hives
+    const v = new THREE.Vector3(hive.position[0], hive.position[1] + 2.4, hive.position[2]);
     const project = () => {
-      v.set(hive.position[0], hive.position[1] + 2.6, hive.position[2]);
+      v.set(hive.position[0], hive.position[1] + 2.4, hive.position[2]);
       const p = v.clone().project(cam);
       const rect = canvas.getBoundingClientRect();
-      const x = ((p.x + 1) / 2) * rect.width;
-      const y = ((-p.y + 1) / 2) * rect.height;
+      // clamp keeps the whole popup in-viewport with chrome margins —
+      // including far hives whose projection lands near the fold
+      const x = THREE.MathUtils.clamp(((p.x + 1) / 2) * rect.width, 135, rect.width - 135);
+      const y = THREE.MathUtils.clamp(((-p.y + 1) / 2) * rect.height - 14, 90, rect.height - 185);
       setScreen({ x, y });
       rafRef.current = requestAnimationFrame(project);
     };
@@ -56,12 +63,9 @@ export function HivePopup() {
   // (the isDaylight lesson — no second definition of full)
   const ready = combReady(fill);
   const name = STRUCTURE_BY_ID.hive?.name ?? 'Hive';
-  const fillLine =
-    ready
-      ? 'The comb hangs heavy and golden — full to the brim.'
-      : fill > 0.5
-        ? 'The comb is filling — you can see it warming through the straw.'
-        : 'The colony is settling in; the first drops of the season are already in the comb.';
+  // the ONE shared state line (src/data/honey) — the info panel's hive
+  // hint renders the same strings, so both surfaces always agree
+  const fillLine = combStateLine(fill);
 
   const panelStyle: CSSProperties = {
     position: 'fixed',
@@ -124,7 +128,7 @@ export function HivePopup() {
         data-hive-popup-more
         onClick={() => {
           usePlacementStore.getState().closeHivePopup();
-          usePlacementStore.getState().openNotebook({ kind: 'structure', id: 'hive' });
+          usePlacementStore.getState().openNotebook({ kind: 'structure', id: 'hive', instanceId: hive.id });
         }}
         style={{ ...btnStyle(false), marginLeft: ready ? 6 : 0 }}
       >

@@ -847,6 +847,200 @@ async function checkHivePopup() {
     e2eAfter.jars === e2eBefore + 1 && !e2eAfter.popupOpen,
     `jars ${e2eBefore}->${e2eAfter.jars}, popup closed: ${!e2eAfter.popupOpen}`,
   );
+  // 3c. LIVE flip while open: force-fill 1.0 with the popup open -> the
+  //     state line flips to brimming and the button APPEARS (reactive
+  //     re-read, not a snapshot); force-drain -> it flips back.
+  const liveFill = await page.evaluate(async (id) => {
+    const w = window.__meadowlight;
+    w.setComb(id, 0.05);
+    w.openHivePopup(id);
+    await new Promise((res) => setTimeout(res, 250));
+    const before = (() => {
+      const el = document.querySelector('[data-hive-popup]');
+      return { filling: el.textContent.includes('filling') || el.textContent.includes('settling'), hasBtn: !!el.querySelector('[data-hive-popup-harvest]') };
+    })();
+    w.setComb(id, 1);
+    await new Promise((res) => setTimeout(res, 400));
+    const atFull = (() => {
+      const el = document.querySelector('[data-hive-popup]');
+      return { brimming: el.textContent.includes('full and heavy'), hasBtn: !!el.querySelector('[data-hive-popup-harvest]') };
+    })();
+    w.setComb(id, 0.05);
+    await new Promise((res) => setTimeout(res, 400));
+    const drained = (() => {
+      const el = document.querySelector('[data-hive-popup]');
+      return { backToFilling: el.textContent.includes('filling') || el.textContent.includes('settling'), btnGone: !el.querySelector('[data-hive-popup-harvest]') };
+    })();
+    return { before, atFull, drained };
+  }, hiveId);
+  rec.record(
+    'hivepopup.live-flip-while-open-both-directions',
+    !liveFill.before.hasBtn && liveFill.before.filling &&
+      liveFill.atFull.brimming && liveFill.atFull.hasBtn &&
+      liveFill.drained.backToFilling && liveFill.drained.btnGone,
+    JSON.stringify(liveFill),
+  );
+  // 3d. TWO-SOURCES assertion: the info panel and the popup read the SAME
+  //     comb state at 0 / 0.5 / 1.0 (open popup, read its line, then open
+  //     the panel via 'more' with the instance attributed, read its hint)
+  const agreement = [];
+  for (const fill of [0, 0.5, 1]) {
+    const agree = await page.evaluate(async (args) => {
+      const [id, fill] = args;
+      const w = window.__meadowlight;
+      w.setComb(id, fill);
+      w.openHivePopup(id);
+      await new Promise((res) => setTimeout(res, 350));
+      const popupEl = document.querySelector('[data-hive-popup]');
+      const popupLine = popupEl ? popupEl.querySelector('div > div:nth-child(2)')?.textContent ?? popupEl.textContent : '';
+      // panel via 'more' (instance-attributed)
+      popupEl.querySelector('[data-hive-popup-more]')?.click();
+      await new Promise((res) => setTimeout(res, 400));
+      const panelEl = document.querySelector('#notebook-card');
+      const panelText = panelEl ? panelEl.textContent : '';
+      const w2 = window.__meadowlight;
+      // both must contain the same shared state line for this fill
+      // TWO-SOURCES assertion: both surfaces must render the SAME line —
+      // read each one's comb-state sentence and require equality (this is
+      // the agreement itself, not a hardcoded boundary)
+      const stateOf = (txt) =>
+        txt.includes('full and heavy') ? 'full' :
+        txt.includes('filling') ? 'filling' :
+        txt.includes('settling in') ? 'settling' : 'none';
+      const popupState = stateOf(popupLine);
+      const panelState = stateOf(panelText);
+      return { fill, popupState, panelState, agree: popupState === panelState && popupState !== 'none' };
+    }, [hiveId, fill]);
+    agreement.push({ fill, ...agree });
+  }
+  const agreeOk = agreement.every((a) => a.agree);
+  rec.record(
+    'hivepopup.panel-and-popup-agree-at-all-fills',
+    agreeOk,
+    JSON.stringify(agreement),
+  );
+  // 3e. anchor proximity: popup within N px of the hive's projected top
+  //     for a NEAR hive (center) and a FAR hive (placed toward the edge)
+  const anchor = await page.evaluate(async () => {
+    const w = window.__meadowlight;
+    const th = w.__three;
+    const cam = th.camera;
+    const project = (X, Y, Z) => {
+      const vm = cam.matrixWorldInverse.elements, pm = cam.projectionMatrix.elements;
+      const vx = vm[0]*X+vm[4]*Y+vm[8]*Z+vm[12], vy = vm[1]*X+vm[5]*Y+vm[9]*Z+vm[13], vz = vm[2]*X+vm[6]*Y+vm[10]*Z+vm[14], vw = vm[3]*X+vm[7]*Y+vm[11]*Z+vm[15];
+      const cx = pm[0]*vx+pm[4]*vy+pm[8]*vz+pm[12]*vw, cy = pm[1]*vx+pm[5]*vy+pm[9]*vz+pm[13]*vw, cw = pm[3]*vx+pm[7]*vy+pm[11]*vz+pm[15]*vw;
+      const rect = th.gl.domElement.getBoundingClientRect();
+      return { x: ((cx/cw+1)/2)*rect.width, y: ((-cy/cw+1)/2)*rect.height };
+    };
+    // place a far hive the camera actually frames (the default view covers
+    // the -z half; (12,-6) is far from the near hive yet in-frame — an
+    // off-frame hive is a clamp case, not an anchor case)
+    w.placeStructure('hive', 12, -6);
+    await new Promise((res) => setTimeout(res, 400));
+    const farId = w.structures().find((st) => st.structureId === 'hive' && Math.hypot(st.position[0] - 12, st.position[2] + 6) < 1)?.id;
+    const results = [];
+    for (const [id, label, px, pz] of [[w.structures()[0].id, 'near', 0, 0], [farId, 'far', 12, -6]]) {
+      if (!id) continue;
+      w.openHivePopup(id);
+      await new Promise((res) => setTimeout(res, 450));
+      const el = document.querySelector('[data-hive-popup]');
+      if (!el) { results.push({ label, err: 'no popup' }); continue; }
+      const rect = el.getBoundingClientRect();
+      const center = { x: rect.left + rect.width / 2, y: rect.top };
+      const proj = project(px, w.terrainHeightAt(px, pz) + 2.4, pz);
+      const dist = Math.hypot(center.x - proj.x, center.y - proj.y);
+      results.push({ label, distPx: +dist.toFixed(0), inViewport: rect.top >= 0 && rect.bottom <= innerHeight && rect.left >= 0 && rect.right <= innerWidth });
+    }
+    return results;
+  });
+  const nearOk = anchor.find((a) => a.label === 'near');
+  const farOk = anchor.find((a) => a.label === 'far');
+  rec.record(
+    'hivepopup.anchor-within-150px-of-projected-hive',
+    !!nearOk && !!farOk && nearOk.distPx !== undefined && nearOk.distPx < 150 && farOk.distPx !== undefined && farOk.distPx < 150 && nearOk.inViewport && farOk.inViewport,
+    JSON.stringify(anchor),
+  );
+  // 3f. THE HARVEST CYCLE through the popup per spec: fill 0 -> open ->
+  //     still-working line, no button; force-fill 1.0 WHILE OPEN -> line
+  //     flips to brimming, button appears; CLICK THE BUTTON -> jar+1,
+  //     comb resets to partial, button hides, line returns to still-working.
+  const cycle = await page.evaluate(async (id) => {
+    const w = window.__meadowlight;
+    const read = () => {
+      const el = document.querySelector('[data-hive-popup]');
+      if (!el) return null;
+      return {
+        line: el.querySelector('div > div:nth-child(2)')?.textContent ?? '',
+        hasBtn: !!el.querySelector('[data-hive-popup-harvest]'),
+        stillWorking: el.textContent.includes('still working'),
+      };
+    };
+    const jars0 = w.honeyJars();
+    w.setComb(id, 0);
+    w.openHivePopup(id);
+    await new Promise((res) => setTimeout(res, 350));
+    const atZero = read();
+    w.setComb(id, 1);
+    await new Promise((res) => setTimeout(res, 400));
+    const atFull = read();
+    // click the harvest button (the real DOM affordance)
+    document.querySelector('[data-hive-popup-harvest]')?.click();
+    await new Promise((res) => setTimeout(res, 600));
+    const afterHarvest = read();
+    return {
+      jars: w.honeyJars() - jars0,
+      comb: w.hiveCombs()[id],
+      atZero, atFull, afterHarvest,
+      popupClosed: !document.querySelector('[data-hive-popup]'),
+    };
+  }, hiveId);
+  const cycleOk =
+    cycle.atZero.stillWorking && !cycle.atZero.hasBtn &&
+    !cycle.atFull.stillWorking && cycle.atFull.hasBtn &&
+    cycle.jars === 1 && Math.abs(cycle.comb - 0.35) < 0.05 &&
+    cycle.popupClosed;
+  rec.record(
+    'hivepopup.harvest-cycle-through-button',
+    cycleOk,
+    JSON.stringify(cycle).slice(0, 400),
+  );
+  // 3g. FACT LINE varies with season: the notebook card for the hive shows
+  //     different text in summer vs winter (the winter cluster line only
+  //     in winter; the evergreen base otherwise)
+  const factSeason = await page.evaluate(async () => {
+    const w = window.__meadowlight;
+    const readPanel = async () => {
+      const card = document.querySelector('#notebook-card');
+      return card ? card.textContent : '';
+    };
+    // summer
+    w.setSeason('summer');
+    w.openHivePopup(w.structures()[0].id);
+    await new Promise((res) => setTimeout(res, 350));
+    document.querySelector('[data-hive-popup-more]')?.click();
+    await new Promise((res) => setTimeout(res, 500));
+    const summerText = await readPanel();
+    // close the panel
+    document.querySelector('#notebook-card')?.querySelector('button')?.click();
+    await new Promise((res) => setTimeout(res, 250));
+    // winter
+    w.setSeason('winter');
+    w.openHivePopup(w.structures()[0].id);
+    await new Promise((res) => setTimeout(res, 350));
+    document.querySelector('[data-hive-popup-more]')?.click();
+    await new Promise((res) => setTimeout(res, 500));
+    const winterText = await readPanel();
+    return {
+      summerHasWinterCluster: summerText.includes('clusters around the queen'),
+      winterHasWinterCluster: winterText.includes('clusters around the queen'),
+      differ: summerText !== winterText,
+    };
+  });
+  rec.record(
+    'hivepopup.fact-line-varies-with-season',
+    !factSeason.summerHasWinterCluster && factSeason.winterHasWinterCluster && factSeason.differ,
+    JSON.stringify(factSeason),
+  );
   // 4. the P-panel path is the SAME action (one code path under both)
   const ppanel = await page.evaluate((id) => {
     const w = window.__meadowlight;

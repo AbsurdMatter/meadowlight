@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { PLANTS } from '../data/plants';
+import { combStateLine } from '../data/honey';
 import { usePlacementStore } from '../render/placementStore';
 import {
   choosePlantFact,
@@ -77,16 +78,17 @@ export function Notebook() {
       // #10: the hive carries its comb state — a warm hint, never pressure
       let hint: string | null = null;
       if (entry.id === 'hive') {
-        const fill = Object.entries(s.hiveCombs).find(([id]) =>
-          s.structures.some((st) => st.structureId === 'hive' && st.id === id),
-        )?.[1];
-        const v = fill ?? 0;
-        hint =
-          v >= 1
-            ? 'The comb is full and heavy — click the hive to bring a jar in. \u{1F36B}'
-            : v > 0.5
-              ? 'The comb is filling — you can see it warming in the straw.'
-              : 'The colony is settling in — the first drops of the season are already in the comb.';
+        // #36: read THE instance's comb (the clicked hive, when the panel
+        // opened via the popup's 'more'), and render the ONE shared state
+        // line — popup and panel can never disagree (the two-sources bug)
+        const instance = entry.instanceId
+          ? s.structures.find((st) => st.id === entry.instanceId && st.structureId === 'hive')
+          : s.structures.find((st) => st.structureId === 'hive');
+        const v = instance ? s.hiveCombs[instance.id] ?? 0 : 0;
+        // the shared state line only — the harvest affordance lives in
+        // the hive POPUP's real button (a 'click the hive' instruction
+        // here was a dead end: clicking the hive opens the popup)
+        hint = combStateLine(v);
       }
       return { title: name, choice, hint };
     }

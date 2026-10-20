@@ -65,6 +65,20 @@ export const HONEY_FORAGING_SEASONS: Season[] = ['spring', 'summer', 'autumn'];
 
 /** EDUCATION.md: "Honeybee workers visit 50-100 flowers per foraging trip,
  *  and a colony can visit millions of flowers in a year." */
+/**
+ * #36 (eyeball round 5): the ONE shared fill-state read — the popup's
+ * state line, the harvest button's enabled state, the harvest action,
+ * AND the info panel's hive hint all call these (the isDaylight lesson:
+ * no second definition of "full" anywhere). combReady lives in
+ * engine/honey.ts and consumes the same tuning; the state LINE lives
+ * here beside the copy it renders.
+ */
+export function combStateLine(fill: number): string {
+  if (fill >= 1 - 1e-4) return 'The comb is full and heavy — golden to the brim. \u{1F36B}';
+  if (fill > 0.5) return 'The comb is filling — you can see it warming through the straw.';
+  return 'The colony is settling in; the first drops of the season are already in the comb.';
+}
+
 export const HONEY_FACTS = {
   harvest: 'Honeybee workers visit 50\u2013100 flowers on every foraging trip \u2014 this jar holds a whole season of those visits, millions of flowers\u2019 worth.',
   filling: 'Bees turn nectar into honey by fanning it with their wings until it thickens \u2014 every drop in the comb is a summer\u2019s work, kept for the winter cluster.',

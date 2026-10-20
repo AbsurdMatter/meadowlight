@@ -67,8 +67,9 @@ export const PLANT_FACTS: Record<string, FactEntry> = {
 
 export const STRUCTURE_FACTS: Record<string, FactEntry> = {
   hive: {
+    // #36: the base fact must be EVERGREEN (the winter-cluster line as the base rendered in every season — the 'static content' read); the winter cluster line lives only in SEASON_VARIANT_FACTS.winter now.
     id: 'structure:hive',
-    text: 'In winter, the honeybee colony clusters around the queen and shivers to keep her at a cozy ~21\u00b0C, feeding on stored honey.',
+    text: 'Honeybee workers visit 50–100 flowers per foraging trip — a colony can visit millions of flowers in a year.',
   },
   bath: {
     id: 'structure:bath',

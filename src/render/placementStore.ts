@@ -37,7 +37,9 @@ export interface PlacementState {
   placementVariation: boolean;
   /** the milestone that most recently fired (for the toast stack) */
   toasts: Toast[];
-  notebook: { kind: 'plant' | 'structure' | 'meadow'; id: string } | null;
+  notebook:
+    | { kind: 'plant' | 'structure' | 'meadow'; id: string; instanceId?: string }
+    | null;
   /** ids of facts the player has seen (persisted, additive save field) */
   seenFacts: string[];
   markFactSeen: (id: string) => void;
