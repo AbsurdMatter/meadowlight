@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
+import { scaledDelta } from '../engine/scaledTime';
 import * as THREE from 'three';
 import { isRaining, RAIN_TUNING } from '../engine/weather';
 
@@ -39,7 +40,7 @@ export function Rain() {
     mesh.instanceMatrix.needsUpdate = true;
   }, []);
 
-  useFrame((_, delta) => {
+  useFrame(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
     const raining = isRaining();
@@ -73,6 +74,7 @@ export function Rain() {
     const mat = new THREE.Matrix4();
     let i = 0;
     for (const d of drops.current) {
+      const delta = scaledDelta();
       d.y -= d.speed * delta;
       d.x += RAIN_TUNING.windX * delta;
       if (d.y < 0) {

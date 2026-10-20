@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
+import { scaledElapsed } from '../engine/scaledTime';
 import * as THREE from 'three';
 import { STRUCTURES } from '../data/structures';
 import { usePlacementStore } from './placementStore';
@@ -75,9 +76,9 @@ export function PlacedStructures() {
     openNotebook({ kind: 'structure', id: structureId });
   };
 
-  useFrame(({ clock }) => {
+  useFrame(() => {
     const r = refs.current;
-    const t = clock.elapsedTime;
+    const t = scaledElapsed();
     const store = usePlacementStore.getState();
     for (const def of STRUCTURES) {
       const mesh = r.meshes[def.id];

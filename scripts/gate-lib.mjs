@@ -28,13 +28,27 @@ export async function launchChromium(chromium, { libPath = '' } = {}) {
   });
 }
 
-/** new page that captures console/page errors for the no-console-errors check */
+/** new page that captures console/page errors for the no-console-errors check.
+ *  A dev server that isn't running reads as a clean, actionable message —
+ *  never a raw ERR_CONNECTION_REFUSED stack (a wrong-port run is a usage
+ *  error, not a test failure). */
 export async function newPage(browser, url) {
   const page = await browser.newPage();
   const errors = [];
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 8000 });
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (msg.includes('ERR_CONNECTION_REFUSED') || msg.includes('net::ERR')) {
+      console.error(
+        `[GATE] dev server not reachable at ${url} — start it first (npm run dev, then pass --url with the right port).`,
+      );
+      process.exit(2);
+    }
+    throw e;
+  }
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
-  await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
   await page.waitForTimeout(2500);
   return { page, errors };
 }

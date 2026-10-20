@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
+import { scaledElapsed } from '../engine/scaledTime';
 import * as THREE from 'three';
 import { PLANTS } from '../data/plants';
 import { usePlacementStore } from './placementStore';
@@ -61,9 +62,9 @@ function FlowerInstances() {
     const itemId = idx === undefined ? undefined : idMaps.current[plantId]?.[idx];
     if (itemId) openNotebook({ kind: 'plant', id: itemId });
   };
-  useFrame(({ clock, camera }) => {
+  useFrame(({ camera }) => {
     const r = refs.current;
-    const t = clock.elapsedTime;
+    const t = scaledElapsed();
     // #9: companion vigor — recipe partners bloom a touch fuller. Strictly
     // additive (a gentle scale-up on blessed flowers); unblessed flowers
     // keep the exact pre-recipe look, so nothing ever reads as penalized.

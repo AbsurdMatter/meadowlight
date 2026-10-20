@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
+import { scaledDelta } from '../engine/scaledTime';
+import { NIGHT_SKY_TUNING } from '../data/nightSky';
 import * as THREE from 'three';
 import { MEADOW_SIZE } from '../engine/terrain';
+import { pondExclusionRadius } from '../engine/treeLayout';
 import {
   HILLS,
   LAKE,
@@ -284,10 +287,25 @@ function Forest() {
         const r = Math.sqrt(rng()) * cluster.spread;
         const x = cluster.x + Math.cos(a) * r;
         const z = cluster.z + Math.sin(a) * r;
-        const gy = backgroundHeight(x, z);
         const variant = TREES.variants[Math.floor(rng() * TREES.variants.length)];
         const scale = 0.8 + rng() * 0.5;
         const rotY = rng() * Math.PI * 2;
+        // U4 revision (#6297851661, exact-footprint rule): exclude trees
+        // whose FULL rendered footprint (canopy bounds incl. scale — never
+        // the trunk cell) reaches the pond footprint + the data clearance.
+        // ONE SOURCE: engine/treeLayout.ts holds this exact rule (same RNG
+        // order — the unit test asserts the same trees this loop renders).
+        {
+          let canopyMax = 0;
+          for (const f of variant.foliage) {
+            canopyMax = Math.max(canopyMax, Math.hypot(f.offset[0], f.offset[2]) + Math.max(f.size[0], f.size[2]) * 0.5);
+          }
+          const footprint = (canopyMax + 0.3) * (1 + scale);
+          if (Math.hypot(x - LAKE.center[0], z - LAKE.center[1]) < pondExclusionRadius() + footprint) {
+            continue; // water-excluded: rolls consumed in treeLayout's order
+          }
+        }
+        const gy = backgroundHeight(x, z);
         const dist = Math.hypot(x, z);
         const fogT = THREE.MathUtils.clamp(
           (dist - HILLS.fogBlendStart) / (HILLS.fogBlendEnd - HILLS.fogBlendStart),
@@ -380,11 +398,11 @@ function Clouds() {
     }));
   }, []);
 
-  useFrame((_, delta) => {
+  useFrame(() => {
     for (let i = 0; i < clusters.length; i++) {
       const g = clusterRefs.current[i];
       if (!g) continue;
-      g.position.x += clusters[i].speed * delta;
+      g.position.x += clusters[i].speed * scaledDelta();
       if (g.position.x > CLOUDS.wrapHalfWidth) {
         g.position.x = -CLOUDS.wrapHalfWidth;
       }
@@ -412,7 +430,7 @@ function Clouds() {
                 <meshLambertMaterial
                   color={new THREE.Color(CLOUDS.color).multiplyScalar(shade)}
                   transparent
-                  opacity={CLOUDS.opacity}
+                  opacity={NIGHT_SKY_TUNING.clouds.opacity}
                   depthWrite={false}
                 />
               </mesh>

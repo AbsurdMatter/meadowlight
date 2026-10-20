@@ -6,6 +6,7 @@ import { FOG, HILLS, shapedHeight } from '../data/environment';
 import { skyPaletteAt, dayPhase, advanceDay } from '../engine/dayCycle';
 import { advanceSeasons, seasonClockOverridden } from '../engine/seasonClock';
 import { timeMultiplier } from '../engine/timeControl';
+import { tickScaledTime } from '../engine/scaledTime';
 import { usePlacementStore } from './placementStore';
 
 /**
@@ -60,6 +61,11 @@ export function Sky() {
   const lastKey = useRef('');
   const fogRef = useRef<THREE.Fog | null>(null);
   useFrame((_, delta) => {
+    // ONE time system, now truly one: this single site advances both SIM
+    // clocks AND ticks the shared ANIMATION clock (scaledTime) — every
+    // animation system consumes scaledDelta()/scaledElapsed() from it, so
+    // speed changes and pause reach the whole world through one multiply.
+    tickScaledTime(delta);
     // ONE time system: this is the single site that advances both clocks
     // (day cycle + #11 season calendar). Nothing else may tick either —
     // a second advance site is how two clocks drift apart. The speed

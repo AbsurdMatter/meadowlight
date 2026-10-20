@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
+import { scaledElapsed } from '../engine/scaledTime';
 import * as THREE from 'three';
 import { GRASS_TUFTS, BUSHLETS } from '../data/polish';
 import { groundAt, isGrassSpawnable } from '../engine/ground';
@@ -159,10 +160,10 @@ export function GrassTufts() {
   const halfHeightMat = useMemo(() => new THREE.Matrix4(), []);
   const scaleVec = useMemo(() => new THREE.Vector3(...GRASS_TUFTS.bladeSize), []);
 
-  useFrame(({ clock }) => {
+  useFrame(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
-    const t = clock.elapsedTime;
+    const t = scaledElapsed();
     let i = 0;
     for (const tuft of tufts) {
       const h = groundAt(tuft.x, tuft.z).height;

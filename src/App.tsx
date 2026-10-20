@@ -6,6 +6,8 @@ import { Background } from './render/Background';
 import { Sky, DistantRidge } from './render/Sky';
 import { dayPhase, skyPaletteAt } from './engine/dayCycle';
 import { WildPollinators } from './render/WildPollinators';
+import { HabitatScenery } from './render/HabitatScenery';
+import { NightSky } from './render/NightSky';
 import { Fireflies } from './render/Fireflies';
 import { Rain } from './render/Rain';
 import { PlantedFlowers } from './render/PlantedFlowers';
@@ -110,6 +112,8 @@ function Scene() {
       <BeeSwarm />
       <SolitaryBees />
       <WildPollinators />
+      <HabitatScenery />
+      <NightSky />
       <Fireflies />
       <Rain />
       <BloomPipeline />

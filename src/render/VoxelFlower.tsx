@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
+import { scaledElapsed } from '../engine/scaledTime';
 import * as THREE from 'three';
 import type { PlantPart } from '../data/plants';
 
@@ -19,10 +20,10 @@ export function VoxelFlower({ def, position, rotationY, ghost, swayStrength, til
   const groupRef = useRef<THREE.Group>(null);
   const phase = useRef(Math.random() * Math.PI * 2).current;
   const sway = swayStrength ?? def.sway ?? 0.05;
-  useFrame(({ clock }) => {
+  useFrame(() => {
     const g = groupRef.current;
     if (!g) return;
-    const t = clock.elapsedTime;
+    const t = scaledElapsed();
     g.rotation.z = Math.sin(t * 0.9 + phase) * sway + (tilt ? tilt[1] : 0);
     g.rotation.x = Math.cos(t * 0.7 + phase * 1.3) * sway * 0.5 + (tilt ? tilt[0] : 0);
   });

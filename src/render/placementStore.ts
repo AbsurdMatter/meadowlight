@@ -18,6 +18,11 @@ import { SEASON_ARRIVAL } from '../data/seasons';
 import { newlyFormed, companionSet } from '../engine/companions';
 import { combReady, fillAfterHarvest } from '../engine/honey';
 import { HONEY_FACTS } from '../data/honey';
+import { SEEDING_FACTS } from '../data/seeding';
+import { rollVolunteers } from '../engine/seeding';
+import { isPlantableCell } from '../engine/ground';
+import { flowerBlocked } from '../engine/collision';
+import { groundAt } from '../engine/ground';
 import type { MilestoneId } from '../data/milestones';
 
 export interface Toast {
@@ -80,6 +85,20 @@ export interface PlacementState {
   setComb: (hiveId: string, fill: number) => void;
   /** #10: lifetime jars of honey brought in (persisted v6) */
   honeyJars: number;
+  /**
+   * U1 (session 7): the world's named seed state — deterministic key for
+   * every seeding roll, the exact counterpart of dayPhase/season (one
+   * definition, persisted v7 additive). Old saves got theirs derived at
+   * load; fresh worlds roll one at boot.
+   */
+  worldSeed: number;
+  /** U1: season rollovers this world has seeded (persisted v7 additive) */
+  seedingEpoch: number;
+  /**
+   * U2: seasonal visitor windows — (visitorId, season) pairs, one entry
+   * per visit-window (persisted v7 additive; the notebook reads it).
+   */
+  visitorWindows: string[];
   /** #10: harvest a ready hive — jar + ceremony state + warm fact toast */
   harvestHoney: (hiveId: string) => boolean;
   /** #10: hive ids currently mid-harvest-dip (the render reads this) */
@@ -116,6 +135,8 @@ if (typeof initial.dayPhase === 'number') setDayPhase(initial.dayPhase);
 // never re-interpret a boundary differently than live play did.
 setSeasonProgressForTest(initial.seasonProgress ?? 0);
 let toastSeq = 1;
+/** one quiet mention of self-seeding per world, ever (the meadow teaches once) */
+let volunteerToastShown = initial.items.some((it) => it.volunteer);
 
 export const usePlacementStore = create<PlacementState>((set, get) => ({
   items: initial.items,
@@ -169,6 +190,9 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
     // #11: the manual dial is the SAME override path the P panel uses —
     // one trigger pattern (forceSeason holds the calendar; resume releases)
     forceSeason(season);
+    // U1: crossing into a different season is a rollover for the flora —
+    // the dial seeds exactly like the natural calendar (one shared site)
+    if (get().season !== season) seedVolunteers(season, false);
     set((s) => {
       const hasWildCorner = s.structures.some((st) => st.structureId === 'wildcorner');
       if (!hasWildCorner || s.wildSeasons.includes(season)) return { season };
@@ -188,6 +212,11 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
         : null;
       return toast ? { season, wildSeasons, toasts: [...s.toasts, toast] } : { season, wildSeasons };
     });
+    // U1 (session 7): self-seeding rides the ONE season-advance site — one
+    // deterministic roll per rollover, keyed on the world's named seed
+    // state + epoch. The dial (setSeason) crosses a season boundary too and
+    // shares this helper; nothing else may seed.
+    seedVolunteers(season, false);
     get().save();
   },
   resumeSeasonClock: () => {
@@ -225,6 +254,9 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
     set({ hiveCombs: { ...s.hiveCombs, [hiveId]: next } });
   },
   honeyJars: initial.honeyJars ?? 0,
+  worldSeed: initial.worldSeed ?? 12345,
+  seedingEpoch: initial.seedingEpoch ?? 0,
+  visitorWindows: initial.visitorWindows ?? [],
   harvestDips: {},
   hivePopup: null,
   openHivePopup: (hiveId) => set({ hivePopup: hiveId }),
@@ -270,6 +302,9 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       structures: [],
       milestones: [],
       season: 'summer',
+      worldSeed: Math.floor(Math.random() * 2147483647),
+      seedingEpoch: 0,
+      visitorWindows: [],
       // #11: reset returns the calendar to a fresh summer start, unheld
       toasts: [],
       modalOpen: false,
@@ -316,6 +351,9 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       foundRecipes: w.foundRecipes ?? [],
       hiveCombs: w.hiveCombs ?? {},
       honeyJars: w.honeyJars ?? 0,
+      worldSeed: w.worldSeed ?? 12345,
+      seedingEpoch: w.seedingEpoch ?? 0,
+      visitorWindows: w.visitorWindows ?? [],
     });
     // #11: the reload must re-derive the calendar position from the blob —
     // same semantics as a fresh page load, not the live clock
@@ -338,9 +376,67 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       foundRecipes: s.foundRecipes,
       hiveCombs: s.hiveCombs,
       honeyJars: s.honeyJars,
+      worldSeed: s.worldSeed,
+      seedingEpoch: s.seedingEpoch,
+      visitorWindows: s.visitorWindows,
     });
   },
 }));
+
+/**
+ * U1: the ONE seeding site — called only from the season-boundary crossings
+ * (arriveAtSeason / setSeason). Parents = flowers that bloomed in the season
+ * just ended; children are roster-compatible, land only in RAW-query
+ * plantable cells (isPlantableCell — the same classification the overlay,
+ * ghost, and click path use), and are ordinary items the moment they exist:
+ * clearable like any plant, rendered like any plant, persisted like any
+ * plant (with volunteer: true so the notebook can say who planted them).
+ */
+function seedVolunteers(season: Season, announce: boolean): void {
+  const s = usePlacementStore.getState();
+  const seeds = rollVolunteers(
+    s.items,
+    s.season,
+    season,
+    s.worldSeed,
+    s.seedingEpoch,
+    isPlantableCell,
+    (x, z) => flowerBlocked(x, z, s.structures),
+  );
+  if (seeds.length === 0) {
+    // the epoch still advances: a no-seed rollover consumed its roll
+    usePlacementStore.setState({ seedingEpoch: s.seedingEpoch + 1 });
+    return;
+  }
+  usePlacementStore.setState((cur) => {
+    const newItems = seeds.map((seed, i): PlacedItem => ({
+      id: `volunteer:${cur.worldSeed}:${cur.seedingEpoch}:${i}`,
+      plantId: seed.plantId,
+      position: [seed.position[0], groundAt(seed.position[0], seed.position[2]).height, seed.position[2]],
+      rotationY: 0,
+      phase: seed.phase,
+      variation: seed.variation,
+      volunteer: true,
+    }));
+    const toasts =
+      announce && !volunteerToastShown
+        ? [
+            ...cur.toasts,
+            {
+              id: toastSeq++,
+              title: 'The meadow seeds itself',
+              body: SEEDING_FACTS.volunteer,
+            },
+          ]
+        : cur.toasts;
+    if (announce && seeds.length > 0) volunteerToastShown = true;
+    return {
+      items: [...cur.items, ...newItems],
+      seedingEpoch: cur.seedingEpoch + 1,
+      toasts,
+    };
+  });
+}
 
 /** Roll placement variation respecting the persisted toggle. */
 export function makeVariation(enabled: boolean): PlacementVariation {

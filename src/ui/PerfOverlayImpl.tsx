@@ -343,6 +343,11 @@ function PerfOverlayPanel() {
       <Session6SeasonTriggers />
       <Session6RecipeTriggers />
       <Session6HoneyTriggers />
+      <Session7SeedingReadback />
+      <Session7VisitorTriggers />
+      <Session7ColonyReadback />
+      <Session7HabitatReadback />
+      <Session7NightSkyReadback />
       <SaveInspector />
       <MilestoneChecklist />
     </div>
@@ -562,6 +567,221 @@ function Session6HoneyTriggers() {
         }, 'honey-harvest')}
         <span style={{ fontSize: 11, opacity: 0.7 }}>
           {' '}jars {jars} · combs {hives.map((h) => (combs[h.id] ?? 0).toFixed(2)).join(',') || '-'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** session 7 trigger section: self-seeding (#U1) — read the named seed
+ *  state, cross a season boundary (the dial = the one seeding trigger
+ *  path), and read the volunteer census. Trigger-first: no direct
+ *  seed-spawn — volunteers only ever arrive via the season boundary. */
+function Session7SeedingReadback() {
+  const [, forceRender] = useState(0);
+  const refresh = () => forceRender((n) => n + 1);
+  const worldSeed = usePlacementStore((s) => s.worldSeed);
+  const epoch = usePlacementStore((s) => s.seedingEpoch);
+  const items = usePlacementStore((s) => s.items);
+  const volunteers = items.filter((it) => it.volunteer).length;
+  const btn = (label: string, onClick: () => void, key?: string) => (
+    <button
+      key={key}
+      data-perf-s7={key}
+      onClick={() => {
+        onClick();
+        refresh();
+      }}
+      style={{
+        margin: '2px 4px 2px 0',
+        padding: '5px 9px',
+        borderRadius: 8,
+        border: 'none',
+        background: '#666',
+        color: '#fff',
+        fontFamily: 'inherit',
+        fontSize: 12,
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>self-seeding (U1)</div>
+      <div>
+        {btn('dial next season (rolls seeds)', () => {
+          const s = usePlacementStore.getState();
+          const order: typeof s.season[] = ['spring', 'summer', 'autumn', 'winter'];
+          const next = order[(order.indexOf(s.season) + 1) % 4];
+          s.setSeason(next);
+        }, 'seed-roll')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {' '}seed #{worldSeed} · epoch {epoch} · volunteers {volunteers}/{items.length}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** session 7 trigger section: seasonal wild visitors (#U2) — force the
+ *  NATURAL CONDITIONS (season, day phase, target flowers), never the spawn
+ *  itself (the session-5 butterfly decision, kept). Readback: per-species
+ *  counts + the visitor-window log. */
+function Session7VisitorTriggers() {
+  const [, forceRender] = useState(0);
+  const refresh = () => forceRender((n) => n + 1);
+  const btn = (label: string, onClick: () => void, key?: string) => (
+    <button
+      key={key}
+      data-perf-s7={key}
+      onClick={() => {
+        onClick();
+        refresh();
+      }}
+      style={{
+        margin: '2px 4px 2px 0',
+        padding: '5px 9px',
+        borderRadius: 8,
+        border: 'none',
+        background: '#666',
+        color: '#fff',
+        fontFamily: 'inherit',
+        fontSize: 12,
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>seasonal wild visitors (U2)</div>
+      <div>
+        {btn('queen cond: spring + crocuses', () => {
+          const w = (window as unknown as { __meadowlight?: { plant: (id: string, x: number, z: number) => void; setSeason: (s: 'spring' | 'summer' | 'autumn' | 'winter') => void } }).__meadowlight;
+          w?.setSeason('spring');
+          for (let k = 0; k < 4; k++) w?.plant('crocus', 2 + k * 1.2, 2);
+        }, 'visitor-queen')}
+        {btn('moth cond: night + lavender', () => {
+          const w = (window as unknown as { __meadowlight?: { plant: (id: string, x: number, z: number) => void; setDayPhase: (p: number) => void; setSeason: (s: 'spring' | 'summer' | 'autumn' | 'winter') => void } }).__meadowlight;
+          w?.setSeason('summer');
+          w?.setDayPhase(0.95);
+          for (let k = 0; k < 4; k++) w?.plant('lavender', -2 - k * 1.2, 2);
+        }, 'visitor-moth')}
+        {btn('firefly bloom cond: summer + dusk', () => {
+          const w = (window as unknown as { __meadowlight?: { setSeason: (s: 'spring' | 'summer' | 'autumn' | 'winter') => void; setDayPhase: (p: number) => void; placeStructure: (id: string, x: number, z: number) => void } }).__meadowlight;
+          w?.setSeason('summer');
+          w?.setDayPhase(0.82);
+          w?.placeStructure('wildcorner', -4.5, 5);
+        }, 'visitor-fireflies')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}> windows: {usePlacementStore.getState().visitorWindows.length}</span>
+      </div>
+    </div>
+  );
+}
+
+/** session 7 readback section: bee lifecycles (#U3) — the colony breath.
+ *  Trigger-first: force season/progress (the natural inputs), read the ONE
+ *  shared semantic (engine/lifecycle). No direct population force exists. */
+function Session7ColonyReadback() {
+  const [, forceRender] = useState(0);
+  const refresh = () => forceRender((n) => n + 1);
+  const btn = (label: string, onClick: () => void, key?: string) => (
+    <button
+      key={key}
+      data-perf-s7={key}
+      onClick={() => {
+        onClick();
+        refresh();
+      }}
+      style={{
+        margin: '2px 4px 2px 0',
+        padding: '5px 9px',
+        borderRadius: 8,
+        border: 'none',
+        background: '#666',
+        color: '#fff',
+        fontFamily: 'inherit',
+        fontSize: 12,
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+  const w = (window as unknown as { __meadowlight?: { setSeason: (s: 'spring' | 'summer' | 'autumn' | 'winter') => void; setSeasonProgressForTest: (p: number) => void; colonyReadback: () => { line: string; intensity: number; target: number } } }).__meadowlight;
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>colony breath (U3)</div>
+      <div>
+        {btn('winter mid', () => { w?.setSeason('winter'); w?.setSeasonProgressForTest(0.4); }, 'colony-winter')}
+        {btn('spring start', () => { w?.setSeason('spring'); w?.setSeasonProgressForTest(0.05); }, 'colony-spring')}
+        {btn('summer full', () => { w?.setSeason('summer'); w?.setSeasonProgressForTest(0.5); }, 'colony-summer')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {' '}live {w ? w.colonyReadback().intensity.toFixed(2) : '?'} → target {w ? w.colonyReadback().target.toFixed(2) : '?'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** session 7 readback section: habitat scenery (#U4) — the corner-fold
+ *  census (the raw query) + dragonfly telemetry. Pure scenery: the only
+ *  "trigger" is the readback itself — nothing is force-able (the layout
+ *  is deterministic from the classification truth). */
+function Session7HabitatReadback() {
+  const [, forceRender] = useState(0);
+  const w = (window as unknown as { __meadowlight?: { habitatReadback: () => { foldCells: { x: number; z: number }[]; dragonflies: number } } }).__meadowlight;
+  const data = w?.habitatReadback();
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>habitat scenery (U4)</div>
+      <div style={{ fontSize: 11, opacity: 0.7 }}>
+        fold cells {data ? data.foldCells.length : '?'} · dragonflies {data ? data.dragonflies : '?'}
+        <button
+          data-perf-s7="habitat-refresh"
+          onClick={() => forceRender((n) => n + 1)}
+          style={{ margin: '0 6px', padding: '2px 8px', borderRadius: 8, border: 'none', background: '#666', color: '#fff', fontFamily: 'inherit', fontSize: 11, cursor: 'pointer' }}
+        >
+          refresh
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** session 7 readback section: night sky (#U5) — force the day phase
+ *  (the natural input), read the shared visibility predicate + live star
+ *  opacity + the cloud material value. */
+function Session7NightSkyReadback() {
+  const [, forceRender] = useState(0);
+  const refresh = () => forceRender((n) => n + 1);
+  const btn = (label: string, onClick: () => void, key?: string) => (
+    <button
+      key={key}
+      data-perf-s7={key}
+      onClick={() => {
+        onClick();
+        refresh();
+      }}
+      style={{ margin: '2px 4px 2px 0', padding: '5px 9px', borderRadius: 8, border: 'none', background: '#666', color: '#fff', fontFamily: 'inherit', fontSize: 12, cursor: 'pointer' }}
+    >
+      {label}
+    </button>
+  );
+  const w = (window as unknown as { __meadowlight?: { setDayPhase: (p: number) => void; starsReadback: () => { visible: number; opacity: number }; cloudOpacityReadback: () => number } }).__meadowlight;
+  const stars = w?.starsReadback();
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>night sky (U5)</div>
+      <div>
+        {btn('night', () => w?.setDayPhase(0.0), 'sky-night')}
+        {btn('evening', () => w?.setDayPhase(0.84), 'sky-evening')}
+        {btn('morning', () => w?.setDayPhase(0.3), 'sky-morning')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {' '}stars {stars ? stars.visible : '?'} @ opacity {stars ? stars.opacity.toFixed(2) : '?'} · clouds {w ? w.cloudOpacityReadback() : '?'}
         </span>
       </div>
     </div>

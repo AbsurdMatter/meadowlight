@@ -186,6 +186,17 @@ export const WILD_VISITOR_FACTS: Record<string, FactEntry> = {
     id: 'wild:hoverfly',
     text: 'This little "bee" is a hoverfly — a harmless mimic with no stinger at all; its disguise fools hungry birds while it sips nectar.',
   },
+  // session 7 U2: the seasonal visitors' facts live beside their species'
+  // tuning with in-file citations (src/data/seasonalVisitors.ts) — the
+  // notebook records share the verified fact text from there
+  queenbumble: {
+    id: 'wild:queenbumble',
+    text: 'A queen bumblebee emerges from winter sleep hungry — the first crocuses of spring are exactly the warm meal she needs to start her whole colony.',
+  },
+  lavendermoth: {
+    id: 'wild:lavendermoth',
+    text: 'When the bees go home, moths take the late shift — a lavender patch hums with night visitors long after dusk, pollinating in the dark.',
+  },
 };
 
 export const MEADOW_FACTS: FactEntry[] = [

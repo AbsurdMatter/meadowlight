@@ -15,6 +15,13 @@ import { dayPhase } from './dayCycle';
 import { seasonProgress, seasonClockOverridden } from './seasonClock';
 import { honeyDebug } from '../render/BeeSwarm';
 import { setSpeedStep, setPaused, isPaused, currentSpeedStep, timeMultiplier, type SpeedStep } from './timeControl';
+import { scaledElapsed } from './scaledTime';
+import { colonyReadback } from './lifecycle';
+import { cornerFoldCells, pondSegments, fringeCells } from '../data/habitatScenery';
+import { dragonflyDebug } from '../render/HabitatScenery';
+import { starsDebug } from '../render/NightSky';
+import { starVisibility } from './nightSky';
+import { NIGHT_SKY_TUNING } from '../data/nightSky';
 import { isPlantableCell } from './ground';
 import { hillsBoxes } from './hillsLayout';
 import { setFireflyForce } from '../render/Fireflies';
@@ -43,6 +50,27 @@ declare global {
       setSeasonProgressForTest: (p: number) => void;
       /** #11: true while the calendar is held by an override */
       seasonClockOverridden: () => boolean;
+      /** U1 (session 7): the world's named seed state + epoch (readback) */
+      worldSeedReadback: () => number;
+      seedingEpochReadback: () => number;
+      /** U1: id -> volunteer flag for every item (persisted in the save) */
+      volunteersReadback: () => { id: string; plantId: string; volunteer: boolean }[];
+      /** U2: visitor-window log — (visitorId, season) pairs, one per window */
+      visitorWindowsReadback: () => string[];
+      /** U3: the colony breath — live intensity + the season's line (one source) */
+      colonyReadback: () => { line: string; intensity: number; target: number };
+      /** U4: habitat scenery — fold-cell census + dragonfly telemetry */
+      habitatReadback: () => { foldCells: { x: number; z: number }[]; dragonflies: number };
+      /** U4 revision: the pond-edge segments (the controlled-variance source) */
+      pondSegmentsReadback: () => { index: number; plants: number; spread: number; bandDepth: number; bandWidth: number }[];
+      /** U4 revision: the fringe census (the named extension rule) */
+      fringeCellsReadback: () => { x: number; z: number }[];
+      /** U5: stars — the shared visibility predicate (pure, per phase) + live telemetry */
+      starsReadback: () => { visible: number; opacity: number; visibilityAt: (phase: number) => number };
+      /** U5: the composed-cloud material opacity (the asserted tuning value) */
+      cloudOpacityReadback: () => number;
+      /** write the save NOW (the same store save() the autosave uses) */
+      save: () => void;
       /** #9: discovered recipe ids (persisted) */
       foundRecipes: () => string[];
       /** #9: rescans for newly formed recipes (the plant() path calls it) */
@@ -63,6 +91,10 @@ declare global {
       timeIsPaused: () => boolean;
       timeSpeed: () => number;
       timeMultiplierReadback: () => number;
+      /** fix unit: the shared ANIMATION clock — scaledElapsed accumulates
+       *  dt*timeMultiplier (0 when paused); the gate asserts it scales at
+       *  4x and freezes under pause (the observable that failed) */
+      scaledElapsedReadback: () => number;
       /** #36 item 4: the classification query readbacks (deterministic gate) */
       isPlantableCellReadback: (x: number, z: number) => boolean;
       /** #36 hive popup: open/close via the store path the click uses */
@@ -177,6 +209,29 @@ export function installTestHook() {
     seasonProgressReadback: () => seasonProgress(),
     setSeasonProgressForTest: (p) => usePlacementStore.getState().setSeasonProgressForTest(p),
     seasonClockOverridden: () => seasonClockOverridden(),
+    worldSeedReadback: () => usePlacementStore.getState().worldSeed,
+    seedingEpochReadback: () => usePlacementStore.getState().seedingEpoch,
+    volunteersReadback: () =>
+      usePlacementStore.getState().items.map((it) => ({
+        id: it.id,
+        plantId: it.plantId,
+        volunteer: it.volunteer === true,
+      })),
+    visitorWindowsReadback: () => usePlacementStore.getState().visitorWindows,
+    colonyReadback: () => colonyReadback(usePlacementStore.getState().season, seasonProgress()),
+    habitatReadback: () => ({
+      foldCells: cornerFoldCells(),
+      dragonflies: dragonflyDebug.count,
+    }),
+    starsReadback: () => ({
+      visible: starsDebug.visible,
+      opacity: starsDebug.opacity,
+      visibilityAt: starVisibility,
+    }),
+    cloudOpacityReadback: () => NIGHT_SKY_TUNING.clouds.opacity,
+    pondSegmentsReadback: () => pondSegments(),
+    fringeCellsReadback: () => fringeCells(),
+    save: () => usePlacementStore.getState().save(),
     foundRecipes: () => usePlacementStore.getState().foundRecipes,
     checkCompanions: () => usePlacementStore.getState().checkCompanions(),
     activeRecipes: () => usePlacementStore.getState().activeRecipes(),
@@ -191,6 +246,7 @@ export function installTestHook() {
     timeIsPaused: () => isPaused(),
     timeSpeed: () => currentSpeedStep(),
     timeMultiplierReadback: () => timeMultiplier(),
+    scaledElapsedReadback: () => scaledElapsed(),
     isPlantableCellReadback: (x, z) => isPlantableCell(x, z),
     openHivePopup: (hiveId) => usePlacementStore.getState().openHivePopup(hiveId),
     hillsBoxesReadback: () => hillsBoxes().map((b) => ({ x: b.x, z: b.z, half: b.half })),

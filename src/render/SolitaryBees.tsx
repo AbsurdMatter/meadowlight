@@ -1,5 +1,6 @@
 import { useMemo, useRef } from 'react';
-import { useFrame, type RootState } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
+import { scaledDelta, scaledElapsed } from '../engine/scaledTime';
 import * as THREE from 'three';
 import { SOLITARY_BEE_TUNING, RARE_POLLINATOR_TUNING } from '../data/bees';
 import { PLANT_BY_ID } from '../data/plants';
@@ -96,7 +97,7 @@ export function SolitaryBees() {
   const lastKey = useRef('');
   const lastRareKey = useRef('');
 
-  const update = (state: RootState, delta: number) => {
+  const update = (delta: number) => {
     const body = bodyRef.current;
     const stripes = stripeRef.current;
     const wings = wingRef.current;
@@ -143,7 +144,7 @@ export function SolitaryBees() {
       bees.current = bees.current.filter((b) => hotelIds.has(b.hotelId));
     }
 
-    const t = state.clock.elapsedTime;
+    const t = scaledElapsed();
     const hotelById = new Map(hotels.map((h) => [h.id, h]));
 
     for (let bi = 0; bi < bees.current.length; bi++) {
@@ -309,9 +310,9 @@ export function SolitaryBees() {
     rareWings.instanceMatrix.needsUpdate = true;
   };
 
-  useFrame((state, delta) => {
+  useFrame(() => {
     try {
-      update(state, delta);
+      update(scaledDelta());
     } catch (err) {
       if (!crashLogged) {
         crashLogged = true;

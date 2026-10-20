@@ -375,6 +375,17 @@ Success test: a returning spring visitor finds their meadow changed but
 never diminished — new seedlings they didn't plant, queens on the crocuses,
 the hive waking — and the night sky gives the slow phases something to look at.
 
+### Session 7 deferred scope (carried, not dropped — the repo is the backlog)
+
+- N1 — natural rain trigger: rain currently toggles/holds via the P panel
+  (the session-5 trigger suite); a NATURAL weather driver (seasonal odds,
+  gentle showers from their own conditions) is planned v3 work.
+- N2 — pollinator-gate: a dedicated behavioral gate asserting the full
+  pollinator chain (appeal -> comb -> harvest) end-to-end; today it is
+  covered piecewise by the honey/colony checks.
+- N3 — magnifier: an inspect-mode zoom for close reads of small visitors
+  (moth, hoverfly) and the winter cluster; planned as a chrome/UI nicety.
+
 ## Session 8 — Sharing & the wider door
 
 6. Seed codes (#new): a seed string captures species + positions

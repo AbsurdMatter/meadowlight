@@ -12,6 +12,7 @@ import {
 } from '../data/facts';
 import { MILESTONES } from '../data/milestones';
 import { RECIPES } from '../data/recipes';
+import { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, type SeasonalVisitorTuning } from '../data/seasonalVisitors';
 import { usePlacementStore } from '../render/placementStore';
 import { theme, headingStyle } from './theme';
 
@@ -70,6 +71,7 @@ function HubInner() {
   const seenFacts = usePlacementStore((s) => s.seenFacts);
   const milestones = usePlacementStore((s) => s.milestones);
   const foundRecipes = usePlacementStore((s) => s.foundRecipes);
+  const visitorWindows = usePlacementStore((s) => s.visitorWindows);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -152,6 +154,33 @@ function HubInner() {
               </div>
             ) : null;
           })}
+
+          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>WILD VISITORS</h4>
+          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
+            Who stopped by, and when — the meadow keeps its own guest book.
+          </div>
+          {(() => {
+            const seasonal: SeasonalVisitorTuning[] = [QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING];
+            const rows: { label: string; fact: string }[] = [];
+            for (const v of seasonal) {
+              const seen = visitorWindows.filter((k) => k.startsWith(v.id + ':')).map((k) => k.split(':')[1]);
+              if (seen.length > 0) rows.push({ label: `${v.name} — ${seen.join(', ')}`, fact: v.fact });
+            }
+            const fireflySeen = visitorWindows.filter((k) => k.startsWith('fireflies:')).map((k) => k.split(':')[1]);
+            if (fireflySeen.length > 0)
+              rows.push({ label: `Fireflies — ${fireflySeen.join(', ')}`, fact: 'On summer evenings the meadow glows — fireflies drift over the wild corners while the hive sleeps.' });
+            if (rows.length === 0)
+              return (
+                <div style={{ fontSize: 13, opacity: 0.6, marginBottom: 6 }}>
+                  🔒 No guests recorded yet — keep blooms up through the seasons and see who finds them.
+                </div>
+              );
+            return rows.map((r) => (
+              <div key={r.label} style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 6 }}>
+                ✨ <strong>{r.label}</strong> — {r.fact}
+              </div>
+            ));
+          })()}
 
           <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>GARDEN RECIPES</h4>
           <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>

@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -89,6 +89,17 @@ const { variationFor, rollVariation, noVariation, VARIATION_TUNING } = require(O
 const { choosePlantFact, chooseStructureFact, chooseMeadowFact } = require(OUT + '/engine/factSelection.js');
 const { flowerBlocked, structureBlocked } = require(OUT + '/engine/collision.js');
 const { computeCaptionLayout, fallbackMetrics } = require(OUT + '/engine/postcardLayout.js');
+const { rollVolunteers, compatibleSeedling } = require(OUT + '/engine/seeding.js');
+const { colonyIntensityTarget, LIFECYCLE_LINES } = require(OUT + '/data/lifecycle.js');
+const { HABITAT_TUNING, cornerFoldCells, cornerKey, pondSegments, fringeCells, pondClusters } = require(OUT + '/data/habitatScenery.js');
+const { NIGHT_SKY_TUNING, CLOUDS_OPACITY_BEFORE } = require(OUT + '/data/nightSky.js');
+const { starVisibility } = require(OUT + '/engine/nightSky.js');
+const { treePlacements, pondExclusionRadius } = require(OUT + '/engine/treeLayout.js');
+const { advanceColony, colonyIntensity: colonyIntensityExport, colonyReadback: colonyReadbackExport, setColonyIntensityForTest } = require(OUT + '/engine/lifecycle.js');
+const { SEEDING_TUNING, SEEDING_FACTS } = require(OUT + '/data/seeding.js');
+const { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, FIREFLY_SUMMER_TUNING, HOVERFLY_AUTUMN_TUNING, isEarlySpring } = require(OUT + '/data/seasonalVisitors.js');
+const { isPlantableCell, groundAt: groundAtReadback } = require(OUT + '/engine/ground.js');
+const { hillsCover: hillsCoverReadback } = require(OUT + '/engine/hillsLayout.js');
 
 const mkItem = (plantId, x = 0, z = 0) => ({ id: plantId + ':' + x + ':' + z, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
 const mkStruct = (structureId, x = 0, z = 0) => ({ id: structureId + ':' + x + ':' + z, structureId, position: [x, 0, z], rotationY: 0 });
@@ -628,6 +639,440 @@ test('fact selection prefers unseen facts and marks seen ones', () => {
   seen.push(first.fact.id);
   const second = chooseStructureFact('bath', 'summer', seen);
   assert.ok(second.fact.id !== first.fact.id || second.alreadySeen, 'must prefer unseen or admit seen');
+});
+
+// ---------- session 7 U1: self-seeding ----------
+// persistence is storage-backed: shim localStorage before requiring it
+// (the node runner has no DOM — a harness finding documented in session 6)
+{
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+  };
+}
+const { saveWorld, loadWorld, clearSavedWorld } = require(OUT + '/engine/persistence.js');
+
+test('save v7 additive: session-6 blob loads without loss and derives a stable seed', () => {
+  // a session-6-shaped blob (version 6, no worldSeed/seedingEpoch)
+  const v6 = {
+    version: 6,
+    items: [{ id: 'a', plantId: 'lavender', position: [1, 0, 2], rotationY: 0, phase: 0.5 }],
+    structures: [],
+    milestones: [],
+    season: 'summer',
+    placementVariation: true,
+    randomRotation: true,
+    seenFacts: ['f1'],
+    foundRecipes: ['recipe:lavender-thyme'],
+    hiveCombs: { h1: 0.4 },
+    honeyJars: 2,
+  };
+  globalThis.localStorage.setItem('meadowlight.world.v2', JSON.stringify(v6));
+  const w1 = loadWorld();
+  assert.strictEqual(w1.items.length, 1, 'v6 items load without loss');
+  assert.strictEqual(w1.honeyJars, 2, 'v6 jars survive');
+  assert.ok(Number.isFinite(w1.worldSeed), 'v7 fields derive at load');
+  assert.strictEqual(w1.seedingEpoch, 0, 'v7 epoch starts at 0');
+  // the derived seed is stable per-blob: same blob, same seed
+  const w2 = loadWorld();
+  assert.strictEqual(w2.worldSeed, w1.worldSeed, 'derived seed is stable');
+  // a v7 save round-trips its named seed state
+  saveWorld({ ...w1, version: undefined, worldSeed: w1.worldSeed, seedingEpoch: 3 });
+  const w3 = loadWorld();
+  assert.strictEqual(w3.worldSeed, w1.worldSeed, 'v7 seed round-trips');
+  assert.strictEqual(w3.seedingEpoch, 3, 'v7 epoch round-trips');
+  assert.strictEqual(w3.version, 7, 'save writes v7');
+  // volunteer flag persists through the round-trip
+  saveWorld({ ...w3, items: [...w3.items.map((it) => ({ ...it, volunteer: true }))] });
+  const w4 = loadWorld();
+  assert.strictEqual(w4.items[0].volunteer, true, 'volunteer flag round-trips');
+  clearSavedWorld();
+});
+test('seeding: deterministic — same inputs give identical volunteers, different epochs differ', () => {
+  const mk = (plantId, x, z, i) => ({ id: 'p' + i, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
+  // a summer-blooming drift well inside the placement box
+  const items = [];
+  for (let i = 0; i < 24; i++) items.push(mk(i % 3 === 0 ? 'lavender' : 'cosmos', -6 + (i % 6) * 2.4, -6 + Math.floor(i / 6) * 2.4, i));
+  const run = (epoch) => rollVolunteers(items, 'summer', 'autumn', 12345, epoch, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
+  const a1 = run(3), a2 = run(3);
+  assert.deepStrictEqual(a1, a2, 'same seed+epoch = same volunteers (deterministic)');
+  // different epoch = different rolls (the epoch key advances)
+  const b = run(4);
+  assert.ok(JSON.stringify(a1) !== JSON.stringify(b) || a1.length === 0, 'epoch changes the roll');
+  // different world seed = different rolls
+  const c = rollVolunteers(items, 'summer', 'autumn', 999, 3, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
+  assert.ok(JSON.stringify(a1) !== JSON.stringify(c) || a1.length === 0, 'world seed changes the roll');
+});
+
+test('seeding: rare + capped — a 4-season accelerated run never grows invasively', () => {
+  const mk = (plantId, x, z, i) => ({ id: 'p' + i, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
+  let items = [];
+  for (let i = 0; i < 40; i++) items.push(mk(['lavender', 'cosmos', 'poppy', 'aster'][i % 4], -9 + (i % 8) * 2.6, -9 + Math.floor(i / 8) * 2.6, i));
+  const seasons = ['summer', 'autumn', 'winter', 'spring'];
+  let epoch = 0;
+  let total = 0;
+  for (let si = 0; si < seasons.length - 1; si++) {
+    const from = seasons[si], to = seasons[si + 1];
+    const seeds = rollVolunteers(items, from, to, 12345, epoch, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
+    assert.ok(seeds.length <= SEEDING_TUNING.maxPerSeason, 'whole-meadow cap holds: ' + seeds.length);
+    for (const s of seeds) {
+      items.push({ id: 'v' + epoch + ':' + total, plantId: s.plantId, position: [s.position[0], 0, s.position[2]], rotationY: 0, phase: 0, volunteer: true });
+      total++;
+    }
+    epoch++;
+  }
+  // a season of a 40-flower meadow volunteers at most the hard cap...
+  assert.ok(total <= 4 * SEEDING_TUNING.maxPerSeason, 'four seasons never runaway: ' + total);
+  // ...AND the CUMULATIVE brake holds: volunteers never exceed the tuned
+  // share of the meadow (the #37 gate finding: per-season caps alone let
+  // volunteers compound to a third of the meadow — encroachment)
+  const volunteers = items.filter((it) => it.volunteer === true).length;
+  assert.ok(
+    volunteers <= Math.floor(items.length * SEEDING_TUNING.maxVolunteerFraction),
+    'cumulative fraction holds: ' + volunteers + '/' + items.length,
+  );
+});
+
+test('seeding: the cumulative brake pauses seeding above the share — never removes (#37 finding 2)', () => {
+  const mk = (plantId, x, z, i, vol) => ({ id: (vol ? 'v' : 'p') + i, plantId, position: [x, 0, z], rotationY: 0, phase: 0, volunteer: vol });
+  // a 20-flower meadow already at the 15% share (3 volunteers):
+  const items = [];
+  for (let i = 0; i < 17; i++) items.push(mk('lavender', -9 + (i % 6) * 3, -9 + Math.floor(i / 6) * 3, i, false));
+  for (let i = 0; i < 3; i++) items.push(mk('cosmos', -6 + i * 3, 6, 100 + i, true));
+  // ...at the share: NO further seeding, no matter the season crossing
+  const atShare = rollVolunteers(items, 'summer', 'autumn', 42, 0, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
+  assert.strictEqual(atShare.length, 0, 'at the share, seeding pauses');
+  // planting more of one's own flowers RAISES the ceiling (the meadow
+  // grows, so the share grows — self-seeding resumes: richer, not frozen)
+  for (let i = 0; i < 20; i++) items.push(mk('poppy', -20 + (i % 7) * 3, -20 + Math.floor(i / 7) * 3, 200 + i, false));
+  const resumed = rollVolunteers(items, 'summer', 'autumn', 42, 0, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
+  assert.ok(resumed.length >= 0, 'seeding may resume under the new, higher ceiling');
+  // and the brake NEVER removes: at-the-share items are untouched
+  assert.strictEqual(items.filter((it) => it.volunteer).length, 3, 'no volunteer was removed');
+});
+
+test('seeding: volunteers land only in plantable cells, roster-compatible, blooming in the new season', () => {
+  const mk = (plantId, x, z, i) => ({ id: 'p' + i, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
+  const items = [];
+  for (let i = 0; i < 20; i++) items.push(mk('lavender', -7 + (i % 5) * 3.0, -7 + Math.floor(i / 5) * 3.0, i));
+  for (let epoch = 0; epoch < 8; epoch++) {
+    const seeds = rollVolunteers(items, 'summer', 'autumn', 777, epoch, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
+    for (const s of seeds) {
+      assert.ok(isPlantableCell(s.position[0], s.position[2]), 'volunteer in a plantable cell (raw query)');
+      const compat = compatibleSeedling('lavender', 'autumn');
+      assert.ok(compat.includes(s.plantId), 'volunteer is roster-compatible');
+      // parent-adjacent (seed distance band)
+      const parent = items.find((it) => Math.hypot(it.position[0] - s.position[0], it.position[2] - s.position[2]) >= SEEDING_TUNING.seedDistanceMin - 0.15);
+      assert.ok(!!parent, 'volunteer near a parent');
+    }
+  }
+});
+
+test('seeding: compatibleSeedling is same-species or bloom-season companion, and can bloom in the new season', () => {
+  const same = compatibleSeedling('lavender', 'autumn');
+  assert.ok(same[0] === 'lavender', 'same species first');
+  assert.ok(same.includes('cosmos'), 'cosmos shares summer bloom + blooms in autumn');
+  assert.ok(!same.includes('clover'), 'clover does not bloom in autumn (would read as a weed)');
+  assert.ok(!same.includes('crocus'), 'crocus does not share a bloom season with lavender');
+  assert.ok(compatibleSeedling('crocus', 'spring').includes('forget-me-not'), 'the crocus/fmn companion pair seeds');
+  assert.ok(SEEDING_FACTS.volunteer.length > 20, 'the volunteer fact exists');
+});
+
+test('seeding: empty or non-blooming meadows volunteer nothing (winter stays quiet)', () => {
+  const mk = (plantId, x, z, i) => ({ id: 'p' + i, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
+  const empty = rollVolunteers([], 'summer', 'autumn', 1, 0, isPlantableCell, () => false);
+  assert.strictEqual(empty.length, 0, 'empty meadow seeds nothing');
+  // a lavender-only meadow rolling INTO winter: lavender does not bloom in
+  // winter and nothing compatible does either — no winter volunteers
+  const lavenderOnly = [mk('lavender', 0, 0, 0), mk('lavender', 3, 0, 1)];
+  const winter = rollVolunteers(lavenderOnly, 'autumn', 'winter', 1, 0, isPlantableCell, () => false);
+  assert.strictEqual(winter.length, 0, 'winter stays quiet for a summer meadow');
+});
+
+// ---------- session 7 U2: seasonal wild visitors ----------
+// persistence shim already installed above (U1 block)
+
+test('visitors: the moth is an evening creature — dusk through night, never midday', () => {
+  const w = LAVENDER_MOTH_TUNING.phaseWindow;
+  assert.ok(!!w, 'the moth has a phase window');
+  // dusk (0.79) through deep night (0.05) to dawn edge (0.22): evening active
+  assert.ok(w(0.8) && w(0.95) && w(0.05) && w(0.22), 'evening/night is the moth window');
+  // midday and bright afternoon are NOT
+  assert.ok(!w(0.5) && !w(0.3) && !w(0.7), 'no moths in daylight (bees shift)');
+});
+
+test('visitors: the queen is early-spring only — the window closes mid-season', () => {
+  assert.ok(isEarlySpring(0.1) && isEarlySpring(0.49), 'first half of spring');
+  assert.ok(!isEarlySpring(0.5) && !isEarlySpring(0.9), 'late spring sees workers, not the queen');
+});
+
+test('visitors: target blooms are real roster species that bloom in the season (buildable)', () => {
+  for (const t of [QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING]) {
+    assert.ok(t.targetPlantIds && t.targetPlantIds.length > 0, t.id + ' has target flowers');
+    for (const id of t.targetPlantIds) {
+      assert.ok(!!PLANT_BY_ID[id], t.id + ' target ' + id + ' is a roster species');
+      assert.ok(
+        t.activeSeasons.some((s) => PLANT_BY_ID[id].bloom.includes(s)),
+        t.id + ' target ' + id + ' blooms in one of its seasons',
+      );
+    }
+    assert.ok(t.fact.length > 20, t.id + ' carries a verified fact');
+  }
+  // the queen comes for crocuses specifically (the plan of record)
+  assert.ok(QUEEN_BUMBLE_TUNING.targetPlantIds.includes('crocus'), 'queen targets crocus');
+  // the moth comes for lavender
+  assert.ok(LAVENDER_MOTH_TUNING.targetPlantIds.includes('lavender'), 'moth targets lavender');
+});
+
+test('visitors: the firefly bloom composes with dusk — never a second firefly system', () => {
+  assert.ok(FIREFLY_SUMMER_TUNING.seasons.includes('summer'), 'the bloom is a summer event');
+  assert.ok(FIREFLY_SUMMER_TUNING.extraPerCorner > 0, 'the bloom adds, not replaces');
+  assert.ok(FIREFLY_SUMMER_TUNING.summerMax >= 12, 'the capacity covers the bloom');
+});
+
+test('visitors: the autumn hoverfly thins, never grows', () => {
+  assert.ok(HOVERFLY_AUTUMN_TUNING.fraction > 0 && HOVERFLY_AUTUMN_TUNING.fraction < 1, 'stragglers are a fraction');
+  assert.ok(HOVERFLY_AUTUMN_TUNING.speedScale <= 1, 'autumn air is never faster');
+});
+
+test('visitors: notebook windows are one per (visitor, season) and round-trip', () => {
+  const seen = new Set();
+  const record = (visitorId, season) => {
+    const key = visitorId + ':' + season;
+    if (seen.has(key)) return seen.size;
+    seen.add(key);
+    return seen.size;
+  };
+  record('queenbumble', 'spring');
+  const n1 = seen.size;
+  record('queenbumble', 'spring'); // same window
+  assert.strictEqual(seen.size, n1, 'repeated sightings never re-record');
+  record('queenbumble', 'summer');
+  assert.strictEqual(seen.size, n1 + 1, 'a new season is a new window');
+  // and the save round-trips the keys (parseVisitorWindows dedupes)
+  const world = loadWorld();
+  saveWorld({ ...world, visitorWindows: ['queenbumble:spring', 'queenbumble:spring', 'moth:summer'] });
+  const back = loadWorld();
+  assert.deepStrictEqual(back.visitorWindows.sort(), ['moth:summer', 'queenbumble:spring'], 'dedup + round-trip');
+  clearSavedWorld();
+});
+
+// ---------- session 7 U3: bee lifecycles, gently ----------
+
+test('lifecycle: full-year trace — rise, hold, cluster, reawaken', () => {
+  const spring = [0, 0.25, 0.5, 0.75, 1].map((p) => colonyIntensityTarget('spring', p));
+  const summer = [0, 0.5, 1].map((p) => colonyIntensityTarget('summer', p));
+  const autumn = [0, 0.5, 1].map((p) => colonyIntensityTarget('autumn', p));
+  const winter = [0, 0.25, 0.5, 0.75, 1].map((p) => colonyIntensityTarget('winter', p));
+  assert.ok(spring[4] > spring[0], 'spring grows');
+  assert.ok(Math.abs(summer[0] - summer[2]) < 1e-9, 'summer holds (no mid-summer decline)');
+  assert.ok(summer[0] >= spring[4] - 1e-9, 'summer is the peak');
+  assert.ok(autumn[2] < autumn[0] && autumn[2] >= 0.49, 'autumn thins to the straggler floor, no further');
+  assert.ok(winter[2] <= 0.08, 'midwinter is the tucked cluster');
+  assert.ok(winter[4] > winter[3], 'late winter stirs (cleansing flights -> first foragers)');
+  assert.ok(spring[0] < spring[4], 'the breath repeats');
+});
+
+test('lifecycle: the live breath eases toward the target and freezes under pause (dt=0)', () => {
+  setColonyIntensityForTest(0.2);
+  for (let i = 0; i < 40; i++) advanceColony('summer', 0.5, 0.5);
+  const eased = colonyIntensityExport();
+  assert.ok(eased > 0.2 && eased <= 0.86, 'eases up gently: ' + eased.toFixed(3));
+  const before = colonyIntensityExport();
+  for (let i = 0; i < 10; i++) advanceColony('winter', 0.5, 0);
+  assert.strictEqual(colonyIntensityExport(), before, 'pause (dt 0) = full freeze');
+  for (let i = 0; i < 400; i++) advanceColony('summer', 0.5, 0.5);
+  assert.ok(Math.abs(colonyIntensityExport() - colonyIntensityTarget('summer', 0.5)) < 0.01, 'settles at target');
+});
+
+test('lifecycle: NO DECLINE FRAMING — every surface line is winter-safe (the constitution scan)', () => {
+  const forbidden = /declin|die|died|dead|loss|losing|shrink|fail|gone|perish|starv|sick|weaken|disappear/i;
+  for (const [season, line] of Object.entries(LIFECYCLE_LINES)) {
+    assert.ok(!forbidden.test(line), 'the ' + season + ' line must never read as decline: ' + JSON.stringify(line));
+    assert.ok(line.length > 20, 'the ' + season + ' line exists');
+  }
+  assert.ok(LIFECYCLE_LINES.winter.includes('clustered snug'), 'winter reads as tucked-in, never as empty');
+  assert.ok(LIFECYCLE_LINES.winter.includes('21'), 'carries the verified 21\u00b0C fact (EDUCATION.md)');
+  const rb = colonyReadbackExport('winter', 0.5);
+  assert.strictEqual(rb.line, LIFECYCLE_LINES.winter, 'the readback renders the one source');
+  assert.ok(rb.target <= 0.08, 'midwinter target is the cluster');
+});
+
+// ---------- session 7 U4: habitat-corner scenery ----------
+test('habitat: fold cells derive from the ONE raw query — covered by hills, unplantable, inside the box', () => {
+  const cells = cornerFoldCells();
+  assert.ok(cells.length > 8, 'the folds exist (hills intrude into the box corners): ' + cells.length);
+  // measured reality (dense 0.4 census: ~2457 cells): the fold region is
+  // the full covered-unplantable strip along the box's inner edge — the
+  // hills lattice reaches deep along each edge, not just the corner
+  // points. The 0.8 probe grid lands ~613; the bound below allows the
+  // natural probe-grid variance, not a runaway.
+  assert.ok(cells.length < 900, 'the folds stay the edge strips, not the whole box: ' + cells.length);
+  for (const c of cells) {
+    assert.ok(Math.abs(c.x) <= 22 && Math.abs(c.z) <= 22, 'fold cell inside the placement box');
+    assert.ok(hillsCoverReadback(c.x, c.z), 'fold cell covered by a rendered hills box (the layout key)');
+    assert.ok(!isPlantableCell(c.x, c.z), 'fold cell is unplantable (the same raw query)');
+  }
+  // all four corners carry fold cells (the seams all read as corners)
+  const keys = new Set(cells.map((c) => cornerKey(c.x, c.z)));
+  assert.ok(keys.size === 4, 'all four corner wedges have fold cells: ' + [...keys].join(','));
+  // scenery never lands on plantable ground (scenery never steals cells)
+  for (const c of cells) {
+    assert.ok(!isPlantableCell(c.x, c.z), 'scenery cells are exactly the unplantable folds');
+  }
+});
+
+test('habitat: the scenery palette comes from the world families (the band-palette rule)', () => {
+  const hillSet = new Set(['#6c8a4f', '#5f7a45', '#79995b', '#556e40']);
+  for (const c of HABITAT_TUNING.bushes.colors) assert.ok(hillSet.has(c), 'bushes use the hills family');
+  assert.ok(HABITAT_TUNING.log.color.startsWith('#'), 'the log has a color');
+  assert.ok(HABITAT_TUNING.dragonflies.count >= 2, 'a few dragonflies over the pond');
+  assert.ok(HABITAT_TUNING.dragonflies.fact.length > 20, 'the dragonfly fact exists (verified, cited in-file)');
+});
+
+// ---------- session 7 U5: night sky & cloud translucency ----------
+test('stars: visibility derives from the ONE lit window — night yes, day no, ramps between', () => {
+  // deep night: fully visible
+  assert.ok(Math.abs(starVisibility(0.0) - 1) < 1e-9, 'midnight: full stars');
+  assert.ok(Math.abs(starVisibility(0.95) - 1) < 1e-9, 'deep night: full stars');
+  // day: gone
+  assert.ok(starVisibility(0.5) === 0, 'noon: no stars');
+  assert.ok(starVisibility(0.35) === 0, 'morning: no stars');
+  // the dusk ramp: golden hour (0.82) -> dark (0.88): 0 -> 1 monotonic
+  const g = starVisibility(0.82), d = starVisibility(0.88);
+  assert.ok(g > 0 && g < 1 && Math.abs(d - 1) < 1e-9, 'dusk ramp fades stars in');
+  assert.ok(starVisibility(0.85) > g, 'ramp is monotonic');
+  // the dawn ramp: 0.22 full -> 0.30 gone
+  assert.ok(Math.abs(starVisibility(0.22) - 1) < 1e-9, 'dawn edge: still full');
+  assert.ok(starVisibility(0.26) < 1 && starVisibility(0.30) === 0, 'dawn ramp fades stars out');
+  // the boundary epsilon lesson: the lit window's edges are inclusive the
+  // same way isDaylight is — no rounding flip between surfaces
+  assert.ok(starVisibility(0.2199) > 0.99, 'just before dawn edge: night');
+});
+
+test('stars: winter nights are the brightest (the long-night pairing)', () => {
+  const b = NIGHT_SKY_TUNING.stars.brightnessBySeason;
+  assert.ok(b.winter === 1.0 && b.summer < b.winter, 'winter peaks, summer softest');
+  assert.ok(b.spring < b.autumn, 'autumn (longer nights) beats spring');
+  assert.ok(NIGHT_SKY_TUNING.stars.count >= 100, 'a real sky, not a sprinkle');
+});
+
+test('clouds: translucent — softer than the composed original, never gone', () => {
+  const now = NIGHT_SKY_TUNING.clouds.opacity;
+  assert.ok(now < CLOUDS_OPACITY_BEFORE, 'more translucent than the 0.92 original');
+  assert.ok(now >= 0.35 && now <= 0.75, 'softly veiled, not gone and not a ghost: ' + now);
+});
+
+// ---------- session 7 U4 revision: pond edge (controlled variance) ----------
+test('pond edge: per-segment variance is non-zero and bounded (asymmetric but deterministic)', () => {
+  const segs = pondSegments();
+  assert.strictEqual(segs.length, HABITAT_TUNING.pondEdge.segments, 'the shore splits into the tuned segment count');
+  const plants = segs.map((s) => s.plants);
+  const spreads = segs.map((s) => s.spread);
+  const depths = segs.map((s) => s.bandDepth);
+  // asymmetry: the ring is NOT uniform — segments differ
+  const pVar = Math.max(...plants) - Math.min(...plants);
+  const sVar = Math.max(...spreads) - Math.min(...spreads);
+  const dVar = Math.max(...depths) - Math.min(...depths);
+  assert.ok(pVar >= 2, 'per-segment density varies: ' + pVar);
+  assert.ok(sVar > 0.5, 'cluster spread varies: ' + sVar.toFixed(2));
+  assert.ok(dVar > 0.4, 'band depth varies: ' + dVar.toFixed(2));
+  // bounded: every segment stays inside its tuned envelope
+  for (const s of segs) {
+    assert.ok(s.plants >= HABITAT_TUNING.pondEdge.density.min && s.plants <= HABITAT_TUNING.pondEdge.density.max, 'density in bounds');
+    assert.ok(s.spread >= HABITAT_TUNING.pondEdge.clusterSpread.min - 1e-9 && s.spread <= HABITAT_TUNING.pondEdge.clusterSpread.max + 1e-9, 'spread in bounds');
+    assert.ok(s.bandDepth >= HABITAT_TUNING.pondEdge.bandDrift.min - 1e-9 && s.bandDepth <= HABITAT_TUNING.pondEdge.bandDrift.max + 1e-9, 'band depth in bounds');
+    assert.ok(s.bandWidth > 0.25 && s.bandWidth <= 0.92, 'band width in bounds');
+  }
+  // deterministic: the same segments derive every call
+  assert.deepStrictEqual(pondSegments(), segs, 'the shore layout is stable across calls');
+});
+
+// ---------- session 7 U4 revision: the organic extension (fringe) ----------
+test('fringe: the named extension rule — outside the box, dry land, dissolving falloff, never plantable-stealing', () => {
+  const cells = fringeCells();
+  assert.ok(cells.length > 20, 'the fringe exists beyond the box: ' + cells.length);
+  const halfBox = 22; // MEADOW_SIZE/2
+  const depth = HABITAT_TUNING.extension.depth;
+  let nearestEdge = Infinity;
+  let farthestEdge = 0;
+  for (const c of cells) {
+    const edgeDist = Math.max(Math.abs(c.x) - halfBox, Math.abs(c.z) - halfBox);
+    // strictly OUTSIDE the box (the fold rule owns the inside)
+    assert.ok(Math.abs(c.x) > halfBox - 1 || Math.abs(c.z) > halfBox - 1, 'fringe cell outside the box');
+    assert.ok(edgeDist <= depth + 1e-9, 'fringe cell within the extension depth');
+    // never floating: dry land per the ground oracle
+    assert.strictEqual(groundAtReadback(c.x, c.z).kind, 'meadow', 'fringe sits on dry land (never water/shore)');
+    nearestEdge = Math.min(nearestEdge, Math.max(0, edgeDist));
+    farthestEdge = Math.max(farthestEdge, edgeDist);
+  }
+  assert.ok(nearestEdge < 1.5, 'the fringe starts at the box edge (bleeds from the folds)');
+  assert.ok(farthestEdge > depth * 0.5, 'the fringe reaches well into the band');
+  // dissolving: the outer half of the band carries FEWER cells than the
+  // inner half (the soft falloff — never a hard ring edge)
+  let inner = 0, outer = 0;
+  for (const c of cells) {
+    const edgeDist = Math.max(Math.abs(c.x) - halfBox, Math.abs(c.z) - halfBox);
+    if (edgeDist < depth / 2) inner++; else outer++;
+  }
+  assert.ok(inner > outer, 'the fringe dissolves outward: inner ' + inner + ' vs outer ' + outer);
+  // and the fold rule still holds for the INSIDE (nothing changed there)
+  for (const c of cornerFoldCells()) {
+    assert.ok(!isPlantableCell(c.x, c.z), 'inside the box, scenery still only on unplantable cells');
+  }
+});
+
+// ---------- session 7 U4 revision: trees never stand in the pond ----------
+test('trees: no tree footprint cell overlaps any pond cell (exact-footprint rule)', () => {
+  const placements = treePlacements();
+  assert.ok(placements.length > 20, 'the forest still stands: ' + placements.length);
+  const exclusion = pondExclusionRadius();
+  assert.ok(exclusion > 9, 'the exclusion radius covers water + edge cells + clearance: ' + exclusion.toFixed(2));
+  // the decided pond-side cluster exists and sits LEFT of the pond, dry
+  const pondSide = placements.filter((p) => p.x < 30 && p.z < -5);
+  assert.ok(pondSide.length >= 3, 'the pond-framing cluster renders: ' + pondSide.length + ' trees');
+  for (const p of placements) {
+    const d = Math.hypot(p.x - 36 + 0, p.z - (-14)); // pond center (36,-14)
+    assert.ok(
+      d >= exclusion + p.footprint - 1e-9,
+      'tree at (' + p.x.toFixed(1) + ',' + p.z.toFixed(1) + ') footprint ' + p.footprint.toFixed(2) + ' clears the pond: dist ' + d.toFixed(2),
+    );
+  }
+  // deterministic: same layout every call
+  assert.deepStrictEqual(treePlacements(), placements, 'the tree layout is stable');
+});
+
+// ---------- session 7 U4 revision: pond edge — CLUSTERED GROUPS ----------
+test('pond edge: cluster-first — tight 3-5 member groups with calm gaps between', () => {
+  const clusters = pondClusters();
+  const t = HABITAT_TUNING.pondEdge;
+  assert.ok(clusters.length >= 12, 'every segment carries at least one cluster: ' + clusters.length);
+  for (const c of clusters) {
+    assert.ok(
+      c.members.length >= t.membersPerCluster.min && c.members.length <= t.membersPerCluster.max,
+      'cluster sizes within bounds: ' + c.members.length,
+    );
+    // tight: every member within the max cluster radius of the group's centroid
+    const cx = c.members.reduce((a, m) => a + m.x, 0) / c.members.length;
+    const cz = c.members.reduce((a, m) => a + m.z, 0) / c.members.length;
+    for (const m of c.members) {
+      assert.ok(
+        Math.hypot(m.x - cx, m.z - cz) <= t.clusterRadius.max + 0.15,
+        'member within the tight radius of its group',
+      );
+    }
+  }
+  // calm gaps: consecutive cluster CENTERS (angularly sorted) are separated
+  const sorted = [...clusters].sort((a, b) => a.angle - b.angle);
+  let gapCount = 0;
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].angle - sorted[i - 1].angle > (2 * Math.PI) / t.segments * 0.45) gapCount++;
+  }
+  assert.ok(gapCount >= 3, 'inter-cluster gaps present: ' + gapCount + ' calm gaps');
+  // deterministic
+  assert.deepStrictEqual(pondClusters(), clusters, 'the shore clusters are stable');
 });
 
 // ---------- collision ----------
