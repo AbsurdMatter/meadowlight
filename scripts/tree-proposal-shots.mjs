@@ -2,6 +2,11 @@
 /**
  * U4 revision 3/3 — trees-behind-the-pond PROPOSAL SHOTS (#6297184564).
  *
+ * OUTPUT PATH: the PNGs are written to the CURRENT WORKING DIRECTORY of the
+ * script invocation (the repo root when run as documented): tree-<label>-low.png
+ * and tree-<label>-high.png (label = before|after). Look there — not in a
+ * shots/ subfolder.
+ *
  * Captures before/after screenshots from the user's actual viewing angle:
  * a LOW angle at meadow center looking toward the pond (where a user
  * actually looks), plus a higher framing for composition. Manual-camera +
@@ -25,7 +30,18 @@ import { writeFileSync } from 'node:fs';
 const { url = 'http://localhost:5199', 'lib-path': libPath = '', label = 'after' } = parseArgs();
 const browser = await launchChromium(chromium, { libPath });
 const page = await browser.newPage();
-await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
+// the gate-lib unreachable-server discipline: a dev server that isn't
+// running reads as a clean actionable message, never a raw stack
+try {
+  await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
+} catch (e) {
+  const msg = String(e?.message || e);
+  if (msg.includes('ERR_CONNECTION_REFUSED') || msg.includes('net::ERR')) {
+    console.error(`[SHOTS] dev server not reachable at ${url} — start it first (npm run dev, then pass --url with the right port).`);
+    process.exit(2);
+  }
+  throw e;
+}
 await page.waitForTimeout(2500);
 
 /** capture from a camera pose: set camera, render one frame, read the PNG */
