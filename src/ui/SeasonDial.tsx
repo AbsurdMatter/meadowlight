@@ -131,8 +131,13 @@ export function TimeControls() {
       {label}
     </button>
   );
+  // observable pause (the named-state rule): the row dims and a resting
+  // chip appears whenever paused — frozen must read at a glance, never as
+  // "the controls do nothing" (the silent-success lesson, session 4)
+  const paused = isPaused();
   return (
     <div
+      data-time-row
       style={{
         position: 'absolute',
         top: 56,
@@ -146,11 +151,30 @@ export function TimeControls() {
         border: `${theme.border.chunk}px solid ${theme.color.honey}`,
         boxShadow: theme.border.shadowPanel,
         fontFamily: theme.font.family,
+        opacity: paused ? 0.55 : 1,
+        transition: 'opacity 0.25s',
       }}
     >
-      <span style={{ fontSize: 11, opacity: 0.7, marginRight: 2 }}>
-        {'\u{1F552}'}
-      </span>
+      {paused ? (
+        <span
+          data-paused-chip
+          style={{
+            fontSize: 11,
+            opacity: 0.9,
+            marginRight: 4,
+            padding: '1px 6px',
+            borderRadius: theme.border.radius,
+            border: `${theme.border.chunk}px solid ${theme.color.clay}`,
+            color: theme.color.textSoft,
+          }}
+        >
+          {'\u{1F634} resting'}
+        </span>
+      ) : (
+        <span style={{ fontSize: 11, opacity: 0.7, marginRight: 2 }}>
+          {'\u{1F552}'}
+        </span>
+      )}
       {btn('\u23F8', isPaused(), () => setPaused(!isPaused()), 'pause', 'Let the meadow hold still a moment (resumes naturally on your next visit)')}
       {SPEED_STEPS.map((s: SpeedStep) =>
         btn(`${s}x`, !isPaused() && currentSpeedStep() === s, () => setSpeedStep(s), `speed-${s}`, `Let time drift ${s}x faster${s === 8 ? ' — a night passes in about a minute and a half' : ''}`),
