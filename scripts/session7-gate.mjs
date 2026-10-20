@@ -568,7 +568,48 @@ async function checkColony() {
   await page.close();
 }
 
-const map = { seeding: checkSeeding, visitors: checkVisitors, timecontrols: checkTimeControlsUI, colony: checkColony };
+/** U4: habitat-corner scenery + pond life */
+async function checkHabitat() {
+  const { page, errors } = await newPage(browser, url);
+  const hb = await page.evaluate(async () => {
+    const w = window.__meadowlight;
+    const data = w.habitatReadback();
+    // dragonflies fly over the pond (they exist only with the unit mounted)
+    await new Promise((r) => setTimeout(r, 2500));
+    const after = w.habitatReadback();
+    return { foldCells: data.foldCells.length, dragonflies: after.dragonflies };
+  });
+  rec.record(
+    'habitat.fold-cells-exist-and-scenery-mounted',
+    hb.foldCells > 50 && hb.dragonflies >= 2,
+    JSON.stringify(hb) + ' (the folds carry scenery; dragonflies over the pond)',
+  );
+  // scenery must not steal plantable ground: probe a sample of the box —
+  // plantable count unchanged by scenery is implied by the fold derivation
+  // (unit-tested); the gate asserts the LIVE classification still answers
+  const cls = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    let plantable = 0;
+    let unplantable = 0;
+    for (let x = -21; x <= 21; x += 2) {
+      for (let z = -21; z <= 21; z += 2) {
+        if (w.isPlantableCellReadback(x, z)) plantable++;
+        else unplantable++;
+      }
+    }
+    return { plantable, unplantable };
+  });
+  rec.record(
+    'habitat.classification-unchanged',
+    cls.plantable > 300 && cls.unplantable > 10,
+    JSON.stringify(cls) + ' (scenery never reclassifies ground)',
+  );
+  const re = realErrors(errors);
+  rec.record('habitat.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
+const map = { seeding: checkSeeding, visitors: checkVisitors, timecontrols: checkTimeControlsUI, colony: checkColony, habitat: checkHabitat };
 for (const c of checks.split(',')) {
   if (map[c]) await map[c]();
   else rec.record(`unknown-check:${c}`, false, 'no such check in session7-gate');

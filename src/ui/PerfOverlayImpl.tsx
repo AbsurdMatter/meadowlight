@@ -346,6 +346,7 @@ function PerfOverlayPanel() {
       <Session7SeedingReadback />
       <Session7VisitorTriggers />
       <Session7ColonyReadback />
+      <Session7HabitatReadback />
       <SaveInspector />
       <MilestoneChecklist />
     </div>
@@ -720,6 +721,31 @@ function Session7ColonyReadback() {
         <span style={{ fontSize: 11, opacity: 0.7 }}>
           {' '}live {w ? w.colonyReadback().intensity.toFixed(2) : '?'} → target {w ? w.colonyReadback().target.toFixed(2) : '?'}
         </span>
+      </div>
+    </div>
+  );
+}
+
+/** session 7 readback section: habitat scenery (#U4) — the corner-fold
+ *  census (the raw query) + dragonfly telemetry. Pure scenery: the only
+ *  "trigger" is the readback itself — nothing is force-able (the layout
+ *  is deterministic from the classification truth). */
+function Session7HabitatReadback() {
+  const [, forceRender] = useState(0);
+  const w = (window as unknown as { __meadowlight?: { habitatReadback: () => { foldCells: { x: number; z: number }[]; dragonflies: number } } }).__meadowlight;
+  const data = w?.habitatReadback();
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>habitat scenery (U4)</div>
+      <div style={{ fontSize: 11, opacity: 0.7 }}>
+        fold cells {data ? data.foldCells.length : '?'} · dragonflies {data ? data.dragonflies : '?'}
+        <button
+          data-perf-s7="habitat-refresh"
+          onClick={() => forceRender((n) => n + 1)}
+          style={{ margin: '0 6px', padding: '2px 8px', borderRadius: 8, border: 'none', background: '#666', color: '#fff', fontFamily: 'inherit', fontSize: 11, cursor: 'pointer' }}
+        >
+          refresh
+        </button>
       </div>
     </div>
   );

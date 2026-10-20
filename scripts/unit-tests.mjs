@@ -91,10 +91,12 @@ const { flowerBlocked, structureBlocked } = require(OUT + '/engine/collision.js'
 const { computeCaptionLayout, fallbackMetrics } = require(OUT + '/engine/postcardLayout.js');
 const { rollVolunteers, compatibleSeedling } = require(OUT + '/engine/seeding.js');
 const { colonyIntensityTarget, LIFECYCLE_LINES } = require(OUT + '/data/lifecycle.js');
+const { HABITAT_TUNING, cornerFoldCells, cornerKey } = require(OUT + '/data/habitatScenery.js');
 const { advanceColony, colonyIntensity: colonyIntensityExport, colonyReadback: colonyReadbackExport, setColonyIntensityForTest } = require(OUT + '/engine/lifecycle.js');
 const { SEEDING_TUNING, SEEDING_FACTS } = require(OUT + '/data/seeding.js');
 const { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, FIREFLY_SUMMER_TUNING, HOVERFLY_AUTUMN_TUNING, isEarlySpring } = require(OUT + '/data/seasonalVisitors.js');
 const { isPlantableCell } = require(OUT + '/engine/ground.js');
+const { hillsCover: hillsCoverReadback } = require(OUT + '/engine/hillsLayout.js');
 
 const mkItem = (plantId, x = 0, z = 0) => ({ id: plantId + ':' + x + ':' + z, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
 const mkStruct = (structureId, x = 0, z = 0) => ({ id: structureId + ':' + x + ':' + z, structureId, position: [x, 0, z], rotationY: 0 });
@@ -893,6 +895,38 @@ test('lifecycle: NO DECLINE FRAMING — every surface line is winter-safe (the c
   const rb = colonyReadbackExport('winter', 0.5);
   assert.strictEqual(rb.line, LIFECYCLE_LINES.winter, 'the readback renders the one source');
   assert.ok(rb.target <= 0.08, 'midwinter target is the cluster');
+});
+
+// ---------- session 7 U4: habitat-corner scenery ----------
+test('habitat: fold cells derive from the ONE raw query — covered by hills, unplantable, inside the box', () => {
+  const cells = cornerFoldCells();
+  assert.ok(cells.length > 8, 'the folds exist (hills intrude into the box corners): ' + cells.length);
+  // measured reality (dense 0.4 census: ~2457 cells): the fold region is
+  // the full covered-unplantable strip along the box's inner edge — the
+  // hills lattice reaches deep along each edge, not just the corner
+  // points. The 0.8 probe grid lands ~613; the bound below allows the
+  // natural probe-grid variance, not a runaway.
+  assert.ok(cells.length < 900, 'the folds stay the edge strips, not the whole box: ' + cells.length);
+  for (const c of cells) {
+    assert.ok(Math.abs(c.x) <= 22 && Math.abs(c.z) <= 22, 'fold cell inside the placement box');
+    assert.ok(hillsCoverReadback(c.x, c.z), 'fold cell covered by a rendered hills box (the layout key)');
+    assert.ok(!isPlantableCell(c.x, c.z), 'fold cell is unplantable (the same raw query)');
+  }
+  // all four corners carry fold cells (the seams all read as corners)
+  const keys = new Set(cells.map((c) => cornerKey(c.x, c.z)));
+  assert.ok(keys.size === 4, 'all four corner wedges have fold cells: ' + [...keys].join(','));
+  // scenery never lands on plantable ground (scenery never steals cells)
+  for (const c of cells) {
+    assert.ok(!isPlantableCell(c.x, c.z), 'scenery cells are exactly the unplantable folds');
+  }
+});
+
+test('habitat: the scenery palette comes from the world families (the band-palette rule)', () => {
+  const hillSet = new Set(['#6c8a4f', '#5f7a45', '#79995b', '#556e40']);
+  for (const c of HABITAT_TUNING.bushes.colors) assert.ok(hillSet.has(c), 'bushes use the hills family');
+  assert.ok(HABITAT_TUNING.log.color.startsWith('#'), 'the log has a color');
+  assert.ok(HABITAT_TUNING.dragonflies.count >= 2, 'a few dragonflies over the pond');
+  assert.ok(HABITAT_TUNING.dragonflies.fact.length > 20, 'the dragonfly fact exists (verified, cited in-file)');
 });
 
 // ---------- collision ----------

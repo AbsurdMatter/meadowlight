@@ -17,6 +17,8 @@ import { honeyDebug } from '../render/BeeSwarm';
 import { setSpeedStep, setPaused, isPaused, currentSpeedStep, timeMultiplier, type SpeedStep } from './timeControl';
 import { scaledElapsed } from './scaledTime';
 import { colonyReadback } from './lifecycle';
+import { cornerFoldCells } from '../data/habitatScenery';
+import { dragonflyDebug } from '../render/HabitatScenery';
 import { isPlantableCell } from './ground';
 import { hillsBoxes } from './hillsLayout';
 import { setFireflyForce } from '../render/Fireflies';
@@ -54,6 +56,8 @@ declare global {
       visitorWindowsReadback: () => string[];
       /** U3: the colony breath — live intensity + the season's line (one source) */
       colonyReadback: () => { line: string; intensity: number; target: number };
+      /** U4: habitat scenery — fold-cell census + dragonfly telemetry */
+      habitatReadback: () => { foldCells: { x: number; z: number }[]; dragonflies: number };
       /** write the save NOW (the same store save() the autosave uses) */
       save: () => void;
       /** #9: discovered recipe ids (persisted) */
@@ -204,6 +208,10 @@ export function installTestHook() {
       })),
     visitorWindowsReadback: () => usePlacementStore.getState().visitorWindows,
     colonyReadback: () => colonyReadback(usePlacementStore.getState().season, seasonProgress()),
+    habitatReadback: () => ({
+      foldCells: cornerFoldCells(),
+      dragonflies: dragonflyDebug.count,
+    }),
     save: () => usePlacementStore.getState().save(),
     foundRecipes: () => usePlacementStore.getState().foundRecipes,
     checkCompanions: () => usePlacementStore.getState().checkCompanions(),
