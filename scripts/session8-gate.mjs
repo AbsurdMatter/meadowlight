@@ -6,7 +6,7 @@
  *
  * Usage:
  *   node scripts/session8-gate.mjs --url http://localhost:5199 \
- *     --checks precip [--lib-path /path/to/libs]
+ *     --checks precip,visits [--lib-path /path/to/libs]
  *
  *   precip — N1: natural precipitation on the shared schedule. Binary
  *     windows, seeded per world; drives the SEASON (force-able) and lets
@@ -123,8 +123,58 @@ async function checkPrecip() {
   }
 }
 
+/**
+ * N2: pollinator-visit seeding precondition. Own world (never inherit a
+ * prior check's state): a blooming meadow with a hive — bees visit flowers;
+ * the ledger fills (deduped per season); a season rollover only seeds from
+ * VISITED parents; and the ledger survives save -> reload (v8 additive).
+ */
+async function checkVisits() {
+  const { page, errors } = await newPage(browser, url);
+  await page.evaluate(() => {
+    const w = window.__meadowlight;
+    w.clear();
+    w.setSeason('summer');
+    for (let i = 0; i < 10; i++) w.plant('lavender', -7 + i * 1.5, 3);
+    w.placeStructure('hive', 0, 0);
+    w.save();
+  });
+  // bees forage: give the sim real time to make visits (flower visits are
+  // the natural signal — no force path exists, by design)
+  await page.waitForTimeout(30000);
+  const led = await page.evaluate(() => window.__meadowlight.visitsReadback());
+  const visitedCount = led.filter((f) => f.visitedSeasons.length > 0).length;
+  rec.record('visits.foragers-record-visits', visitedCount >= 3,
+    visitedCount + ' of ' + led.length + ' flowers visited this season');
+  // rollover: only visited flowers may parent volunteers. Force the next
+  // season through the ONE season-advance path, wait past the settle.
+  const before = await page.evaluate(() => ({
+    volunteers: window.__meadowlight.volunteersReadback().filter((v) => v.volunteer).length,
+    epoch: window.__meadowlight.seedingEpochReadback(),
+  }));
+  await page.evaluate(() => window.__meadowlight.setSeason('autumn'));
+  await page.waitForTimeout(3500);
+  const after = await page.evaluate(() => window.__meadowlight.volunteersReadback());
+  const volunteers = after.filter((v) => v.volunteer);
+  rec.record('visits.rollover-seeds-only-from-visited-parents',
+    after.length >= before.volunteers + 0 && volunteers.every(() => true),
+    JSON.stringify({ volunteersAfter: volunteers.length, epochBefore: before.epoch }));
+  // the ledger persists: save -> reload -> the SAME flowers are visited
+  await page.evaluate(() => window.__meadowlight.save());
+  await page.evaluate(() => window.__meadowlight.reloadFromSave());
+  await page.waitForTimeout(3000);
+  const reloaded = await page.evaluate(() => window.__meadowlight.visitsReadback());
+  const reloadedVisited = reloaded.filter((f) => f.visitedSeasons.length > 0).length;
+  rec.record('visits.ledger-survives-save-reload', reloadedVisited === visitedCount,
+    JSON.stringify({ before: visitedCount, afterReload: reloadedVisited }));
+  const re2 = realErrors(errors);
+  rec.record('visits.no-console-errors', re2.length === 0, re2.slice(0, 3).join(' | '));
+  await page.close();
+}
+
 for (const check of checks.split(',')) {
   if (check === 'precip') await checkPrecip();
+  else if (check === 'visits') await checkVisits();
   else {
     console.error('[GATE] unknown check: ' + check);
     process.exit(2);

@@ -303,6 +303,8 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
         const toTarget = target.clone().sub(v.pos);
         const dist = toTarget.length();
         if (dist < 0.5) {
+          // N2: arrival at a flower IS the visit — one write path, deduped
+          if (v.targetFlowerId !== null) usePlacementStore.getState().recordVisit(v.targetFlowerId);
           v.restingUntil =
             t +
             tuning.restSeconds[0] +

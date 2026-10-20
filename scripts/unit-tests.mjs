@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts', 'visits.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -101,6 +101,7 @@ const { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, FIREFLY_SUMMER_TUNING, HOVERF
 const { isPlantableCell, groundAt: groundAtReadback } = require(OUT + '/engine/ground.js');
 const { hillsCover: hillsCoverReadback } = require(OUT + '/engine/hillsLayout.js');
 const { seasonWindows, precipReadback, tickPrecipScheduleForTest, nextWindowAfter } = require(OUT + '/engine/rainSchedule.js');
+const { wasVisitedThisSeason, withVisit, visitedParents } = require(OUT + '/engine/visits.js');
 
 const mkItem = (plantId, x = 0, z = 0) => ({ id: plantId + ':' + x + ':' + z, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
 const mkStruct = (structureId, x = 0, z = 0) => ({ id: structureId + ':' + x + ':' + z, structureId, position: [x, 0, z], rotationY: 0 });
@@ -684,7 +685,7 @@ test('save v7 additive: session-6 blob loads without loss and derives a stable s
   const w3 = loadWorld();
   assert.strictEqual(w3.worldSeed, w1.worldSeed, 'v7 seed round-trips');
   assert.strictEqual(w3.seedingEpoch, 3, 'v7 epoch round-trips');
-  assert.strictEqual(w3.version, 7, 'save writes v7');
+  assert.strictEqual(w3.version, 8, 'save writes v8 (N2 additive bump)');
   // volunteer flag persists through the round-trip
   saveWorld({ ...w3, items: [...w3.items.map((it) => ({ ...it, volunteer: true }))] });
   const w4 = loadWorld();
@@ -1162,6 +1163,88 @@ test('N1 windows live mid-season: a boundary crossing never resets or silences w
   const held = precipReadback().current;
   tickPrecipScheduleForTest(5, 2, 'autumn');
   assert.deepStrictEqual(precipReadback().current, held, 'same world point = same live verdict');
+});
+
+
+// ---------- session 8 N2: pollinator-visit seeding precondition ----------
+test('N2 visit ledger: withVisit dedupes per season; absent field = unvisited', () => {
+  const item = mkItem('lavender', 1, 1);
+  assert.strictEqual(wasVisitedThisSeason(item, 'summer'), false, 'no ledger = never visited (pre-v8 saves)');
+  const a = withVisit(item, 'summer');
+  assert.deepStrictEqual(a, ['summer']);
+  const b = withVisit({ ...item, visitedSeasons: a }, 'summer');
+  assert.deepStrictEqual(b, ['summer'], 'second visit the same season is a no-op (one visit suffices)');
+  const c = withVisit({ ...item, visitedSeasons: a }, 'autumn');
+  assert.deepStrictEqual(c, ['summer', 'autumn'], 'seasons accumulate additively');
+  assert.strictEqual(wasVisitedThisSeason({ ...item, visitedSeasons: c }, 'autumn'), true);
+});
+
+test('N2 seeding gate: only VISITED blooming flowers parent volunteers', () => {
+  const items = [
+    { ...mkItem('lavender', 0, 0), visitedSeasons: ['summer'] }, // blooming + visited
+    mkItem('lavender', 3, 0),                                    // blooming, UNVISITED
+    { ...mkItem('lavender', 6, 0), visitedSeasons: ['spring'] }, // blooming, visited LAST season only
+    { ...mkItem('crocus', 9, 0), visitedSeasons: ['summer'] },  // visited but NOT blooming in summer
+  ];
+  const parents = visitedParents(items, 'summer');
+  assert.strictEqual(parents.length, 1, 'only the visited-and-blooming flower parents');
+  assert.strictEqual(parents[0].id, items[0].id);
+});
+
+test('N2 rollVolunteers honors the precondition without touching the roll sequence', () => {
+  const isPlantable = () => true;
+  const flowerBlockedFn = () => false;
+  const mk = (id, x, visited) => ({ id, plantId: 'lavender', position: [x, 0, 0], rotationY: 0, phase: 0, visitedSeasons: visited });
+  // two visited parents: their volunteer rolls must be IDENTICAL to a
+  // pre-N2 run with the same parents (the RNG parity lesson — the filter
+  // runs BEFORE the rolls, so surviving parents roll byte-identically)
+  const visited = [mk('a', -6, ['summer']), mk('b', 6, ['summer'])];
+  const fromVisited = rollVolunteers(visited, 'summer', 'autumn', 42, 3, isPlantable, flowerBlockedFn);
+  const plain = visited.map((v) => ({ ...v, visitedSeasons: undefined }));
+  const fromPlain = rollVolunteers(plain, 'summer', 'autumn', 42, 3, isPlantable, flowerBlockedFn);
+  assert.strictEqual(fromVisited.length, fromPlain.length, 'same parents = same volunteer count');
+  for (let i = 0; i < fromVisited.length; i++) {
+    assert.deepStrictEqual(fromVisited[i], fromPlain[i], 'roll sequence untouched (positions, phases, variations)');
+  }
+  // and unvisited parents seed NOTHING
+  const unvisited = [mk('a', -6, undefined), mk('b', 6, ['spring'])];
+  const none = rollVolunteers(unvisited, 'summer', 'autumn', 42, 3, isPlantable, flowerBlockedFn);
+  assert.strictEqual(none.length, 0, 'unvisited flowers set no seed');
+});
+
+test('N2 save v8 load path: a v7 blob loads losslessly; visitedSeasons round-trips', () => {
+  // the session-7 localStorage shim (top of the self-seeding section) is
+  // already in place — never re-assign the global (probe hygiene: build on
+  // the shared fixture instead of replacing it)
+  clearSavedWorld();
+  // a v7-shaped blob (session-7 save, no visitedSeasons anywhere)
+  const v7 = {
+    version: 7,
+    items: [
+      { id: 'x', plantId: 'lavender', position: [1, 0, 1], rotationY: 0, phase: 0.5, volunteer: true,
+        variation: { rotationY: 0.2, heightJitter: 0, tiltX: 0, tiltZ: 0 } },
+    ],
+    structures: [], milestones: [], season: 'summer',
+    placementVariation: true, randomRotation: true, seenFacts: [], wildSeasons: [],
+    onboardingDismissed: false, visitorWindows: ['queenbumble:spring'],
+    worldSeed: 777, seedingEpoch: 3, dayPhase: 0.4, seasonProgress: 0.5,
+  };
+  localStorage.setItem('meadowlight.world.v2', JSON.stringify(v7));
+  const loaded = loadWorld();
+  assert.strictEqual(loaded.version >= 7, true, 'loads, not backed up');
+  assert.strictEqual(loaded.items.length, 1, 'the item survives');
+  assert.strictEqual(loaded.items[0].volunteer, true, 'volunteer flag preserved');
+  assert.strictEqual(loaded.items[0].visitedSeasons, undefined, 'pre-v8 item = unvisited, eligible on next visit');
+  assert.strictEqual(loaded.visitorWindows[0], 'queenbumble:spring', 'visitor windows preserved');
+  assert.strictEqual(loaded.worldSeed, 777, 'seed preserved');
+  assert.strictEqual(loaded.seedingEpoch, 3, 'epoch preserved');
+  // round-trip a v8 save with a visit ledger
+  loaded.items[0].visitedSeasons = ['summer'];
+  saveWorld(loaded);
+  const again = loadWorld();
+  assert.deepStrictEqual(again.items[0].visitedSeasons, ['summer'], 'visitedSeasons round-trips');
+  assert.strictEqual(again.version, 8, 'saves write v8');
+  clearSavedWorld();
 });
 
 test('N1 8x observability: every season of every world precipitates multiple times', () => {

@@ -19,6 +19,7 @@ import { PLANT_BY_ID, PLANTS } from '../data/plants';
 import { hash3 } from './seededHash';
 import type { PlacedItem } from './persistence';
 import { inBloom } from './pollinator';
+import { wasVisitedThisSeason } from './visits';
 import type { Season } from '../data/seasons';
 
 export interface VolunteerSeed {
@@ -91,8 +92,13 @@ export function rollVolunteers(
   const existingVolunteers = items.filter((it) => it.volunteer === true).length;
   const maxVolunteers = Math.floor(items.length * SEEDING_TUNING.maxVolunteerFraction);
   if (existingVolunteers >= maxVolunteers) return [];
-  // parents: flowers that bloomed during the season just ended
-  const parents = items.filter((it) => inBloom(it.plantId, endedSeason));
+  // parents: flowers that bloomed during the season just ended AND were
+  // visited by a pollinator during it (N2: unvisited flowers don't set
+  // seed — the precondition is a FILTER before the rolls, so the roll
+  // sequence for the surviving parents is byte-identical to pre-N2)
+  const parents = items.filter(
+    (it) => inBloom(it.plantId, endedSeason) && wasVisitedThisSeason(it, endedSeason),
+  );
   if (parents.length === 0) return [];
   const budget = maxVolunteers - existingVolunteers;
   const out: VolunteerSeed[] = [];

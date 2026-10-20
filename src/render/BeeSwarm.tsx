@@ -312,6 +312,9 @@ export function BeeSwarm() {
         const toTarget = target.clone().sub(bee.pos);
         const dist = toTarget.length();
         if (dist < BEE_TUNING.arriveRadius) {
+          // N2: arrival at a flower IS the visit — record it through the
+          // ONE write path (no new detection; the ledger dedupes per season)
+          if (bee.targetFlowerId !== null) usePlacementStore.getState().recordVisit(bee.targetFlowerId);
           // arrived: rest a moment, then pick a new target
           bee.restingUntil =
             t +

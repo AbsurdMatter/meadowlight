@@ -5,6 +5,7 @@ import {
   clearSavedWorld,
 } from '../engine/persistence';
 import type { PlacedItem, PlacedStructure } from '../engine/persistence';
+import { withVisit } from '../engine/visits';
 import { variationFor, type PlacementVariation } from '../engine/variation';
 import type { Season } from '../data/seasons';
 import { setDayPhase, dayPhase } from '../engine/dayCycle';
@@ -105,6 +106,12 @@ export interface PlacementState {
   harvestDips: Record<string, number>;
   /** #36 hive popup: the hive the popup is anchored to (null = closed) */
   hivePopup: string | null;
+  /**
+   * N2: record a pollinator visit on a flower (the foragers' arrival
+   * branches call this through recordFlowerVisit in engine/visits — the
+   * ONE write path, additive v8 field). Idempotent per season.
+   */
+  recordVisit: (itemId: string) => void;
   openHivePopup: (hiveId: string) => void;
   closeHivePopup: () => void;
   earnMilestone: (id: MilestoneId, label: string, detail: string) => void;
@@ -261,6 +268,18 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   hivePopup: null,
   openHivePopup: (hiveId) => set({ hivePopup: hiveId }),
   closeHivePopup: () => set({ hivePopup: null }),
+  recordVisit: (itemId) => {
+    const s = get();
+    // idempotent fast path: the vast majority of arrivals are repeat
+    // visits within the same season — no state write, no rerender
+    const idx = s.items.findIndex((it) => it.id === itemId);
+    if (idx < 0) return;
+    const it = s.items[idx];
+    if (it.visitedSeasons?.includes(s.season)) return;
+    const items = s.items.slice();
+    items[idx] = { ...it, visitedSeasons: withVisit(it, s.season) };
+    set({ items });
+  },
   harvestHoney: (hiveId) => {
     const s = get();
     const fill = s.hiveCombs[hiveId] ?? 0;

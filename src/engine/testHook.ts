@@ -56,6 +56,8 @@ declare global {
       seedingEpochReadback: () => number;
       /** U1: id -> volunteer flag for every item (persisted in the save) */
       volunteersReadback: () => { id: string; plantId: string; volunteer: boolean }[];
+      /** N2: per-flower visit ledger (id -> visited seasons) */
+      visitsReadback: () => { id: string; plantId: string; visitedSeasons: string[] }[];
       /** U2: visitor-window log — (visitorId, season) pairs, one per window */
       visitorWindowsReadback: () => string[];
       /** U3: the colony breath — live intensity + the season's line (one source) */
@@ -214,6 +216,13 @@ export function installTestHook() {
     seasonClockOverridden: () => seasonClockOverridden(),
     worldSeedReadback: () => usePlacementStore.getState().worldSeed,
     seedingEpochReadback: () => usePlacementStore.getState().seedingEpoch,
+    /** N2: per-flower visit ledger readback (persisted v8) */
+    visitsReadback: () =>
+      usePlacementStore.getState().items.map((it) => ({
+        id: it.id,
+        plantId: it.plantId,
+        visitedSeasons: it.visitedSeasons ?? [],
+      })),
     volunteersReadback: () =>
       usePlacementStore.getState().items.map((it) => ({
         id: it.id,

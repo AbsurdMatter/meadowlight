@@ -184,6 +184,8 @@ export function SolitaryBees() {
         const toTarget = target.clone().sub(bee.pos);
         const dist = toTarget.length();
         if (dist < SOLITARY_BEE_TUNING.arriveRadius) {
+          // N2: arrival at a flower IS the visit — one write path, deduped
+          if (bee.targetFlowerId !== null) usePlacementStore.getState().recordVisit(bee.targetFlowerId);
           bee.restingUntil =
             t +
             SOLITARY_BEE_TUNING.restSeconds[0] +
