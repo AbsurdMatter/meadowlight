@@ -181,26 +181,73 @@ Delivered: flower roster 6->10 (crocus makes all-four-seasons reachable; borage/
 Post-review fixes (the user real-GPU loop caught six): ghost voxel unparked (gated instanced meshes left mounted); ridge anchoring, then ridge bottoms (visual legibility is the acceptance criterion — distant terrain must read as terrain in the hills' language); bush rotation; bees-stuck regression — isDaylight used sunElevation>0.05, reading the golden-hour default (0.82) as night, so the swarm homed from every boot and survived reload while the panel printed day; fixed as the palette's own lit window (dawn 0.22 -> dusk 0.88, epsilon-tolerant, ONE shared source for bees/panel/save — two definitions of "day" is how the panel and the bees disagreed); corner placement — the raycast CLAMPED hits into the placement box, silently misclassifying overhang cells as valid; now the raw cell hit is checked against the same isPlantableCell query the cell-map overlay uses (one source, no divergence). The trigger suite found a behavioral gap on its own: bees never homed at night (rain-homing existed, day/night never touched bee behavior) — fixed per real colonies, count untouched, no punishment.
 Lessons: state semantics need ONE shared definition — the panel said day while bees said night because two modules each defined it (same class as session-4's reload round-trip bug); instrument the RAW query, not a clamped/projection one (the raycast clamp made overlay, ghost, and placement disagree while each was locally "right"); a trigger suite pays for itself by exposing behavioral holes the feature gates can't see (night-homing found while verifying the triggers); gates go stale against feature commits — fix the detector, never bend behavior to a stale detector; the custom OrbitControls re-asserts the camera every frame, so proposal screenshots need a working camera path (an honest environment finding, not a "no difference" shrug); terrain acceptance is the user's composition verdict, not slope numbers; taste-first held through three terrain rounds — proposal screenshots before commit, per change; camera-path tooling is part of the proposal workflow now.
 
-### Session 6 — Depth mechanics (post-mortem pending closing round, PR #36)
-Delivered so far: auto-advancing seasons (save v6, one time system, override
-dial); garden recipes (companion pairs, one-time discovery toast + notebook
-"Garden recipes" section with cozy locked entries); honey (comb fills from
-observed foraging effort, comb-as-filling-jar glow, harvest via hive popup +
-P-panel — one shared path); time controls (pause + 1x/2x/4x/8x above the
-season dial, "morning" jump reusing the force paths, not persisted — reload
-resumes natural); corner classification fix (exact rendered hills footprints
-in one shared hillsLayout.ts, hillsCover ANDed into isPlantableCell); terrain
-shallow bowl (0.2u step, edge-anchored profile); bare-minimum deploy (GitHub
-Pages workflow, default URL). Post-mortem to be written at the closing round —
-earned entries already identified: the state-source pattern across the whole
-session (isDaylight -> popup/panel disagreement -> wrong-hive comb attribution
--> duplicate state strings — the one-source rule now includes auditing every
-UI surface that renders a semantic); the corner geometric lesson (radial vs
-square systems mismatch; classification-level footprint checks as the standing
-fix); gate-infrastructure lessons (SwiftShader in-page-evaluate death ->
-node-side scans; deterministic classification census over sampled click
-matrices; skip-honestly instead of flake); the terrain-retune tail (each
-profile change carries dependent visuals tuned to the old profile).
+### Session 6 — Depth mechanics (post-merge record, PR #36)
+
+Delivered: auto-advancing seasons (save v6 additive seasonProgress, ONE
+advance site shared with the day clock, override dial = P-panel force
+path, boundary interpretation has one home in advanceSeasons); garden
+recipes (5 verified companion pairs, strictly additive — non-recipes
+neutral by test, discovery toast + notebook section with cozy locked
+entries, save v6 foundRecipes); honey (comb fills from observed foraging
+effort, comb-as-filling-jar glow — honey voxels GROW with fill, harvest
+via the hive popup and the P panel through one shared harvestHoney,
+ceremony dip + fact toast on both); the hive popup itself (warm
+fill-state lines, the gentle not-yet read, ground-truth hive
+resolution); time controls (pause + 1x/2x/4x/8x above the season dial,
+"morning" jump reusing the existing force paths, not persisted — reload
+resumes natural); corner classification fix (the exact rendered hills
+layout in one shared hillsLayout.ts consumed by renderer AND classifier,
+hillsCover ANDed into isPlantableCell — the deterministic census caught
+a fast-reject diagonal bug a sampled matrix missed); terrain retunes
+(edge-anchored shallow bowl, 0.2u step, rim palette bridge with per-cell
+dither, fog 34/120); bare-minimum deploy (Pages workflow, default URL;
+subdomain + og:image documented post-deploy).
+
+Perf (user real-GPU stress): PASS — 183.4fps @ 221 items (avg 5.45ms,
+p95 8.3ms, max 11.1ms, budget 20ms); vs the session-3 93.8fps @ 229
+baseline the safe claim is no regression with comfortable headroom at
+every percentile (environments differ; not 2x). Session 6's full stack
+added no measurable frame cost under load.
+
+Lessons: the state-source pattern ran through the whole session —
+isDaylight (s5) -> popup/panel hive disagreement -> wrong-hive comb
+attribution (first hiveCombs entry) -> duplicate state strings -> a
+seasonal fact stored as an evergreen base; the one-source rule now
+includes auditing EVERY UI surface that renders a semantic (predicate,
+string, and attribution). Sandbox-edit loss: a change not present in
+the committed tree does not exist — commit messages describe intent,
+not contents; after any history rewrite the full gate suite re-runs
+before any state claim (the reflog audit showed identical trees — the
+edit was lost BEFORE staging; a commit described a hunk it never
+contained, and a default-camera-only gate passed it). Camera-coupling:
+a world-anchored popup is camera-state-dependent by definition — test
+matrices must include the ZOOM EXTREMES, not just the default camera;
+a span-based lift shrinks with distance while the popup's pixel height
+doesn't (clearance collapsed at zoom-out), and the x-clamp must use
+the popup's full rendered width (the extended matrix caught a ~23px
+edge overflow the default-camera check couldn't see); a second offset
+source in the style layer silently overrides the projection (removed —
+the projection is the single anchor source). Corner geometry: radial
+hills vs square placement box — the standing fix is classification-
+level footprint checks reading the renderer's own placement data. Gate
+infrastructure under SwiftShader: long in-page evaluates die silently
+('page closed', three different symptoms = the rabbit-hole signature)
+— node-side scans (one evaluate per pixel), fresh pages per case,
+deterministic classification census over sampled click matrices, and
+skip-honestly instead of flake; R3F ThreeEvent raycasts don't fire
+headless at all (canvas events verified arriving) — store-driven
+verification + real-DOM button clicks, with the canvas-click flow on
+the user's manual list. Terrain-retune tail: every profile change
+carries dependent visuals tuned to the old profile (the brown rim band
+was tuned for the ~1u bowl; the base hive fact carried seasonal copy;
+fog was tuned to the pre-retune composition).
+
+Post-merge polish backlog (user decisions): popup anchor jitter during
+camera rotation (candidates: recompute on the damped camera only or
+temporal smoothing; round the projected position to whole pixels for
+the pixel-font chrome; batch the anchor update with the camera-asserted
+frame); habitat corners — scenery covering the unplantable corner folds
+(session 7's scenery unit, on the v3 roadmap).
 
 ---
 
