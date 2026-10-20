@@ -6,13 +6,14 @@ import { groundAt } from '../engine/ground';
 const GRASS_COLORS = ['#94b364', '#8fae5f', '#87a75a', '#7d9f54'];
 /** bowl cross-section: the same earth tones the hills use */
 /*
- * #36 terrain retune: the rim band was EARTH brown (#8a7350 family, the
- * bowl-cross-section read), tuned when the bowl was ~1u deep — at the new
- * 0.2u shallow rim the brown strip protruded visually against the green
- * outer terrain. The rim top now reads as a DRIER GRASS tone — the
- * meadow-to-outer-meadow transition family, so the seam is grass-to-grass.
+ * #36 terrain retune (round 5): the rim band was EARTH brown, then a
+ * drier-grass tone — both read as a distinct surface pasted between the
+ * meadow and the outer terrain. The final read: a PALETTE BRIDGE — the
+ * band samples toward the meadow's own grass at the inner boundary and
+ * toward the hills' near-meadow greens at the outer boundary, with
+ * per-cell dither (voxel-language jitter, not alpha) so the transition
+ * drifts naturally; corner cells dither strongest. See the isRim branch.
  */
-const RIM_GRASS_COLORS = ['#a8a45f', '#9aa057', '#b0a768'];
 
 export function Meadow() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -53,10 +54,30 @@ export function Meadow() {
         mat.setPosition(x, h - depth * 0.5, z);
         mesh.setMatrixAt(i, mat);
         if (isRim) {
-          color.set(RIM_GRASS_COLORS[
-            Math.abs(Math.floor(Math.sin(ix * 12.9898 + iz * 78.233) * 43758.5)) %
-              RIM_GRASS_COLORS.length
-          ]);
+          // #36 round-5 palette bridge: the rim band reads as a gradient
+          // TOWARD whichever terrain it touches — inner rim rows lean to
+          // the meadow's own grass, outer rim rows lean to the hills'
+          // near-meadow greens, with per-cell palette jitter so the
+          // boundary is a natural drift, not a third surface. Corner
+          // cells (the fold regions) get the strongest dither — the
+          // transition was most abrupt there.
+          const outerEdge = MEADOW_SIZE / 2;
+          const innerEdge = outerEdge - step * 3;
+          // 0 at the inner boundary -> 1 at the outermost cells
+          const t = THREE.MathUtils.clamp((r - innerEdge) / (outerEdge - innerEdge), 0, 1);
+          const jitter = Math.abs(Math.floor(Math.sin(ix * 12.9898 + iz * 78.233) * 43758.5) % 1000) / 1000;
+          // near-meadow hills greens (the family the outer terrain wears)
+          const hillA = new THREE.Color('#8fae5f');
+          const hillB = new THREE.Color('#9cb96a');
+          const meadowA = new THREE.Color('#94b364');
+          const meadowB = new THREE.Color('#7d9f54');
+          const towardHills = (jitter < 0.5 ? hillA : hillB).clone();
+          const towardMeadow = (jitter < 0.5 ? meadowA : meadowB).clone();
+          // dither: random cells swap families across the whole band, with
+          // probability rising toward the outer edge (and extra at corners)
+          const isCorner = Math.abs(x) > innerEdge && Math.abs(z) > innerEdge;
+          const swapP = Math.min(1, t + (isCorner ? 0.35 : 0));
+          color.copy(jitter < swapP ? towardHills : towardMeadow);
         } else {
           color.set(
             GRASS_COLORS[
