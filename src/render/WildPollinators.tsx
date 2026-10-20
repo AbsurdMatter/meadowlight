@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react';
-import { useFrame, type RootState } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
   BUTTERFLY_TUNING,
@@ -20,6 +20,7 @@ import { usePlacementStore } from './placementStore';
 import { inBloom } from '../engine/pollinator';
 import { noVariation } from '../engine/variation';
 import { dayPhase } from '../engine/dayCycle';
+import { scaledDelta, scaledElapsed } from '../engine/scaledTime';
 import { seasonProgress } from '../engine/seasonClock';
 import { recordVisitorWindow } from './visitorLog';
 
@@ -161,7 +162,7 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
     [tuning],
   );
 
-  const update = (state: RootState, delta: number) => {
+  const update = (delta: number) => {
     const body = bodyRef.current;
     const wings = wingRef.current;
     const accent = accentRef.current;
@@ -225,7 +226,7 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
       }
     }
 
-    const t = state.clock.elapsedTime;
+    const t = scaledElapsed();
     if (tuning.id === 'butterfly') wildDebug.butterflies = visitors.current.length;
     else if (tuning.id === 'hoverfly') wildDebug.hoverflies = visitors.current.length;
     else if (tuning.id === 'queenbumble') wildDebug.queenBumbles = visitors.current.length;
@@ -343,9 +344,9 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
     wings.instanceMatrix.needsUpdate = true;
   };
 
-  useFrame((state, delta) => {
+  useFrame(() => {
     try {
-      update(state, delta);
+      update(scaledDelta());
     } catch (err) {
       if (!crashLogged) {
         crashLogged = true;

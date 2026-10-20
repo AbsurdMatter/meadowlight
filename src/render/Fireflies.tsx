@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { dayPhase, isDusk } from '../engine/dayCycle';
+import { scaledDelta, scaledElapsed } from '../engine/scaledTime';
 import { usePlacementStore } from './placementStore';
 import { groundAt } from '../engine/ground';
 import { FIREFLY_SUMMER_TUNING } from '../data/seasonalVisitors';
@@ -73,7 +74,7 @@ export function Fireflies() {
     mesh.instanceMatrix.needsUpdate = true;
   }, []);
 
-  useFrame(({ clock }, delta) => {
+  useFrame(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
     const s = usePlacementStore.getState();
@@ -117,7 +118,7 @@ export function Fireflies() {
       flies.current = list;
     }
 
-    const t = clock.elapsedTime;
+    const t = scaledElapsed();
     let i = 0;
     if (!dusk && mesh.count !== 0) {
       mesh.count = 0;
@@ -131,7 +132,8 @@ export function Fireflies() {
         const targetY = f.home.y + Math.sin(t * 0.4 + f.phase) * FIREFLY_TUNING.bobAmplitude;
         const to = new THREE.Vector3(targetX, targetY, targetZ).sub(f.pos);
         const dist = to.length();
-        if (dist > 0.1) {
+        const delta = scaledDelta();
+        if (dist > 0.1 && delta > 0) {
           to.normalize().multiplyScalar(FIREFLY_TUNING.speed);
           f.vel.lerp(to, Math.min(1, delta * 2));
           f.pos.addScaledVector(f.vel, delta);

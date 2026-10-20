@@ -1,5 +1,6 @@
 import { useMemo, useRef } from 'react';
-import { useFrame, type RootState } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
+import { scaledDelta, scaledElapsed } from '../engine/scaledTime';
 import * as THREE from 'three';
 import { BEE_TUNING } from '../data/bees';
 import { PLANT_BY_ID } from '../data/plants';
@@ -120,7 +121,7 @@ export function BeeSwarm() {
     restingUntil: 0,
   });
 
-  const updateSwarm = (state: RootState, delta: number) => {
+  const updateSwarm = (delta: number, rawDelta: number) => {
     const body = bodyRef.current;
     const stripes = stripeRef.current;
     const wings = wingRef.current;
@@ -130,11 +131,14 @@ export function BeeSwarm() {
     syncWorld();
     const foraging = BEE_TUNING.foragingSeasons.includes(s.season);
 
-    // adaptive swarm cap: measure frame time, cap the bee count
-    const dt = Math.min(delta, 0.1) * 1000;
+    // adaptive swarm cap: measure frame time, cap the bee count. The frame
+    // metric stays RAW (perf must observe real device frames even when the
+    // world is slowed or paused); only the adaptation CADENCE uses the
+    // shared scaled clock (adaptation is world behavior, not measurement).
+    const dt = Math.min(rawDelta, 0.1) * 1000;
     frameEma.current = frameEma.current * 0.95 + dt * 0.05;
-    if (state.clock.elapsedTime * 1000 - lastAdapt.current > BEE_TUNING.adaptEveryMs) {
-      lastAdapt.current = state.clock.elapsedTime * 1000;
+    if (scaledElapsed() * 1000 - lastAdapt.current > BEE_TUNING.adaptEveryMs) {
+      lastAdapt.current = scaledElapsed() * 1000;
       if (frameEma.current > BEE_TUNING.slowFrameMs && adaptiveCap.current > 24) {
         adaptiveCap.current = Math.max(24, Math.floor(adaptiveCap.current * 0.8));
       } else if (frameEma.current < BEE_TUNING.fastFrameMs && adaptiveCap.current < MAX_BEES) {
@@ -200,7 +204,7 @@ export function BeeSwarm() {
       bees.current.length = targetTotal;
     }
 
-    const t = state.clock.elapsedTime;
+    const t = scaledElapsed();
     beeDebug.foraging = 0;
     beeDebug.wandering = 0;
     beeDebug.homing = 0;
@@ -368,9 +372,9 @@ export function BeeSwarm() {
     wings.instanceMatrix.needsUpdate = true;
   };
 
-  useFrame((state, delta) => {
+  useFrame((_, delta) => {
     try {
-      updateSwarm(state, delta);
+      updateSwarm(scaledDelta(), delta);
     } catch (err) {
       // invariant: no exception may ever escape the frame loop; contain it,
       // log once, and keep the app alive

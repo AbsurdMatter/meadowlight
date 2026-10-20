@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
+import { scaledDelta } from '../engine/scaledTime';
 import * as THREE from 'three';
 import { MEADOW_SIZE } from '../engine/terrain';
 import {
@@ -380,11 +381,11 @@ function Clouds() {
     }));
   }, []);
 
-  useFrame((_, delta) => {
+  useFrame(() => {
     for (let i = 0; i < clusters.length; i++) {
       const g = clusterRefs.current[i];
       if (!g) continue;
-      g.position.x += clusters[i].speed * delta;
+      g.position.x += clusters[i].speed * scaledDelta();
       if (g.position.x > CLOUDS.wrapHalfWidth) {
         g.position.x = -CLOUDS.wrapHalfWidth;
       }
