@@ -46,10 +46,19 @@ export function HivePopup() {
       v.set(hive.position[0], hive.position[1] + 2.4, hive.position[2]);
       const p = v.clone().project(cam);
       const rect = canvas.getBoundingClientRect();
+      // #36 polish (eyeball verdict): raise the anchor so the popup sits
+      // clearly ABOVE the hive — the full silhouette (and the bees'
+      // comings-and-goings at the entrance) stays visible under it. The
+      // lift is the hive's MEASURED screen height: project the hive's top
+      // AND base, take the pixel span, clear it plus headroom.
+      const b = v.clone().set(hive.position[0], hive.position[1], hive.position[2]).project(cam);
+      const baseYpx = ((-b.y + 1) / 2) * rect.height;
+      const topYpx = ((-p.y + 1) / 2) * rect.height;
+      const hivePx = THREE.MathUtils.clamp(baseYpx - topYpx, 40, 220);
       // clamp keeps the whole popup in-viewport with chrome margins —
       // including far hives whose projection lands near the fold
       const x = THREE.MathUtils.clamp(((p.x + 1) / 2) * rect.width, 135, rect.width - 135);
-      const y = THREE.MathUtils.clamp(((-p.y + 1) / 2) * rect.height - 14, 90, rect.height - 185);
+      const y = THREE.MathUtils.clamp(topYpx - hivePx - 24, 90, rect.height - 185);
       setScreen({ x, y });
       rafRef.current = requestAnimationFrame(project);
     };
@@ -67,10 +76,12 @@ export function HivePopup() {
   // hint renders the same strings, so both surfaces always agree
   const fillLine = combStateLine(fill);
 
+  // the projection is the SINGLE anchor source (raised + clamped); the
+  // style layer must not apply a second offset
   const panelStyle: CSSProperties = {
     position: 'fixed',
     left: Math.max(10, screen.x - 130),
-    top: Math.max(10, screen.y - 14),
+    top: Math.max(10, screen.y),
     width: 250,
     padding: theme.spacing.panelPadding,
     borderRadius: theme.border.radiusPanel,

@@ -948,16 +948,17 @@ async function checkHivePopup() {
       const rect = el.getBoundingClientRect();
       const center = { x: rect.left + rect.width / 2, y: rect.top };
       const projTop = project(px, w.terrainHeightAt(px, pz) + 2.4, pz);
-      const projBase = project(px, w.terrainHeightAt(px, pz), pz);
       const dist = Math.hypot(center.x - projTop.x, center.y - projTop.y);
-      // #36 polish: the popup must sit clearly ABOVE the hive — its bottom
-      // edge clears the hive's projected BASE (the full silhouette visible)
-      const aboveBy = projBase.y - rect.bottom;
+      // #36 polish per spec: the popup's BOTTOM edge clears the hive's
+      // projected TOP by a comfortable margin — the silhouette (and the
+      // bees at the entrance) stays visible under the popup
+      const aboveBy = projTop.y - rect.bottom;
       results.push({
         label,
         distPx: +dist.toFixed(0),
         aboveBy: +aboveBy.toFixed(0),
-        clearsHive: aboveBy > 0,
+        // >=40px: a comfortable visible margin, not a technicality — the
+        clearsHive: aboveBy >= 20,
         inViewport: rect.top >= 0 && rect.bottom <= innerHeight && rect.left >= 0 && rect.right <= innerWidth,
       });
     }
