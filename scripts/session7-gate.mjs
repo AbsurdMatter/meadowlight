@@ -168,7 +168,110 @@ async function checkSeeding() {
   await page.close();
 }
 
-const map = { seeding: checkSeeding };
+/** U2: seasonal wild visitors */
+async function checkVisitors() {
+  const { page, errors } = await newPage(browser, url);
+
+  // 1. queen bumble: forced condition (spring + crocuses) AND early-spring
+  //    window — appears, records exactly one window entry
+  {
+    const q = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.clear();
+      w.setSeason('spring');
+      w.setSeasonProgressForTest(0.1); // early spring (her window)
+      for (let k = 0; k < 5; k++) w.plant('crocus', 2 + k * 1.2, 2);
+      await new Promise((r) => setTimeout(r, 2500));
+      const d = w.wildDebug();
+      const windows1 = w.visitorWindowsReadback().slice();
+      await new Promise((r) => setTimeout(r, 1500));
+      const windows2 = w.visitorWindowsReadback().slice();
+      return { queen: d.queenBumbles, windows1, windows2 };
+    });
+    const win = q.windows1.filter((k) => k.startsWith('queenbumble:'));
+    rec.record(
+      'visitors.queen-under-forced-condition',
+      q.queen >= 1 && win.length === 1 && q.windows2.length === q.windows1.length,
+      JSON.stringify(q) + ' (one window entry, no re-record)',
+    );
+  }
+
+  // 2. moth: forced condition (night + lavender) — appears at night only
+  {
+    const m = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.clear();
+      w.setSeason('summer');
+      w.setDayPhase(0.95); // night (the panel force path)
+      for (let k = 0; k < 5; k++) w.plant('lavender', -2 - k * 1.2, 2);
+      await new Promise((r) => setTimeout(r, 2500));
+      const night = w.wildDebug();
+      w.setDayPhase(0.5); // midday: the condition is gone, visitors vanish
+      await new Promise((r) => setTimeout(r, 2500));
+      const day = w.wildDebug();
+      return { night: night.lavenderMoths, day: day.lavenderMoths };
+    });
+    rec.record(
+      'visitors.moth-night-only-under-forced-condition',
+      m.night >= 1 && m.day === 0,
+      JSON.stringify(m) + ' (night: present; midday: gone — condition-gated)',
+    );
+  }
+
+  // 3. firefly summer bloom: composes with dusk (one system), corner present
+  {
+    const f = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.setSeason('summer');
+      w.setDayPhase(0.82); // dusk (golden hour inside the dusk window)
+      w.placeStructure('wildcorner', -4.5, 5);
+      await new Promise((r) => setTimeout(r, 2500));
+      const summer = w.fireflyDebug();
+      w.setSeason('spring'); // same dusk, not summer: bloom gone, base remains
+      await new Promise((r) => setTimeout(r, 2500));
+      const spring = w.fireflyDebug();
+      return { summer, spring };
+    });
+    rec.record(
+      'visitors.firefly-summer-bloom-composes-with-dusk',
+      f.summer.count > f.spring.count && f.spring.count >= 0,
+      JSON.stringify(f) + ' (summer dusk > spring dusk at the same corner)',
+    );
+  }
+
+  // 4. natural timing in an accelerated run: visitors appear under the
+  //    calendar's own seasons, not just forced conditions (8x run, ~2 seasons)
+  {
+    const n = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.clear();
+      w.setSeason('spring');
+      w.setSeasonProgressForTest(0.05);
+      w.resumeSeasonClock();
+      w.setDayPhase(0.3); // day: butterflies/queen active
+      for (let k = 0; k < 6; k++) w.plant('crocus', 2 + k * 1.2, 2);
+      for (let k = 0; k < 6; k++) w.plant('forget-me-not', -2 - k, -4);
+      w.timeSetPaused(false);
+      w.timeSetSpeed(8);
+      await new Promise((r) => setTimeout(r, 60000)); // ~ most of spring at 8x
+      w.timeSetSpeed(1);
+      const windows = w.visitorWindowsReadback().slice();
+      const d = w.wildDebug();
+      return { windows, debug: { butterflies: d.butterflies, queen: d.queenBumbles } };
+    });
+    rec.record(
+      'visitors.natural-timing-records-window',
+      n.windows.some((k) => k.startsWith('queenbumble:spring')),
+      JSON.stringify(n) + ' (queen recorded under natural spring timing)',
+    );
+  }
+
+  const re = realErrors(errors);
+  rec.record('visitors.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
+const map = { seeding: checkSeeding, visitors: checkVisitors };
 for (const c of checks.split(',')) {
   if (map[c]) await map[c]();
   else rec.record(`unknown-check:${c}`, false, 'no such check in session7-gate');

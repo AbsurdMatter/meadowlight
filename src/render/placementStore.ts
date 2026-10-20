@@ -94,6 +94,11 @@ export interface PlacementState {
   worldSeed: number;
   /** U1: season rollovers this world has seeded (persisted v7 additive) */
   seedingEpoch: number;
+  /**
+   * U2: seasonal visitor windows — (visitorId, season) pairs, one entry
+   * per visit-window (persisted v7 additive; the notebook reads it).
+   */
+  visitorWindows: string[];
   /** #10: harvest a ready hive — jar + ceremony state + warm fact toast */
   harvestHoney: (hiveId: string) => boolean;
   /** #10: hive ids currently mid-harvest-dip (the render reads this) */
@@ -251,6 +256,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   honeyJars: initial.honeyJars ?? 0,
   worldSeed: initial.worldSeed ?? 12345,
   seedingEpoch: initial.seedingEpoch ?? 0,
+  visitorWindows: initial.visitorWindows ?? [],
   harvestDips: {},
   hivePopup: null,
   openHivePopup: (hiveId) => set({ hivePopup: hiveId }),
@@ -298,6 +304,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       season: 'summer',
       worldSeed: Math.floor(Math.random() * 2147483647),
       seedingEpoch: 0,
+      visitorWindows: [],
       // #11: reset returns the calendar to a fresh summer start, unheld
       toasts: [],
       modalOpen: false,
@@ -346,6 +353,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       honeyJars: w.honeyJars ?? 0,
       worldSeed: w.worldSeed ?? 12345,
       seedingEpoch: w.seedingEpoch ?? 0,
+      visitorWindows: w.visitorWindows ?? [],
     });
     // #11: the reload must re-derive the calendar position from the blob —
     // same semantics as a fresh page load, not the live clock
@@ -370,6 +378,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       honeyJars: s.honeyJars,
       worldSeed: s.worldSeed,
       seedingEpoch: s.seedingEpoch,
+      visitorWindows: s.visitorWindows,
     });
   },
 }));

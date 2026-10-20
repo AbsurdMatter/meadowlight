@@ -48,6 +48,8 @@ declare global {
       seedingEpochReadback: () => number;
       /** U1: id -> volunteer flag for every item (persisted in the save) */
       volunteersReadback: () => { id: string; plantId: string; volunteer: boolean }[];
+      /** U2: visitor-window log — (visitorId, season) pairs, one per window */
+      visitorWindowsReadback: () => string[];
       /** #9: discovered recipe ids (persisted) */
       foundRecipes: () => string[];
       /** #9: rescans for newly formed recipes (the plant() path calls it) */
@@ -190,6 +192,7 @@ export function installTestHook() {
         plantId: it.plantId,
         volunteer: it.volunteer === true,
       })),
+    visitorWindowsReadback: () => usePlacementStore.getState().visitorWindows,
     foundRecipes: () => usePlacementStore.getState().foundRecipes,
     checkCompanions: () => usePlacementStore.getState().checkCompanions(),
     activeRecipes: () => usePlacementStore.getState().activeRecipes(),

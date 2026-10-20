@@ -115,6 +115,12 @@ export interface WorldData {
   worldSeed?: number;
   /** v7: how many season rollovers have seeded this world (rolls never repeat) */
   seedingEpoch?: number;
+  /**
+   * U2 (session 7, v7 additive): seasonal visitor windows — every
+   * (visitorId, season) pair that has occurred, one entry per visit-window.
+   * The notebook's "who visited, when" reads this; absent = none yet.
+   */
+  visitorWindows?: string[];
 }
 
 function parseItems(parsed: unknown): PlacedItem[] {
@@ -224,6 +230,12 @@ function parseSeedingEpoch(parsed: unknown): number {
   return typeof parsed === 'number' && parsed >= 0 ? Math.floor(parsed) : 0;
 }
 
+/** U2 (v7 additive): visitor-window keys, deduped strings */
+function parseVisitorWindows(parsed: unknown): string[] {
+  if (!Array.isArray(parsed)) return [];
+  return [...new Set(parsed.filter((v): v is string => typeof v === 'string'))];
+}
+
 function freshWorld(): WorldData {
   return {
     version: 7,
@@ -236,6 +248,7 @@ function freshWorld(): WorldData {
     seenFacts: [],
     wildSeasons: [],
     onboardingDismissed: false,
+    visitorWindows: [],
   };
 }
 
@@ -299,6 +312,7 @@ export function loadWorld(): WorldData {
         honeyJars: parseHoneyJars(data.honeyJars),
         worldSeed: parseWorldSeed(data.worldSeed, data.items),
         seedingEpoch: parseSeedingEpoch(data.seedingEpoch),
+        visitorWindows: parseVisitorWindows(data.visitorWindows),
       };
     }
     // v1 shape: bare array of items

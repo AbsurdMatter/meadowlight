@@ -344,6 +344,7 @@ function PerfOverlayPanel() {
       <Session6RecipeTriggers />
       <Session6HoneyTriggers />
       <Session7SeedingReadback />
+      <Session7VisitorTriggers />
       <SaveInspector />
       <MilestoneChecklist />
     </div>
@@ -616,6 +617,63 @@ function Session7SeedingReadback() {
         <span style={{ fontSize: 11, opacity: 0.7 }}>
           {' '}seed #{worldSeed} · epoch {epoch} · volunteers {volunteers}/{items.length}
         </span>
+      </div>
+    </div>
+  );
+}
+
+/** session 7 trigger section: seasonal wild visitors (#U2) — force the
+ *  NATURAL CONDITIONS (season, day phase, target flowers), never the spawn
+ *  itself (the session-5 butterfly decision, kept). Readback: per-species
+ *  counts + the visitor-window log. */
+function Session7VisitorTriggers() {
+  const [, forceRender] = useState(0);
+  const refresh = () => forceRender((n) => n + 1);
+  const btn = (label: string, onClick: () => void, key?: string) => (
+    <button
+      key={key}
+      data-perf-s7={key}
+      onClick={() => {
+        onClick();
+        refresh();
+      }}
+      style={{
+        margin: '2px 4px 2px 0',
+        padding: '5px 9px',
+        borderRadius: 8,
+        border: 'none',
+        background: '#666',
+        color: '#fff',
+        fontFamily: 'inherit',
+        fontSize: 12,
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>seasonal wild visitors (U2)</div>
+      <div>
+        {btn('queen cond: spring + crocuses', () => {
+          const w = (window as unknown as { __meadowlight?: { plant: (id: string, x: number, z: number) => void; setSeason: (s: 'spring' | 'summer' | 'autumn' | 'winter') => void } }).__meadowlight;
+          w?.setSeason('spring');
+          for (let k = 0; k < 4; k++) w?.plant('crocus', 2 + k * 1.2, 2);
+        }, 'visitor-queen')}
+        {btn('moth cond: night + lavender', () => {
+          const w = (window as unknown as { __meadowlight?: { plant: (id: string, x: number, z: number) => void; setDayPhase: (p: number) => void; setSeason: (s: 'spring' | 'summer' | 'autumn' | 'winter') => void } }).__meadowlight;
+          w?.setSeason('summer');
+          w?.setDayPhase(0.95);
+          for (let k = 0; k < 4; k++) w?.plant('lavender', -2 - k * 1.2, 2);
+        }, 'visitor-moth')}
+        {btn('firefly bloom cond: summer + dusk', () => {
+          const w = (window as unknown as { __meadowlight?: { setSeason: (s: 'spring' | 'summer' | 'autumn' | 'winter') => void; setDayPhase: (p: number) => void; placeStructure: (id: string, x: number, z: number) => void } }).__meadowlight;
+          w?.setSeason('summer');
+          w?.setDayPhase(0.82);
+          w?.placeStructure('wildcorner', -4.5, 5);
+        }, 'visitor-fireflies')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}> windows: {usePlacementStore.getState().visitorWindows.length}</span>
       </div>
     </div>
   );

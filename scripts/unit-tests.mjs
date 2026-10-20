@@ -91,6 +91,7 @@ const { flowerBlocked, structureBlocked } = require(OUT + '/engine/collision.js'
 const { computeCaptionLayout, fallbackMetrics } = require(OUT + '/engine/postcardLayout.js');
 const { rollVolunteers, compatibleSeedling } = require(OUT + '/engine/seeding.js');
 const { SEEDING_TUNING, SEEDING_FACTS } = require(OUT + '/data/seeding.js');
+const { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, FIREFLY_SUMMER_TUNING, HOVERFLY_AUTUMN_TUNING, isEarlySpring } = require(OUT + '/data/seasonalVisitors.js');
 const { isPlantableCell } = require(OUT + '/engine/ground.js');
 
 const mkItem = (plantId, x = 0, z = 0) => ({ id: plantId + ':' + x + ':' + z, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
@@ -756,6 +757,74 @@ test('seeding: empty or non-blooming meadows volunteer nothing (winter stays qui
   const lavenderOnly = [mk('lavender', 0, 0, 0), mk('lavender', 3, 0, 1)];
   const winter = rollVolunteers(lavenderOnly, 'autumn', 'winter', 1, 0, isPlantableCell, () => false);
   assert.strictEqual(winter.length, 0, 'winter stays quiet for a summer meadow');
+});
+
+// ---------- session 7 U2: seasonal wild visitors ----------
+// persistence shim already installed above (U1 block)
+
+test('visitors: the moth is an evening creature — dusk through night, never midday', () => {
+  const w = LAVENDER_MOTH_TUNING.phaseWindow;
+  assert.ok(!!w, 'the moth has a phase window');
+  // dusk (0.79) through deep night (0.05) to dawn edge (0.22): evening active
+  assert.ok(w(0.8) && w(0.95) && w(0.05) && w(0.22), 'evening/night is the moth window');
+  // midday and bright afternoon are NOT
+  assert.ok(!w(0.5) && !w(0.3) && !w(0.7), 'no moths in daylight (bees shift)');
+});
+
+test('visitors: the queen is early-spring only — the window closes mid-season', () => {
+  assert.ok(isEarlySpring(0.1) && isEarlySpring(0.49), 'first half of spring');
+  assert.ok(!isEarlySpring(0.5) && !isEarlySpring(0.9), 'late spring sees workers, not the queen');
+});
+
+test('visitors: target blooms are real roster species that bloom in the season (buildable)', () => {
+  for (const t of [QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING]) {
+    assert.ok(t.targetPlantIds && t.targetPlantIds.length > 0, t.id + ' has target flowers');
+    for (const id of t.targetPlantIds) {
+      assert.ok(!!PLANT_BY_ID[id], t.id + ' target ' + id + ' is a roster species');
+      assert.ok(
+        t.activeSeasons.some((s) => PLANT_BY_ID[id].bloom.includes(s)),
+        t.id + ' target ' + id + ' blooms in one of its seasons',
+      );
+    }
+    assert.ok(t.fact.length > 20, t.id + ' carries a verified fact');
+  }
+  // the queen comes for crocuses specifically (the plan of record)
+  assert.ok(QUEEN_BUMBLE_TUNING.targetPlantIds.includes('crocus'), 'queen targets crocus');
+  // the moth comes for lavender
+  assert.ok(LAVENDER_MOTH_TUNING.targetPlantIds.includes('lavender'), 'moth targets lavender');
+});
+
+test('visitors: the firefly bloom composes with dusk — never a second firefly system', () => {
+  assert.ok(FIREFLY_SUMMER_TUNING.seasons.includes('summer'), 'the bloom is a summer event');
+  assert.ok(FIREFLY_SUMMER_TUNING.extraPerCorner > 0, 'the bloom adds, not replaces');
+  assert.ok(FIREFLY_SUMMER_TUNING.summerMax >= 12, 'the capacity covers the bloom');
+});
+
+test('visitors: the autumn hoverfly thins, never grows', () => {
+  assert.ok(HOVERFLY_AUTUMN_TUNING.fraction > 0 && HOVERFLY_AUTUMN_TUNING.fraction < 1, 'stragglers are a fraction');
+  assert.ok(HOVERFLY_AUTUMN_TUNING.speedScale <= 1, 'autumn air is never faster');
+});
+
+test('visitors: notebook windows are one per (visitor, season) and round-trip', () => {
+  const seen = new Set();
+  const record = (visitorId, season) => {
+    const key = visitorId + ':' + season;
+    if (seen.has(key)) return seen.size;
+    seen.add(key);
+    return seen.size;
+  };
+  record('queenbumble', 'spring');
+  const n1 = seen.size;
+  record('queenbumble', 'spring'); // same window
+  assert.strictEqual(seen.size, n1, 'repeated sightings never re-record');
+  record('queenbumble', 'summer');
+  assert.strictEqual(seen.size, n1 + 1, 'a new season is a new window');
+  // and the save round-trips the keys (parseVisitorWindows dedupes)
+  const world = loadWorld();
+  saveWorld({ ...world, visitorWindows: ['queenbumble:spring', 'queenbumble:spring', 'moth:summer'] });
+  const back = loadWorld();
+  assert.deepStrictEqual(back.visitorWindows.sort(), ['moth:summer', 'queenbumble:spring'], 'dedup + round-trip');
+  clearSavedWorld();
 });
 
 // ---------- collision ----------
