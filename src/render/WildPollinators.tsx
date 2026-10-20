@@ -359,7 +359,18 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
 
   return (
     <group>
-      <instancedMesh ref={bodyRef} args={[bodyGeo, undefined, tuning.maxCount]} frustumCulled={false}>
+      <instancedMesh ref={bodyRef} args={[bodyGeo, undefined, tuning.maxCount]} frustumCulled={false}
+        onPointerOver={() => {
+          // N3: the glass zooms a hovered visitor — pure inspection riding
+          // the mesh's own pointer events (one input path, zero mutation)
+          const s = usePlacementStore.getState();
+          if (s.magnifierOn) s.setMagnifierEntry({ kind: 'visitor', visitorId: tuning.id });
+        }}
+        onPointerOut={() => {
+          const s = usePlacementStore.getState();
+          if (s.magnifierOn && s.magnifierEntry?.kind === 'visitor') s.setMagnifierEntry(null);
+        }}
+      >
         <meshLambertMaterial color={tuning.bodyColor} />
       </instancedMesh>
       <instancedMesh ref={accentRef} args={[accentGeo, undefined, tuning.maxCount]} frustumCulled={false}>

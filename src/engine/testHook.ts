@@ -58,6 +58,10 @@ declare global {
       volunteersReadback: () => { id: string; plantId: string; volunteer: boolean }[];
       /** N2: per-flower visit ledger (id -> visited seasons) */
       visitsReadback: () => { id: string; plantId: string; visitedSeasons: string[] }[];
+      /** N3: the magnifying-glass inspect tool (pure inspection, zero mutation) */
+      magnifierReadback: () => { on: boolean; entry: unknown };
+      toggleMagnifier: () => void;
+      setMagnifierEntryForTest: (e: unknown) => void;
       /** U2: visitor-window log — (visitorId, season) pairs, one per window */
       visitorWindowsReadback: () => string[];
       /** U3: the colony breath — live intensity + the season's line (one source) */
@@ -223,6 +227,14 @@ export function installTestHook() {
         plantId: it.plantId,
         visitedSeasons: it.visitedSeasons ?? [],
       })),
+    /** N3: the magnifying-glass inspect tool (pure inspection, zero mutation) */
+    magnifierReadback: () => {
+      const s = usePlacementStore.getState();
+      return { on: s.magnifierOn, entry: s.magnifierEntry };
+    },
+    toggleMagnifier: () => usePlacementStore.getState().toggleMagnifier(),
+    setMagnifierEntryForTest: (e) =>
+      usePlacementStore.getState().setMagnifierEntry(e as never),
     volunteersReadback: () =>
       usePlacementStore.getState().items.map((it) => ({
         id: it.id,

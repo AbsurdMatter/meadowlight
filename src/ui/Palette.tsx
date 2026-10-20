@@ -70,6 +70,8 @@ export function Palette() {
   const selectStructure = usePlacementStore((s) => s.selectStructure);
   const placementVariation = usePlacementStore((s) => s.placementVariation);
   const toggleVariation = usePlacementStore((s) => s.toggleVariation);
+  const magnifierOn = usePlacementStore((s) => s.magnifierOn);
+  const toggleMagnifier = usePlacementStore((s) => s.toggleMagnifier);
   const milestones = usePlacementStore((s) => s.milestones);
   const bathUnlocked = milestones.includes('fiveSpecies') || milestones.includes('beeBath');
   const hedgeUnlocked = milestones.includes('firstHive') || milestones.includes('hedgesUnlocked');
@@ -198,6 +200,19 @@ export function Palette() {
           {placementVariation ? 'ON' : 'OFF'}
         </button>
         <span style={{ opacity: 0.65 }}>(F)</span>
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
+        {/* N3: the magnifying glass — data-flagged inspect tool (pure
+            inspection; see src/data/magnifier.ts) */}
+        <button
+          data-palette-entry="tool:magnifier"
+          onClick={toggleMagnifier}
+          style={chipStyle(magnifierOn, true)}
+          title="Magnifying glass — hover a flower or visitor for a close read"
+        >
+          <span style={{ fontSize: 16 }} role="img" aria-label="magnifying glass">{'🔍'}</span>
+          <span style={{ fontSize: 11 }}>glass</span>
+        </button>
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <div style={sectionStyle('rgba(220, 236, 194, 0.35)')} data-palette-section="flora">

@@ -112,6 +112,17 @@ export interface PlacementState {
    * ONE write path, additive v8 field). Idempotent per season.
    */
   recordVisit: (itemId: string) => void;
+  /**
+   * N3: the magnifying-glass inspector tool (data-flagged palette entry).
+   * PURE INSPECTION — hovering shows a zoomed detail card; zero mutation,
+   * zero new input paths (the hover rides R3F's existing mesh pointer
+   * events; the card never captures canvas events).
+   */
+  magnifierOn: boolean;
+  toggleMagnifier: () => void;
+  /** what the glass is currently zooming (null = card hidden) */
+  magnifierEntry: { kind: 'flower'; itemId: string } | { kind: 'visitor'; visitorId: string } | null;
+  setMagnifierEntry: (e: PlacementState['magnifierEntry']) => void;
   openHivePopup: (hiveId: string) => void;
   closeHivePopup: () => void;
   earnMilestone: (id: MilestoneId, label: string, detail: string) => void;
@@ -280,6 +291,13 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
     items[idx] = { ...it, visitedSeasons: withVisit(it, s.season) };
     set({ items });
   },
+  magnifierOn: false,
+  toggleMagnifier: () => {
+    const s = get();
+    set({ magnifierOn: !s.magnifierOn, magnifierEntry: null });
+  },
+  magnifierEntry: null,
+  setMagnifierEntry: (e) => set({ magnifierEntry: e }),
   harvestHoney: (hiveId) => {
     const s = get();
     const fill = s.hiveCombs[hiveId] ?? 0;

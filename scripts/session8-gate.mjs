@@ -6,7 +6,7 @@
  *
  * Usage:
  *   node scripts/session8-gate.mjs --url http://localhost:5199 \
- *     --checks precip,visits [--lib-path /path/to/libs]
+ *     --checks precip,visits,magnifier [--lib-path /path/to/libs]
  *
  *   precip — N1: natural precipitation on the shared schedule. Binary
  *     windows, seeded per world; drives the SEASON (force-able) and lets
@@ -172,9 +172,72 @@ async function checkVisits() {
   await page.close();
 }
 
+/**
+ * N3: the magnifying-glass inspector. Own world. Pure inspection, zero
+ * mutation: the glass toggles, the card appears for a hovered flower with
+ * the species' fact + live read-only state (bloom, visit ledger), the
+ * card NEVER captures pointer events (placement clicks pass through), and
+ * hovering writes nothing to the save.
+ */
+async function checkMagnifier() {
+  const { page, errors } = await newPage(browser, url);
+  await page.evaluate(() => {
+    const w = window.__meadowlight;
+    w.clear();
+    for (let i = 0; i < 6; i++) w.plant('lavender', -4 + i * 1.6, 3);
+    w.save();
+  });
+  await page.waitForTimeout(2500);
+  // the palette entry exists and toggles the tool
+  const toggled = await page.evaluate(() => {
+    window.__meadowlight.toggleMagnifier();
+    return window.__meadowlight.magnifierReadback();
+  });
+  rec.record('magnifier.tool-toggles-on', toggled.on === true, JSON.stringify(toggled));
+  // hover a flower: the entry appears (drive through the same store write
+  // the mesh pointer-over uses — the R3F hover itself is the user's eyeball)
+  const firstId = await page.evaluate(() => window.__meadowlight.items()[0].id);
+  const hovered = await page.evaluate((id) => {
+    window.__meadowlight.setMagnifierEntryForTest({ kind: 'flower', itemId: id });
+    return window.__meadowlight.magnifierReadback();
+  }, firstId);
+  rec.record('magnifier.flower-entry-appears', hovered.entry?.kind === 'flower',
+    JSON.stringify(hovered.entry));
+  // the card renders in the viewport and is pointer-transparent
+  await page.waitForTimeout(1200); // past any transition before reading (the detector lesson)
+  const card = await page.evaluate(() => {
+    const el = document.querySelector('[data-magnifier-card="true"]');
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return {
+      visible: r.width > 0 && r.height > 0 && r.bottom >= 0 && r.top <= window.innerHeight,
+      pointerEvents: getComputedStyle(el).pointerEvents,
+      text: el.textContent?.slice(0, 60),
+    };
+  });
+  rec.record('magnifier.card-visible-in-viewport', !!card && card.visible,
+    JSON.stringify(card));
+  rec.record('magnifier.card-never-captures-pointer', !!card && card.pointerEvents === 'none',
+    'pointer-events: ' + (card ? card.pointerEvents : 'n/a'));
+  // ZERO MUTATION: the save blob is byte-identical after inspecting
+  const blobBefore = await page.evaluate(() => localStorage.getItem('meadowlight.world.v2'));
+  await page.evaluate(() => {
+    window.__meadowlight.setMagnifierEntryForTest(null);
+    window.__meadowlight.toggleMagnifier();
+  });
+  await page.waitForTimeout(600);
+  const blobAfter = await page.evaluate(() => localStorage.getItem('meadowlight.world.v2'));
+  rec.record('magnifier.inspection-mutates-nothing', blobBefore === blobAfter,
+    'save unchanged by the glass');
+  const re = realErrors(errors);
+  rec.record('magnifier.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
 for (const check of checks.split(',')) {
   if (check === 'precip') await checkPrecip();
   else if (check === 'visits') await checkVisits();
+  else if (check === 'magnifier') await checkMagnifier();
   else {
     console.error('[GATE] unknown check: ' + check);
     process.exit(2);

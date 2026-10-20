@@ -62,6 +62,21 @@ function FlowerInstances() {
     const itemId = idx === undefined ? undefined : idMaps.current[plantId]?.[idx];
     if (itemId) openNotebook({ kind: 'plant', id: itemId });
   };
+  // N3: the magnifying glass — hover inspection, zero mutation. Rides the
+  // SAME instanced-mesh pointer events the click path uses (one input path:
+  // no new DOM handlers, no stopPropagation chains — hover never swallows
+  // the placement click; the card is pure display elsewhere)
+  const onOver = (e: ThreeEvent<PointerEvent>, plantId: string) => {
+    const s = usePlacementStore.getState();
+    if (!s.magnifierOn) return;
+    const idx = e.instanceId;
+    const itemId = idx === undefined ? undefined : idMaps.current[plantId]?.[idx];
+    if (itemId) s.setMagnifierEntry({ kind: 'flower', itemId });
+  };
+  const onOut = () => {
+    const s = usePlacementStore.getState();
+    if (s.magnifierOn && s.magnifierEntry) s.setMagnifierEntry(null);
+  };
   useFrame(({ camera }) => {
     const r = refs.current;
     const t = scaledElapsed();
@@ -162,6 +177,8 @@ function FlowerInstances() {
           receiveShadow
           frustumCulled={false}
           onClick={(e) => onClick(e, def.id)}
+          onPointerOver={(e) => onOver(e, def.id)}
+          onPointerOut={onOut}
         >
           <boxGeometry args={[1, 1, 1]} />
           <meshLambertMaterial />

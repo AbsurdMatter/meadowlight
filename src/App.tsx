@@ -27,6 +27,7 @@ import { CornerControls } from './ui/CornerControls';
 import { Onboarding } from './ui/Onboarding';
 import { Toasts } from './ui/Toasts';
 import { Notebook } from './ui/Notebook';
+import { MagnifierCard } from './ui/MagnifierCard';
 import { HivePopup } from './ui/HivePopup';
 import { MilestoneWatcher } from './ui/MilestoneWatcher';
 import { PerfOverlay } from './ui/PerfOverlay';
@@ -169,6 +170,7 @@ export default function App() {
       {loaded && <Onboarding />}
       {loaded && <Toasts />}
       {loaded && <Notebook />}
+      {loaded && <MagnifierCard />}
       {loaded && <HivePopup />}
       <MilestoneWatcher />
       {PerfOverlay && <PerfOverlay />}
