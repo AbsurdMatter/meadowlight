@@ -6,8 +6,12 @@ name: Deploy to GitHub Pages
 # POST-DEPLOY step (README "Embedding & deploying").
 
 on:
+  # DISABLED until the deploy session (PR #37 user decision, comment #6298625613;
+  # v3 ROADMAP "Post-session-6: deploy"). Re-enable: delete the `if: false`
+  # line below — one line, nothing else.
   push:
     branches: [main]
+    if: false
   workflow_dispatch:
 
 permissions:
