@@ -27,8 +27,9 @@ export const NIGHT_SKY_TUNING = {
     opacity: 0.55,
   },
   stars: {
-    /** count laid on the sky dome */
-    count: 160,
+    /** count laid on the sky dome (U5 eyeball: lowered from 160 — a
+     *  calmer sky; exact density is the user's taste call) */
+    count: 120,
     /** dome radius (inside the far plane, beyond the ridge) */
     radius: 90,
     /** base size */
@@ -37,8 +38,15 @@ export const NIGHT_SKY_TUNING = {
     sizeJitter: 0.7,
     /** the star family: cool whites + a warm accent, the night palette's own */
     colors: ['#fdf6e3', '#e8eafc', '#fff4e0', '#dfe8ff'],
-    /** slow drift: full dome rotation period, seconds of scaled time */
-    driftSeconds: 600,
+    /**
+     * Drift: a very slow linear drift that never visibly completes on a
+     * minutes-long night (the U5 eyeball verdict: a night sky should feel
+     * still — you notice the stars are THERE, not that they move). The
+     * rotation period framing was retired; this is a barely-perceptible
+     * background motion (~6x slower than the original 600s rotation).
+     * Scaled clock: full freeze holds; 8x reads faster by design.
+     */
+    driftSeconds: 3600,
     /**
      * Brightness by season: winter's long nights get the fullest sky
      * (something to look at in the slow phase). The lit window is fixed
