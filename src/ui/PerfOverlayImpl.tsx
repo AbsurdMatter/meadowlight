@@ -343,6 +343,7 @@ function PerfOverlayPanel() {
       <Session6SeasonTriggers />
       <Session6RecipeTriggers />
       <Session6HoneyTriggers />
+      <Session7SeedingReadback />
       <SaveInspector />
       <MilestoneChecklist />
     </div>
@@ -562,6 +563,58 @@ function Session6HoneyTriggers() {
         }, 'honey-harvest')}
         <span style={{ fontSize: 11, opacity: 0.7 }}>
           {' '}jars {jars} · combs {hives.map((h) => (combs[h.id] ?? 0).toFixed(2)).join(',') || '-'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** session 7 trigger section: self-seeding (#U1) — read the named seed
+ *  state, cross a season boundary (the dial = the one seeding trigger
+ *  path), and read the volunteer census. Trigger-first: no direct
+ *  seed-spawn — volunteers only ever arrive via the season boundary. */
+function Session7SeedingReadback() {
+  const [, forceRender] = useState(0);
+  const refresh = () => forceRender((n) => n + 1);
+  const worldSeed = usePlacementStore((s) => s.worldSeed);
+  const epoch = usePlacementStore((s) => s.seedingEpoch);
+  const items = usePlacementStore((s) => s.items);
+  const volunteers = items.filter((it) => it.volunteer).length;
+  const btn = (label: string, onClick: () => void, key?: string) => (
+    <button
+      key={key}
+      data-perf-s7={key}
+      onClick={() => {
+        onClick();
+        refresh();
+      }}
+      style={{
+        margin: '2px 4px 2px 0',
+        padding: '5px 9px',
+        borderRadius: 8,
+        border: 'none',
+        background: '#666',
+        color: '#fff',
+        fontFamily: 'inherit',
+        fontSize: 12,
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>self-seeding (U1)</div>
+      <div>
+        {btn('dial next season (rolls seeds)', () => {
+          const s = usePlacementStore.getState();
+          const order: typeof s.season[] = ['spring', 'summer', 'autumn', 'winter'];
+          const next = order[(order.indexOf(s.season) + 1) % 4];
+          s.setSeason(next);
+        }, 'seed-roll')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {' '}seed #{worldSeed} · epoch {epoch} · volunteers {volunteers}/{items.length}
         </span>
       </div>
     </div>

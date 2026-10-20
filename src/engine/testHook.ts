@@ -43,6 +43,11 @@ declare global {
       setSeasonProgressForTest: (p: number) => void;
       /** #11: true while the calendar is held by an override */
       seasonClockOverridden: () => boolean;
+      /** U1 (session 7): the world's named seed state + epoch (readback) */
+      worldSeedReadback: () => number;
+      seedingEpochReadback: () => number;
+      /** U1: id -> volunteer flag for every item (persisted in the save) */
+      volunteersReadback: () => { id: string; plantId: string; volunteer: boolean }[];
       /** #9: discovered recipe ids (persisted) */
       foundRecipes: () => string[];
       /** #9: rescans for newly formed recipes (the plant() path calls it) */
@@ -177,6 +182,14 @@ export function installTestHook() {
     seasonProgressReadback: () => seasonProgress(),
     setSeasonProgressForTest: (p) => usePlacementStore.getState().setSeasonProgressForTest(p),
     seasonClockOverridden: () => seasonClockOverridden(),
+    worldSeedReadback: () => usePlacementStore.getState().worldSeed,
+    seedingEpochReadback: () => usePlacementStore.getState().seedingEpoch,
+    volunteersReadback: () =>
+      usePlacementStore.getState().items.map((it) => ({
+        id: it.id,
+        plantId: it.plantId,
+        volunteer: it.volunteer === true,
+      })),
     foundRecipes: () => usePlacementStore.getState().foundRecipes,
     checkCompanions: () => usePlacementStore.getState().checkCompanions(),
     activeRecipes: () => usePlacementStore.getState().activeRecipes(),
