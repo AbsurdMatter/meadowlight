@@ -1041,6 +1041,71 @@ async function checkHivePopup() {
     !factSeason.summerHasWinterCluster && factSeason.winterHasWinterCluster && factSeason.differ,
     JSON.stringify(factSeason),
   );
+  // 3h. JUST-PLACED HIVE (the residual): place a hive through the REAL
+  //     pointer path (palette tool + real click), then immediately open
+  //     its popup — the comb readback must be ~0 and the line must read
+  //     settling-in with NO harvest button. The bug class: instance-id
+  //     resolution could hand back a STALE hive id (another hive, whose
+  //     comb may be full); the resolution is ground-truth (nearest hive
+  //     to the click's world hit) so a fresh hive always opens as its
+  //     own comb state.
+  const fresh = await page.evaluate(async () => {
+    // full-comb OLD hive at origin + a fresh one placed elsewhere
+    const w = window.__meadowlight;
+    const oldHive = w.structures()[0];
+    w.setComb(oldHive.id, 1);
+    // select the hive tool via the palette (DOM click)
+    const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.toLowerCase().includes('skep'));
+    if (btn) btn.click();
+    await new Promise((res) => setTimeout(res, 200));
+    return { oldHiveId: oldHive.id };
+  });
+  // aim + real click to place the second hive (the placement DOM path)
+  let placedAt = null;
+  for (let px = 300; px < 700 && !placedAt; px += 40) {
+    for (let py = 250; py < 450 && !placedAt; py += 40) {
+      const g = await page.evaluate(([x, y]) => {
+        window.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, bubbles: true }));
+        return window.__meadowlight.ghostPosition();
+      }, [px, py]);
+      if (g.pos && g.valid) {
+        const before = await page.evaluate(() => window.__meadowlight.structures().length);
+        await page.mouse.move(px, py);
+        await page.mouse.down();
+        await page.mouse.up();
+        await page.waitForTimeout(300);
+        const after = await page.evaluate(() => window.__meadowlight.structures().length);
+        if (after > before) placedAt = { px, py };
+      }
+    }
+  }
+  const freshCheck = await page.evaluate(async (setup) => {
+    const w = window.__meadowlight;
+    // deselect the tool
+    w.selectStructure && w.selectStructure(null);
+    const newHive = w.structures().find((st) => st.structureId === 'hive' && st.id !== setup.oldHiveId);
+    if (!newHive) return { err: 'fresh hive not placed' };
+    const comb = w.hiveCombs()[newHive.id] ?? 0;
+    w.openHivePopup(newHive.id);
+    await new Promise((res) => setTimeout(res, 400));
+    const el = document.querySelector('[data-hive-popup]');
+    return {
+      freshHiveId: newHive.id,
+      comb: +comb.toFixed(5),
+      // fresh = no foraging accumulation: only the by-design idle trickle
+      // (0.00025/s) may have run — anything a foraging session would add
+      combIsZeroish: comb < 0.005,
+      line: el ? el.querySelector('div > div:nth-child(2)')?.textContent ?? '' : '',
+      stillWorking: el ? el.textContent.includes('settling in') : false,
+      noButton: el ? !el.querySelector('[data-hive-popup-harvest]') : true,
+      popupForFreshHive: !!el,
+    };
+  }, fresh);
+  rec.record(
+    'hivepopup.just-placed-hive-reads-settling-in',
+    !!freshCheck.combIsZeroish && freshCheck.stillWorking && freshCheck.noButton && freshCheck.popupForFreshHive,
+    JSON.stringify(freshCheck).slice(0, 300),
+  );
   // 4. the P-panel path is the SAME action (one code path under both)
   const ppanel = await page.evaluate((id) => {
     const w = window.__meadowlight;

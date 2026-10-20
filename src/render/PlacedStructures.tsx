@@ -41,8 +41,6 @@ export function PlacedStructures() {
   const refs = useRef<{ meshes: Partial<Record<string, THREE.InstancedMesh | null>> }>({
     meshes: {},
   });
-  /** instanceIndex -> placed-structure id, per structure type (for hive clicks) */
-  const idMaps = useRef<Partial<Record<string, string[]>>>({});
 
   const onClick = (e: ThreeEvent<MouseEvent>, structureId: string) => {
     e.stopPropagation();
@@ -51,12 +49,25 @@ export function PlacedStructures() {
     // #10: a FULL hive gives a jar — the harvest ceremony (dip + toast)
     // fires from the store; a not-yet-full hive still opens the notebook
     if (structureId === 'hive') {
-      const hiveId = idMaps.current[structureId]?.[e.instanceId ?? -1];
+      // #36 residual (the instanceId class, one lifecycle step earlier):
+      // resolving via the idMaps index could hand back a STALE hive id on
+      // a just-placed hive (the map rebuilds next frame), opening the
+      // popup for a DIFFERENT hive whose comb may be full. Resolve by
+      // ground truth: the nearest placed hive to the click's world hit.
+      const hit = e.point;
+      const nearest = s.structures
+        .filter((st) => st.structureId === 'hive')
+        .map((st) => ({ st, d: Math.hypot(st.position[0] - hit.x, st.position[2] - hit.z) }))
+        .sort((a, b) => a.d - b.d)[0];
+      const hiveId =
+        nearest && nearest.d <= 1.5 ? nearest.st.id : undefined;
       if (hiveId) {
         // #36 hive popup: the harvest moment happens AT the hive — the
         // popup carries the fill state + harvest button (ONE shared
         // harvestHoney path under it and the P panel); the info panel
-        // stays reachable via the popup's 'more' link
+        // stays reachable via the popup's 'more' link (which attributes
+        // THIS hive so the panel's comb hint reads the same comb — the
+        // isDaylight lesson applied to hive state)
         s.openHivePopup(hiveId);
         return;
       }
@@ -72,10 +83,8 @@ export function PlacedStructures() {
       const mesh = r.meshes[def.id];
       if (!mesh) continue;
       let i = 0;
-      const ids: string[] = [];
       for (const s of structures) {
         if (s.structureId !== def.id) continue;
-        ids.push(s.id);
         const variation = s.variation ?? noVariation();
         const swayZ = Math.sin(t * 0.5 + i * 1.7) * 0.012;
         const swayX = Math.cos(t * 0.4 + i * 2.3) * 0.008;
@@ -151,7 +160,6 @@ export function PlacedStructures() {
         }
       }
       mesh.count = i;
-      idMaps.current[def.id] = ids;
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
