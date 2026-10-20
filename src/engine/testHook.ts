@@ -15,6 +15,7 @@ import { dayPhase } from './dayCycle';
 import { seasonProgress, seasonClockOverridden } from './seasonClock';
 import { honeyDebug } from '../render/BeeSwarm';
 import { setSpeedStep, setPaused, isPaused, currentSpeedStep, timeMultiplier, type SpeedStep } from './timeControl';
+import { scaledElapsed } from './scaledTime';
 import { isPlantableCell } from './ground';
 import { hillsBoxes } from './hillsLayout';
 import { setFireflyForce } from '../render/Fireflies';
@@ -72,6 +73,10 @@ declare global {
       timeIsPaused: () => boolean;
       timeSpeed: () => number;
       timeMultiplierReadback: () => number;
+      /** fix unit: the shared ANIMATION clock — scaledElapsed accumulates
+       *  dt*timeMultiplier (0 when paused); the gate asserts it scales at
+       *  4x and freezes under pause (the observable that failed) */
+      scaledElapsedReadback: () => number;
       /** #36 item 4: the classification query readbacks (deterministic gate) */
       isPlantableCellReadback: (x: number, z: number) => boolean;
       /** #36 hive popup: open/close via the store path the click uses */
@@ -210,6 +215,7 @@ export function installTestHook() {
     timeIsPaused: () => isPaused(),
     timeSpeed: () => currentSpeedStep(),
     timeMultiplierReadback: () => timeMultiplier(),
+    scaledElapsedReadback: () => scaledElapsed(),
     isPlantableCellReadback: (x, z) => isPlantableCell(x, z),
     openHivePopup: (hiveId) => usePlacementStore.getState().openHivePopup(hiveId),
     hillsBoxesReadback: () => hillsBoxes().map((b) => ({ x: b.x, z: b.z, half: b.half })),

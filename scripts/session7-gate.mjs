@@ -348,6 +348,58 @@ async function checkTimeControlsUI() {
   );
   await page.click('[data-time-control="speed-1"]');
 
+  // 3. the ANIMATION clock scales and freezes (the observable that failed:
+  //  sim scaled, animation did not, pause was invisible). Assert the shared
+  //  scaledElapsed accumulator — the one source every animation consumes.
+  const anim = await page.evaluate(async () => {
+    const w = window.__meadowlight;
+    w.timeSetPaused(false);
+    w.timeSetSpeed(1);
+    const a0 = w.scaledElapsedReadback();
+    await new Promise((r) => setTimeout(r, 1500));
+    const a1 = w.scaledElapsedReadback();
+    const rate1 = a1 - a0;
+    w.timeSetSpeed(4);
+    const b0 = w.scaledElapsedReadback();
+    await new Promise((r) => setTimeout(r, 1500));
+    const b1 = w.scaledElapsedReadback();
+    const rate4 = (b1 - b0) / 4;
+    w.timeSetPaused(true);
+    const c0 = w.scaledElapsedReadback();
+    await new Promise((r) => setTimeout(r, 1500));
+    const c1 = w.scaledElapsedReadback();
+    w.timeSetPaused(false);
+    w.timeSetSpeed(1);
+    return { rate1, rate4, frozen: c1 === c0 };
+  });
+  rec.record(
+    'timecontrols.animation-clock-scales-and-freezes',
+    anim.rate1 > 0.5 && Math.abs(anim.rate4 - anim.rate1) < anim.rate1 * 0.4 && anim.frozen,
+    JSON.stringify(anim) + ' (1x vs 4x/4 per-second ~equal; pause = exactly frozen)',
+  );
+
+  // 4. pause indicator present + in-viewport when paused (observable pause)
+  const pausedUI = await page.evaluate(async () => {
+    const w = window.__meadowlight;
+    w.timeSetPaused(true);
+    await new Promise((r) => setTimeout(r, 1300)); // the row re-renders on its 1s cadence
+    const chip = document.querySelector('[data-paused-chip]');
+    const row = document.querySelector('[data-time-row]');
+    const chipRect = chip ? chip.getBoundingClientRect() : null;
+    const rowStyle = row ? getComputedStyle(row) : null;
+    w.timeSetPaused(false);
+    return {
+      chip: !!chip,
+      inViewport: !!chipRect && chipRect.width > 0 && chipRect.top >= 0 && chipRect.bottom <= window.innerHeight,
+      rowOpacity: rowStyle ? rowStyle.opacity : null,
+    };
+  });
+  rec.record(
+    'timecontrols.pause-indicator-present-in-viewport',
+    pausedUI.chip && pausedUI.inViewport && parseFloat(pausedUI.rowOpacity) < 0.7,
+    JSON.stringify(pausedUI) + ' (resting chip visible, row dimmed)',
+  );
+
   const re = realErrors(errors);
   rec.record('timecontrols.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
   await page.close();
