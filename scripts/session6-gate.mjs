@@ -947,17 +947,28 @@ async function checkHivePopup() {
       if (!el) { results.push({ label, err: 'no popup' }); continue; }
       const rect = el.getBoundingClientRect();
       const center = { x: rect.left + rect.width / 2, y: rect.top };
-      const proj = project(px, w.terrainHeightAt(px, pz) + 2.4, pz);
-      const dist = Math.hypot(center.x - proj.x, center.y - proj.y);
-      results.push({ label, distPx: +dist.toFixed(0), inViewport: rect.top >= 0 && rect.bottom <= innerHeight && rect.left >= 0 && rect.right <= innerWidth });
+      const projTop = project(px, w.terrainHeightAt(px, pz) + 2.4, pz);
+      const projBase = project(px, w.terrainHeightAt(px, pz), pz);
+      const dist = Math.hypot(center.x - projTop.x, center.y - projTop.y);
+      // #36 polish: the popup must sit clearly ABOVE the hive — its bottom
+      // edge clears the hive's projected BASE (the full silhouette visible)
+      const aboveBy = projBase.y - rect.bottom;
+      results.push({
+        label,
+        distPx: +dist.toFixed(0),
+        aboveBy: +aboveBy.toFixed(0),
+        clearsHive: aboveBy > 0,
+        inViewport: rect.top >= 0 && rect.bottom <= innerHeight && rect.left >= 0 && rect.right <= innerWidth,
+      });
     }
     return results;
   });
   const nearOk = anchor.find((a) => a.label === 'near');
   const farOk = anchor.find((a) => a.label === 'far');
   rec.record(
-    'hivepopup.anchor-within-150px-of-projected-hive',
-    !!nearOk && !!farOk && nearOk.distPx !== undefined && nearOk.distPx < 150 && farOk.distPx !== undefined && farOk.distPx < 150 && nearOk.inViewport && farOk.inViewport,
+    'hivepopup.anchor-above-hive-in-viewport-near-and-far',
+    !!nearOk && !!farOk && nearOk.distPx !== undefined && nearOk.distPx < 240 && farOk.distPx !== undefined && farOk.distPx < 240 &&
+      nearOk.clearsHive && farOk.clearsHive && nearOk.inViewport && farOk.inViewport,
     JSON.stringify(anchor),
   );
   // 3f. THE HARVEST CYCLE through the popup per spec: fill 0 -> open ->
