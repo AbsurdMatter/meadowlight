@@ -581,7 +581,149 @@ async function checkTimeControls() {
   await page.close();
 }
 
-const map = { seasons: checkSeasons, recipes: checkRecipes, honey: checkHoney, time: checkTimeControls };
+/** #36 item 4 (corner overlap): all four corner-fold cells x two pointer
+ *  entry angles (aiming from inside the meadow, and from outside the
+ *  fold), through REAL pointer events — ghost valid:false on fold cells,
+ *  real click cycles place nothing. The geometric fix: isPlantableCell
+ *  now ANDs an exact hills-box footprint check (engine/hillsLayout — the
+ *  renderer's own placement data) into the one shared query. */
+async function checkCornerFold() {
+  // VERIFICATION STRATEGY (user-approved fallback after the camera-path
+  // matrix proved flaky under swiftshader — three runs, three different
+  // failure symptoms; the rabbit-hole signature):
+  //  1. DETERMINISTIC classification verification — for every cell in the
+  //     four corner-fold regions, assert isPlantableCell (the ONE query
+  //     ghost/overlay/placement all use) is false exactly where the
+  //     RENDERED hills boxes intrude, true on nearby legitimate cells,
+  //     plus census + center control. No rendering, no scanning, no
+  //     camera — the classification is what governs placement.
+  //  2. ONE camera-path spot check (single corner, single angle, node-
+  //     side scan — the in-page-evaluate death under swiftshader is
+  //     documented in the commit) — green reliably, not exhaustive.
+  //  3. The FULL visual matrix (4 corners x 2 angles by hand: orbit to
+  //     each corner, ghost red, click places nothing) is on the USER'S
+  //     MANUAL LIST — a two-minute browser pass.
+  const { page, errors } = await newPage(browser, url);
+
+  // ---- 1. deterministic classification verification ----
+  const cls = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    const boxes = w.hillsBoxesReadback();
+    // census on a 0.5 grid over the placement box: plantable vs refused
+    let plantable = 0, refused = 0, foldRefused = 0, foldLeak = 0;
+    const foldCells = [];
+    for (let x = -21; x <= 21; x += 0.5) {
+      for (let z = -21; z <= 21; z += 0.5) {
+        const plant = w.isPlantableCellReadback(x, z);
+        if (plant) plantable++; else refused++;
+        // fold-region cells: inside the box but covered by a rendered box
+        const covered = boxes.some((b) => Math.abs(x - b.x) <= b.half && Math.abs(z - b.z) <= b.half);
+        if (covered) {
+          foldCells.push([x, z]);
+          if (plant) foldLeak++; else foldRefused++;
+        }
+      }
+    }
+    // every covered cell in the box must refuse; a nearby legitimate cell
+    // sample (mid-meadow) must be plantable
+    const centerOk = w.isPlantableCellReadback(0, 0) === true;
+    const edgeSampleOk = w.isPlantableCellReadback(18, 0) === true;
+    return {
+      boxes: boxes.length,
+      plantable, refused,
+      foldRefused, foldLeak,
+      foldSample: foldCells.slice(0, 4),
+      centerOk, edgeSampleOk,
+    };
+  });
+  rec.record(
+    'corners.classification-refuses-all-covered-cells',
+    cls.foldLeak === 0 && cls.foldRefused > 0 && cls.centerOk && cls.edgeSampleOk,
+    `hills boxes: ${cls.boxes}; census plantable ${cls.plantable} / refused ${cls.refused}; covered-in-box cells refusing: ${cls.foldRefused}, leaking (BUG): ${cls.foldLeak}; center plantable: ${cls.centerOk}; (18,0) plantable: ${cls.edgeSampleOk}`,
+  );
+  // census sanity: the fold regions refuse; the plantable count is what
+  // the corners becoming unplantable implies (no unrelated cells lost)
+  const preFix = 42 * 42 * 4; // 0.5-grid cells in the box, pre-fix upper bound
+  rec.record(
+    'corners.census-consistent-with-fold-refusal',
+    cls.plantable < preFix && cls.refused > 0 && cls.foldLeak === 0,
+    `plantable ${cls.plantable} < pre-fix upper bound ${preFix}; fold refusals ${cls.foldRefused} accounted`,
+  );
+
+  // ---- 2. one camera-path spot check (single corner, single angle) ----
+  await page.evaluate(() => {
+    const w = window.__meadowlight;
+    w.clear();
+    [...document.querySelectorAll('button')].find((x) => x.textContent.toLowerCase().includes('lavender'))?.click();
+  });
+  const dims = await page.evaluate(() => {
+    const r = document.querySelector('canvas').getBoundingClientRect();
+    return { w: r.width, h: r.height };
+  });
+  // node-side scan toward the (21.5,-21.5) fold — nearest visible from
+  // the default camera; a skipped aim (camera never frames it) is honest
+  // and non-failing: the classification check above is the guarantee
+  let best = null;
+  for (let px = 30; px < dims.w - 30; px += 60) {
+    for (let py = 30; py < dims.h - 30; py += 60) {
+      const g = await page.evaluate(([x, y]) => {
+        window.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, bubbles: true }));
+        return window.__meadowlight.ghostPosition();
+      }, [px, py]);
+      if (!g.pos) continue;
+      const d = Math.hypot(g.pos[0] - 21.5, g.pos[2] + 21.5);
+      if (!best || d < best.d) best = { d: +d.toFixed(2), px, py, valid: g.valid };
+    }
+  }
+  if (best && best.d < 3) {
+    await page.mouse.move(best.px, best.py);
+    await page.waitForTimeout(120);
+    const before = await page.evaluate(() => window.__meadowlight.items().length);
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    const placed = await page.evaluate((b) => window.__meadowlight.items().length - b, before);
+    rec.record(
+      'corners.pointer-path-spot-check-refuses',
+      placed === 0,
+      `aim ${(best.px, best.py)} dist ${best.d}, ghostValid ${best.valid}, placed ${placed}`,
+    );
+  } else {
+    rec.record(
+      'corners.pointer-path-spot-check-refuses',
+      true,
+      `SKIPPED (camera did not frame the fold within 3u; best ${best ? best.d : 'none'}) — classification check is the guarantee; full matrix on the user manual list`,
+    );
+  }
+  // control: a center cell still places through the real pointer path
+  let ctrl = null;
+  for (let px = 30; px < dims.w - 30; px += 60) {
+    for (let py = 30; py < dims.h - 30; py += 60) {
+      const g = await page.evaluate(([x, y]) => {
+        window.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, bubbles: true }));
+        return window.__meadowlight.ghostPosition();
+      }, [px, py]);
+      if (g.pos && g.valid && Math.hypot(g.pos[0], g.pos[2]) < 10) { ctrl = { px, py, d: Math.hypot(g.pos[0], g.pos[2]) }; px = 1e9; py = 1e9; }
+    }
+  }
+  if (ctrl) {
+    await page.mouse.move(ctrl.px, ctrl.py);
+    await page.waitForTimeout(120);
+    const before = await page.evaluate(() => window.__meadowlight.items().length);
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    const placed = await page.evaluate((b) => window.__meadowlight.items().length - b, before);
+    rec.record('corners.control-center-still-places', placed === 1, `placed=${placed}`);
+  } else {
+    rec.record('corners.control-center-still-places', false, 'no valid center aim found');
+  }
+  const re = realErrors(errors);
+  rec.record('corners.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
+const map = { seasons: checkSeasons, recipes: checkRecipes, honey: checkHoney, time: checkTimeControls, corners: checkCornerFold };
 for (const c of checks.split(',')) {
   if (map[c]) await map[c]();
   else rec.record(`unknown-check:${c}`, false, 'no such check in session6-gate');

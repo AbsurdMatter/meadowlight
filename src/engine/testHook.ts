@@ -15,6 +15,8 @@ import { dayPhase } from './dayCycle';
 import { seasonProgress, seasonClockOverridden } from './seasonClock';
 import { honeyDebug } from '../render/BeeSwarm';
 import { setSpeedStep, setPaused, isPaused, currentSpeedStep, timeMultiplier, type SpeedStep } from './timeControl';
+import { isPlantableCell } from './ground';
+import { hillsBoxes } from './hillsLayout';
 import { setFireflyForce } from '../render/Fireflies';
 import { rainDebug } from '../render/Rain';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
@@ -61,6 +63,9 @@ declare global {
       timeIsPaused: () => boolean;
       timeSpeed: () => number;
       timeMultiplierReadback: () => number;
+      /** #36 item 4: the classification query readbacks (deterministic gate) */
+      isPlantableCellReadback: (x: number, z: number) => boolean;
+      hillsBoxesReadback: () => { x: number; z: number; half: number }[];
       milestones: () => string[];
       beeCount: () => number;
       beeDebug: () => unknown;
@@ -184,6 +189,8 @@ export function installTestHook() {
     timeIsPaused: () => isPaused(),
     timeSpeed: () => currentSpeedStep(),
     timeMultiplierReadback: () => timeMultiplier(),
+    isPlantableCellReadback: (x, z) => isPlantableCell(x, z),
+    hillsBoxesReadback: () => hillsBoxes().map((b) => ({ x: b.x, z: b.z, half: b.half })),
     milestones: () => usePlacementStore.getState().milestones,
     beeCount: () => beeDebug.count,
     beeDebug: () => ({ ...beeDebug }),
