@@ -100,15 +100,20 @@ export function PlacedStructures() {
             }
           }
         }
-        // #10: comb glow — the hive's honey parts warm with fill. The
-        // floor tint keeps even an empty comb warm ("settling in"); full
-        // reads as deep honey gold. Never dim, never sad.
+        // #10 comb-as-filling-jar (user retune): the honey parts GROW with
+        // fill (thin warm core -> full band, scale lerp from tuning) AND
+        // saturate floor-amber -> deep honey gold. The empty end stays
+        // warm ("settling in", never sad); the full end is unmistakable at
+        // a glance — a bigger, more saturated honey silhouette.
         const combFill = s.structureId === 'hive' ? store.hiveCombs[s.id] ?? 0 : 0;
         combColor.copy(combFloor).lerp(combFull, combFill);
+        const combScale =
+          HONEY_TUNING.combScaleFloor +
+          (HONEY_TUNING.combScaleFull - HONEY_TUNING.combScaleFloor) * combFill;
         for (let pi = 0; pi < def.parts.length; pi++) {
           const part = def.parts[pi];
           const isHoneyPart =
-            s.structureId === 'hive' && (pi === 2 || pi === 4) && part.color === '#e0bc78';
+            s.structureId === 'hive' && HONEY_TUNING.combPartIndices.includes(pi);
           tmpMat.makeTranslation(
             s.position[0],
             s.position[1] + variation.heightJitter + dip,
@@ -122,10 +127,11 @@ export function PlacedStructures() {
           tmpMat.multiply(tiltZMat);
           offsetMat.makeTranslation(part.offset[0], part.offset[1], part.offset[2]);
           tmpMat.multiply(offsetMat);
+          const partScale = isHoneyPart ? combScale : bushScale;
           scaleMat.makeScale(
-            part.size[0] * bushScale,
-            part.size[1] * bushScale,
-            part.size[2] * bushScale,
+            part.size[0] * partScale,
+            part.size[1] * partScale,
+            part.size[2] * partScale,
           );
           tmpMat.multiply(scaleMat);
           mesh.setMatrixAt(i, tmpMat);

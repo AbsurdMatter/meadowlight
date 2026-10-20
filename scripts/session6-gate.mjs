@@ -414,15 +414,23 @@ async function checkHoney() {
       const w = window.__meadowlight;
       const th = w.__three;
       const sampleHoney = () => {
+        // the matching observable for comb-as-filling-jar: (a) the honey
+        // voxels GROW with fill — read the rendered SCALE of the honey
+        // slots from the instance matrices; (b) saturation rises floor ->
+        // deep honey gold. Both whole-hive, not a few slots.
         let colors = null;
+        let scales = null;
         th.scene.traverse((o) => {
           if (colors || !o.isInstancedMesh || !o.instanceColor || !o.instanceMatrix) return;
           if (o.instanceMatrix.count !== 8 * 60) return; // hive parts x capacity
           const arr = o.instanceColor.array;
-          // honey parts are slots 2 and 4 of the FIRST placed hive
+          const m = o.instanceMatrix.array;
           colors = [arr[6], arr[7], arr[8], arr[12], arr[13], arr[14]].map((v) => +v.toFixed(3));
+          // x-scale of instance slots 2 and 4 (column 0 length)
+          const sx = (k) => Math.hypot(m[k * 16], m[k * 16 + 1], m[k * 16 + 2]);
+          scales = [sx(2), sx(4)].map((v) => +v.toFixed(3));
         });
-        return colors;
+        return { colors, scales };
       };
       const readAt = async (fill) => {
         w.setComb(id, fill);
@@ -434,17 +442,21 @@ async function checkHoney() {
       const at1 = await readAt(1);
       return { at0, at05, at1 };
     }, hiveId);
-    // monotonic toward gold: red and green both RISE floor->gold, and every
-    // fill step must move the color (the bug this guards against: a fixed
-    // color at every fill — the aliased-tmpColor write)
-    const r0 = glow.at0[0], r05 = glow.at05[0], r1 = glow.at1[0];
-    const g0 = glow.at0[1], g05 = glow.at05[1], g1 = glow.at1[1];
-    const monotonic = r0 < r05 && r05 < r1 && g0 < g05 && g05 < g1;
-    const emptyWarm = glow.at0[0] > 0.6 && glow.at0[1] > 0.35; // floor is warm gold-tan, never dim
+    // comb-as-filling-jar observables: honey-slot SCALE grows with fill
+    // (the jar fills) and color saturates toward gold. Empty-end warm.
+    const sc0 = Math.min(...glow.at0.scales), sc05 = Math.min(...glow.at05.scales), sc1 = Math.min(...glow.at1.scales);
+    const scaleGrows = sc0 < sc05 && sc05 < sc1 && sc1 > sc0 * 1.5; // unmistakable, not a nudge
+    const r0 = glow.at0.colors[0], r05 = glow.at05.colors[0], r1 = glow.at1.colors[0];
+    const g0 = glow.at0.colors[1], g05 = glow.at05.colors[1], g1 = glow.at1.colors[1];
+    // saturation toward deep gold: RED rises strongly, blue falls (the
+    // #f2a41c target is warmer/more saturated than the #d9a95f floor);
+    // the unmistakable-at-a-glance signal is the red delta
+    const saturationRises = r0 < r05 && r05 < r1 && r1 - r0 > 0.1 && glow.at1.colors[2] < glow.at0.colors[2];
+    const emptyWarm = glow.at0.colors[0] > 0.6 && glow.at0.colors[1] > 0.35; // settling in, never sad
     rec.record(
-      'honey.glow-visible-monotonic-with-fill',
-      glow.at0 && glow.at05 && glow.at1 && monotonic && emptyWarm,
-      `honey-part colors 0:${JSON.stringify(glow.at0)} 0.5:${JSON.stringify(glow.at05)} 1:${JSON.stringify(glow.at1)}`,
+      'honey.comb-jar-scale-and-saturation-rise-with-fill',
+      scaleGrows && saturationRises && emptyWarm,
+      `scales 0:${JSON.stringify(glow.at0.scales)} 0.5:${JSON.stringify(glow.at05.scales)} 1:${JSON.stringify(glow.at1.scales)} | colors 0:${JSON.stringify(glow.at0.colors)} 0.5:${JSON.stringify(glow.at05.colors)} 1:${JSON.stringify(glow.at1.colors)}`,
     );
     await page.close();
   }

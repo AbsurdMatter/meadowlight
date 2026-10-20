@@ -32,12 +32,22 @@ export const HONEY_TUNING = {
   /** harvest leaves the comb at this fill (residents, not machines) */
   afterHarvest: 0.35,
   /**
-   * glow palette: comb color lerps from floor (settling in — warm but
-   * calm) to full (deep honey gold, gently luminous). Both ends warm;
-   * NOTHING may read dim/sad. The hive's own part colors sit between.
+   * COMB-AS-FILLING-JAR (user retune verdict: the first glow was barely
+   * visible — a few voxels slightly lighter is not a whole-hive signal).
+   * The mechanism: the hive's two honey bands GROW with fill — at 0 they
+   * are warm-but-quiet thin cores (empty-end must still read "settling
+   * in", never sad), and they swell to the full band size as the comb
+   * fills, while the color saturates from floor amber to deep honey
+   * gold. Fill reads at a glance: MORE honey-colored voxel + STRONGER
+   * color, across the whole hive silhouette.
    */
   combColorFloor: '#d9a95f',
-  combColorFull: '#f2b431',
+  combColorFull: '#f2a41c',
+  /** honey-band scale at fill 0 (the thin settling-in core) and at 1 (full band) */
+  combScaleFloor: 0.45,
+  combScaleFull: 1.18,
+  /** which hive part indices are the comb bands (structures.ts order) */
+  combPartIndices: [2, 4] as number[],
   /** harvest ceremony: dip depth (world units) and duration (seconds) */
   harvestDip: 0.35,
   harvestDipSeconds: 0.9,
