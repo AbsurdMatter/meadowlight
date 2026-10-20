@@ -413,22 +413,30 @@ async function checkTimeControlsUI() {
   const pausedUI = await page.evaluate(async () => {
     const w = window.__meadowlight;
     w.timeSetPaused(true);
-    await new Promise((r) => setTimeout(r, 1300)); // the row re-renders on its 1s cadence
+    // the row re-renders on its 1s interval and the opacity then takes a
+    // 0.25s transition — the old 1300ms wait could sample BEFORE the
+    // transition started (chip present, opacity still "1"). Wait past
+    // tick + transition with margin, and read the opacity BEFORE unpausing.
+    await new Promise((r) => setTimeout(r, 2200));
     const chip = document.querySelector('[data-paused-chip]');
     const row = document.querySelector('[data-time-row]');
     const chipRect = chip ? chip.getBoundingClientRect() : null;
-    const rowStyle = row ? getComputedStyle(row) : null;
+    const rowOpacity = row ? getComputedStyle(row).opacity : null;
+    const pausedSnapshot = { chip: !!chip, rowOpacity };
+    // the decided observable also includes the INVERSE: running shows no chip
     w.timeSetPaused(false);
+    await new Promise((r) => setTimeout(r, 2200));
+    const chipWhenRunning = document.querySelector('[data-paused-chip]');
     return {
-      chip: !!chip,
+      ...pausedSnapshot,
       inViewport: !!chipRect && chipRect.width > 0 && chipRect.top >= 0 && chipRect.bottom <= window.innerHeight,
-      rowOpacity: rowStyle ? rowStyle.opacity : null,
+      chipAbsentWhenRunning: !chipWhenRunning,
     };
   });
   rec.record(
     'timecontrols.pause-indicator-present-in-viewport',
-    pausedUI.chip && pausedUI.inViewport && parseFloat(pausedUI.rowOpacity) < 0.7,
-    JSON.stringify(pausedUI) + ' (resting chip visible, row dimmed)',
+    pausedUI.chip && pausedUI.inViewport && parseFloat(pausedUI.rowOpacity) < 0.7 && pausedUI.chipAbsentWhenRunning,
+    JSON.stringify(pausedUI) + ' (resting chip visible + row dimmed when paused; no chip when running)',
   );
 
   const re = realErrors(errors);
@@ -446,16 +454,21 @@ async function checkColony() {
     const seasons = await page.evaluate(async () => {
       const w = window.__meadowlight;
       const out = {};
-      for (const [season, p] of [['spring', 0.1], ['summer', 0.5], ['autumn', 0.9], ['winter', 0.5]]) {
+      // the old check read spring at p=0.1 (target 0.193 by the curve's
+      // design) against a > 0.2 threshold — a detector bug, not behavior.
+      // Forced reads assert the TARGET semantic (the pure data curve,
+      // instant and deterministic); the live ease is asserted separately
+      // below.
+      for (const [season, p] of [['spring', 0.5], ['summer', 0.5], ['autumn', 0.5], ['winter', 0.5]]) {
         w.setSeason(season);
         w.setSeasonProgressForTest(p);
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 300));
         out[season] = w.colonyReadback();
       }
       return out;
     });
     const ok =
-      seasons.spring.target > 0.2 &&
+      seasons.spring.target > 0.4 &&
       seasons.summer.target > seasons.spring.target &&
       Math.abs(seasons.summer.target - seasons.autumn.target) < 0.5 &&
       seasons.winter.target < 0.15 &&
@@ -465,6 +478,30 @@ async function checkColony() {
       'colony.forced-seasons-read-correctly',
       ok,
       JSON.stringify(seasons, null, 1),
+    );
+    // (a)/(b) disambiguation, built in: after a force jump the live ease
+    // must CONVERGE on the new target (same shared update site — the
+    // force path writes the store the frame loop reads; no second path).
+    // Bounded settle window: within ~12s the gap must close to < 0.1.
+    const settle = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.setSeason('summer');
+      w.setSeasonProgressForTest(0.5);
+      const target = w.colonyReadback().target;
+      const samples = [];
+      for (let i = 0; i < 12; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const intensity = w.colonyReadback().intensity;
+        samples.push(+intensity.toFixed(3));
+        if (Math.abs(intensity - target) < 0.1) break;
+      }
+      const final = w.colonyReadback().intensity;
+      return { target, samples, converged: Math.abs(final - target) < 0.1 };
+    });
+    rec.record(
+      'colony.forced-jump-ease-converges',
+      settle.converged,
+      JSON.stringify(settle) + ' (force jumps ease to the target through the one update site)',
     );
   }
 
