@@ -17,7 +17,7 @@ import { honeyDebug } from '../render/BeeSwarm';
 import { setSpeedStep, setPaused, isPaused, currentSpeedStep, timeMultiplier, type SpeedStep } from './timeControl';
 import { scaledElapsed } from './scaledTime';
 import { colonyReadback } from './lifecycle';
-import { cornerFoldCells, pondSegments } from '../data/habitatScenery';
+import { cornerFoldCells, pondSegments, fringeCells } from '../data/habitatScenery';
 import { dragonflyDebug } from '../render/HabitatScenery';
 import { starsDebug } from '../render/NightSky';
 import { starVisibility } from './nightSky';
@@ -63,6 +63,8 @@ declare global {
       habitatReadback: () => { foldCells: { x: number; z: number }[]; dragonflies: number };
       /** U4 revision: the pond-edge segments (the controlled-variance source) */
       pondSegmentsReadback: () => { index: number; plants: number; spread: number; bandDepth: number; bandWidth: number }[];
+      /** U4 revision: the fringe census (the named extension rule) */
+      fringeCellsReadback: () => { x: number; z: number }[];
       /** U5: stars — the shared visibility predicate (pure, per phase) + live telemetry */
       starsReadback: () => { visible: number; opacity: number; visibilityAt: (phase: number) => number };
       /** U5: the composed-cloud material opacity (the asserted tuning value) */
@@ -228,6 +230,7 @@ export function installTestHook() {
     }),
     cloudOpacityReadback: () => NIGHT_SKY_TUNING.clouds.opacity,
     pondSegmentsReadback: () => pondSegments(),
+    fringeCellsReadback: () => fringeCells(),
     save: () => usePlacementStore.getState().save(),
     foundRecipes: () => usePlacementStore.getState().foundRecipes,
     checkCompanions: () => usePlacementStore.getState().checkCompanions(),

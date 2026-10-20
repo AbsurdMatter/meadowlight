@@ -604,6 +604,21 @@ async function checkHabitat() {
     cls.plantable > 300 && cls.unplantable > 10,
     JSON.stringify(cls) + ' (scenery never reclassifies ground)',
   );
+  // 2b. the organic extension: fringe cells exist beyond the box, and
+  //     the classification-unchanged assertion still holds (re-assert)
+  {
+    const fr = await page.evaluate(() => {
+      const w = window.__meadowlight;
+      return w.fringeCellsReadback ? w.fringeCellsReadback() : null;
+    });
+    if (fr) {
+      rec.record(
+        'habitat.fringe-cells-exist',
+        fr.length > 20,
+        'fringe cells beyond the box: ' + fr.length,
+      );
+    }
+  }
   // 3. pond-edge asymmetry (U4 revision): per-segment density variance
   //    non-zero and bounded — the shore reads organic, not a regular band
   {

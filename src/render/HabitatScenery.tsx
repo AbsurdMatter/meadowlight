@@ -8,6 +8,7 @@ import {
   cornerKey,
   sceneryHash,
   pondSegments,
+  fringeCells,
 } from '../data/habitatScenery';
 import { groundAt } from '../engine/ground';
 import { LAKE } from '../data/environment';
@@ -44,8 +45,7 @@ interface Piece {
 }
 
 /** build the static corner scenery deterministically from the fold cells */
-function buildCornerPieces(): Piece[] {
-  const cells = cornerFoldCells();
+function buildCornerPiecesFrom(cells: { x: number; z: number }[], saltBase: number): Piece[] {
   const t = HABITAT_TUNING;
   const byCorner = new Map<string, { x: number; z: number }[]>();
   for (const c of cells) {
@@ -67,9 +67,9 @@ function buildCornerPieces(): Piece[] {
     for (let i = 0; i < cap; i++) {
       const cell = kept[i];
       const g = groundAt(cell.x, cell.z);
-      const roll = sceneryHash(cell.x, cell.z, 850 + i);
+      const roll = sceneryHash(cell.x, cell.z, saltBase + i);
       // one log in the FIRST (largest) corner only — the anchor piece
-      if (k === '--' && i === 0 && out.length === 0) {
+      if (k === '--' && i === 0 && out.length === 0 && saltBase === 850) {
         out.push({
           x: cell.x,
           z: cell.z,
@@ -361,12 +361,17 @@ interface DragoState {
 }
 
 export function HabitatScenery() {
-  const cornerPieces = useMemo(buildCornerPieces, []);
+  // fold strips (inside the box; unplantable cells only) + the organic
+  // fringe (outside band; the named fringeCells rule) — one builder, two
+  // cell sets, distinct salt spaces so the two reads never collide
+  const cornerPieces = useMemo(() => buildCornerPiecesFrom(cornerFoldCells(), 850), []);
+  const fringePieces = useMemo(() => buildCornerPiecesFrom(fringeCells(), 980), []);
   const pondPieces = useMemo(buildPondEdgePieces, []);
   const treePieces = useMemo(buildTreeDetailPieces, []);
   return (
     <group>
       <StaticSceneryMesh pieces={cornerPieces} />
+      <StaticSceneryMesh pieces={fringePieces} />
       <StaticSceneryMesh pieces={pondPieces} />
       <StaticSceneryMesh pieces={treePieces} />
       <Dragonflies />

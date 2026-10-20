@@ -91,13 +91,13 @@ const { flowerBlocked, structureBlocked } = require(OUT + '/engine/collision.js'
 const { computeCaptionLayout, fallbackMetrics } = require(OUT + '/engine/postcardLayout.js');
 const { rollVolunteers, compatibleSeedling } = require(OUT + '/engine/seeding.js');
 const { colonyIntensityTarget, LIFECYCLE_LINES } = require(OUT + '/data/lifecycle.js');
-const { HABITAT_TUNING, cornerFoldCells, cornerKey, pondSegments } = require(OUT + '/data/habitatScenery.js');
+const { HABITAT_TUNING, cornerFoldCells, cornerKey, pondSegments, fringeCells } = require(OUT + '/data/habitatScenery.js');
 const { NIGHT_SKY_TUNING, CLOUDS_OPACITY_BEFORE } = require(OUT + '/data/nightSky.js');
 const { starVisibility } = require(OUT + '/engine/nightSky.js');
 const { advanceColony, colonyIntensity: colonyIntensityExport, colonyReadback: colonyReadbackExport, setColonyIntensityForTest } = require(OUT + '/engine/lifecycle.js');
 const { SEEDING_TUNING, SEEDING_FACTS } = require(OUT + '/data/seeding.js');
 const { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, FIREFLY_SUMMER_TUNING, HOVERFLY_AUTUMN_TUNING, isEarlySpring } = require(OUT + '/data/seasonalVisitors.js');
-const { isPlantableCell } = require(OUT + '/engine/ground.js');
+const { isPlantableCell, groundAt: groundAtReadback } = require(OUT + '/engine/ground.js');
 const { hillsCover: hillsCoverReadback } = require(OUT + '/engine/hillsLayout.js');
 
 const mkItem = (plantId, x = 0, z = 0) => ({ id: plantId + ':' + x + ':' + z, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
@@ -987,6 +987,40 @@ test('pond edge: per-segment variance is non-zero and bounded (asymmetric but de
   }
   // deterministic: the same segments derive every call
   assert.deepStrictEqual(pondSegments(), segs, 'the shore layout is stable across calls');
+});
+
+// ---------- session 7 U4 revision: the organic extension (fringe) ----------
+test('fringe: the named extension rule — outside the box, dry land, dissolving falloff, never plantable-stealing', () => {
+  const cells = fringeCells();
+  assert.ok(cells.length > 20, 'the fringe exists beyond the box: ' + cells.length);
+  const halfBox = 22; // MEADOW_SIZE/2
+  const depth = HABITAT_TUNING.extension.depth;
+  let nearestEdge = Infinity;
+  let farthestEdge = 0;
+  for (const c of cells) {
+    const edgeDist = Math.max(Math.abs(c.x) - halfBox, Math.abs(c.z) - halfBox);
+    // strictly OUTSIDE the box (the fold rule owns the inside)
+    assert.ok(Math.abs(c.x) > halfBox - 1 || Math.abs(c.z) > halfBox - 1, 'fringe cell outside the box');
+    assert.ok(edgeDist <= depth + 1e-9, 'fringe cell within the extension depth');
+    // never floating: dry land per the ground oracle
+    assert.strictEqual(groundAtReadback(c.x, c.z).kind, 'meadow', 'fringe sits on dry land (never water/shore)');
+    nearestEdge = Math.min(nearestEdge, Math.max(0, edgeDist));
+    farthestEdge = Math.max(farthestEdge, edgeDist);
+  }
+  assert.ok(nearestEdge < 1.5, 'the fringe starts at the box edge (bleeds from the folds)');
+  assert.ok(farthestEdge > depth * 0.5, 'the fringe reaches well into the band');
+  // dissolving: the outer half of the band carries FEWER cells than the
+  // inner half (the soft falloff — never a hard ring edge)
+  let inner = 0, outer = 0;
+  for (const c of cells) {
+    const edgeDist = Math.max(Math.abs(c.x) - halfBox, Math.abs(c.z) - halfBox);
+    if (edgeDist < depth / 2) inner++; else outer++;
+  }
+  assert.ok(inner > outer, 'the fringe dissolves outward: inner ' + inner + ' vs outer ' + outer);
+  // and the fold rule still holds for the INSIDE (nothing changed there)
+  for (const c of cornerFoldCells()) {
+    assert.ok(!isPlantableCell(c.x, c.z), 'inside the box, scenery still only on unplantable cells');
+  }
 });
 
 // ---------- collision ----------

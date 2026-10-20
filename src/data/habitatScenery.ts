@@ -1,5 +1,5 @@
 import { LAKE, HILLS } from './environment';
-import { isPlantableCell } from '../engine/ground';
+import { isPlantableCell, groundAt } from '../engine/ground';
 import { hillsCover } from '../engine/hillsLayout';
 import { MEADOW_SIZE } from '../engine/terrain';
 
@@ -27,6 +27,18 @@ import { MEADOW_SIZE } from '../engine/terrain';
 
 export const HABITAT_TUNING = {
   /** corner scenery: bush clusters, rocks, a log, fern-like detail */
+  /**
+   * The organic extension band (the fringe): scenery beyond the box edge.
+   * Named rule in fringeCells() — unit-tested like the fold rule.
+   */
+  extension: {
+    /** probe density for the outside strips */
+    probeSpacing: 0.8,
+    /** how far beyond the box edge the fringe reaches (world units) */
+    depth: 4.5,
+    /** base fill fraction at the box edge, dissolving outward */
+    fillFraction: 0.3,
+  },
   corners: {
     /** probe density: cells probed per corner fold region */
     probeSpacing: 0.8,
@@ -117,6 +129,51 @@ export const HABITAT_TUNING = {
     colors: HILLS.hillColors,
   },
 } as const;
+
+/**
+ * The ORGANIC EXTENSION (U4 revision, user verdict #6297184564): scenery
+ * bleeds beyond the placement box so the habitat reads as one continuous
+ * fringe, not decorated corners. THE RULE, named (the layout key):
+ *
+ *   A cell carries fringe scenery when EITHER:
+ *   (a) FOLD — inside the box: covered by a rendered hills box AND
+ *       unplantable by the one shared classification (the original rule,
+ *       unchanged); or
+ *   (b) FRINGE — outside the box (but within the extension band):
+ *       within `extensionDepth` of the box edge, on dry land (the ground
+ *       oracle says meadow — never water/shore), and carried by a soft
+ *       seeded falloff so the fringe dissolves outward (never a hard ring).
+ *
+ *   The one-source rule holds: inside the box, ONLY cells the classifier
+ *   proves unplantable; the fringe never steals plantable ground, and
+ *   nothing floats (heights always from the ground oracle).
+ */
+export function fringeCells(): { x: number; z: number }[] {
+  const out: { x: number; z: number }[] = [];
+  const t = HABITAT_TUNING.extension;
+  const halfBox = MEADOW_SIZE / 2;
+  const step = t.probeSpacing;
+  // probe the four outside strips (one per box side), depth = extensionDepth
+  for (let x = -halfBox - t.depth; x <= halfBox + t.depth; x += step) {
+    for (let z = -halfBox - t.depth; z <= halfBox + t.depth; z += step) {
+      const insideBox = Math.abs(x) <= halfBox - 1 && Math.abs(z) <= halfBox - 1;
+      if (insideBox) continue; // the fold rule owns the inside
+      const outsideBand = Math.abs(x) > halfBox || Math.abs(z) > halfBox;
+      if (!outsideBand) continue;
+      const edgeDist = Math.max(Math.abs(x) - halfBox, Math.abs(z) - halfBox);
+      if (edgeDist > t.depth) continue;
+      // the ground oracle decides kind: dry land only (never water/shore)
+      const g = groundAt(x, z);
+      if (g.kind !== 'meadow') continue;
+      // soft seeded falloff: density dissolves outward (no hard ring edge)
+      const falloff = 1 - edgeDist / t.depth;
+      if (sceneryHash(x, z, 970) < falloff * t.fillFraction) {
+        out.push({ x, z });
+      }
+    }
+  }
+  return out;
+}
 
 /**
  * The corner-fold regions: the four corner wedges of the placement square
