@@ -4,7 +4,8 @@ import { MEADOW_SIZE } from '../engine/terrain';
 import { groundAt } from '../engine/ground';
 import { usePlacementStore } from '../render/placementStore';
 import { beeDebug } from '../render/BeeSwarm';
-import { isRaining, setRaining, releaseRainOverride } from '../engine/weather';
+import { precipitationVisual } from '../engine/weather';
+import { precipReadback } from '../engine/rainSchedule';
 import { dayPhase, setDayPhase, resumeDayCycle, dayCycleOverridden } from '../engine/dayCycle';
 import { fireflyDebug, setFireflyForce, fireflyForced } from '../render/Fireflies';
 import { setCellMapVisible, cellMapVisible } from '../render/CellMapOverlay';
@@ -386,15 +387,21 @@ function Session5Triggers() {
   return (
     <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
       <div style={{ fontWeight: 'bold' }}>session 5 triggers</div>
-      <div style={{ fontSize: 12, marginTop: 4 }}>weather</div>
-      <div>
-        {btn('rain ON', () => setRaining(true), isRaining(), 'rain-on')}
-        {btn('rain OFF', () => setRaining(false), !isRaining(), 'rain-off')}
-        {btn('rain natural', () => releaseRainOverride(), false, 'rain-natural')}
-        <span style={{ fontSize: 11, opacity: 0.7 }}>
-          {' '}ON/OFF override the natural season-weighted schedule (N1);
-          'natural' releases the override back to the schedule
-        </span>
+      <div style={{ fontSize: 12, marginTop: 4 }}>
+        weather (N1: natural only — readback, no force; drive the season below)
+      </div>
+      <div data-perf-s8="weather-readback" style={{ fontSize: 11, opacity: 0.85 }}>
+        {(() => {
+          const now = precipitationVisual();
+          const rb = precipReadback();
+          const next = rb.next;
+          const eta = next
+            ? 'next ' + next.kind + ' in ' + Math.max(0, next.start - seasonProgress()).toFixed(2) + ' of the season'
+            : 'dry through the season\u2019s end';
+          return now
+            ? 'now: ' + now.kind + ' (settling ' + (now.intensity * 100).toFixed(0) + '%) \u2014 ' + eta
+            : 'now: dry \u2014 ' + eta;
+        })()}
       </div>
       <div style={{ fontSize: 12, marginTop: 4 }}>time of day (override; natural clock pauses)</div>
       <div>

@@ -1,34 +1,50 @@
 /**
- * Session 8 N1: the natural rain schedule tuning — one source in data.
+ * Session 8 N1 (round 2, PR #38 comment #6299401525): natural precipitation
+ * tuning — ONE source in data. Binary windows, seeded per (worldSeed, season
+ * ordinal): spring/fall frequent rain, summer rare rain, winter SNOW
+ * (decided). Windows arrive and end mid-season (stochastic reads, seeded
+ * determinism — same world, same weather calendar); boundaries never reset
+ * or silence the weather.
  *
- * Rain arrives on its own in deterministic season-weighted windows
- * (engine/rainSchedule consumes this): winter most, summer least, never
- * purely random. The weighting IS the spell curve — wetShare is the
- * chance-of-rain ceiling per season, and a season's weather ladder is
- * derived entirely from the world's seed, so the same world weathers the
- * same across reloads and machines.
+ * Observability weights (the 8x rule): a season is 720s at 1x, 90s at 8x.
+ * gap/len are fractions of a season; expected window count ~= 1 / (gap/2 +
+ * mean len). Spring/autumn ~4 windows (several rains per accelerated year),
+ * winter ~5 snow windows, summer 0-2. Weather that can't be observed in a
+ * session is a bug, not subtlety.
  */
-export const RAIN_SCHEDULE_TUNING = {
-  /** chance-of-rain ceiling per season (winter most, summer least) */
-  wetShare: {
-    spring: 0.3,
-    summer: 0.12,
-    autumn: 0.24,
-    winter: 0.45,
+export const PRECIP_TUNING = {
+  windows: {
+    spring: { kind: 'rain', gapScale: 0.3, lenScaleMin: 0.06, lenScaleMax: 0.16 },
+    summer: { kind: 'rain', gapScale: 0.7, lenScaleMin: 0.04, lenScaleMax: 0.1 },
+    autumn: { kind: 'rain', gapScale: 0.3, lenScaleMin: 0.06, lenScaleMax: 0.16 },
+    winter: { kind: 'snow', gapScale: 0.22, lenScaleMin: 0.05, lenScaleMax: 0.14 },
   },
-  /** how many wet/dry quanta a season breaks into (window granularity) */
-  quantum: 12,
-  /** fraction of the season where the wet chance eases in/out (no step at boundaries) */
-  edgeEase: 0.1,
+  /** how far a late window may spill past the season's end (progress units) */
+  spill: 0.06,
+  /**
+   * FAST settle on arrival/departure — scaled seconds for the visual ramp.
+   * Weather turns, it doesn't fade: NOT the colony's slow ease.
+   */
+  settleSeconds: 2,
+  /** SNOW visual tuning (winter = snow, decided): slow, soft, drifting */
+  snow: {
+    fallSpeed: 2.2,
+    /** flake size (cube scale) — reads as snow, not thin rain columns */
+    size: 0.09,
+    /** gentler wind than rain */
+    windX: 0.6,
+    color: '#ffffff',
+    opacity: 0.85,
+  },
 } as const;
 
-/**
- * N1 PROPOSAL (taste-first, user eyeball decides): does winter precipitation
- * read as RAIN or SNOW? Defaults to 'rain' — the existing, already-tuned
- * visual — until the user's eyeball picks from screenshots. Switching to
- * 'snow' re-tunes ONLY renderer constants (drop size/speed/spread) via this
- * data flag, never schedule logic.
- */
-export const RAIN_PROPOSAL = {
-  winterPrecip: 'rain' as 'rain' | 'snow',
+/** the rain visual tuning (unchanged, session-5 look preserved) */
+export const RAIN_VISUAL = {
+  drops: 220,
+  fallSpeed: 14,
+  areaHalf: 24,
+  top: 14,
+  windX: 1.2,
+  color: '#a8c8e0',
+  opacity: 0.5,
 } as const;

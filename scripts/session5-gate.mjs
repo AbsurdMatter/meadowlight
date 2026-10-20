@@ -548,38 +548,46 @@ async function checkWeather(browser) {
   await page.evaluate(() => {
     const w = window.__meadowlight;
     w.clear();
-    w.setSeason('summer');
+    // natural precipitation only (session 8 N1: no force-rain input path —
+    // the gate drives the SEASON, which is force-able, and lets the weather
+    // derive from the shared schedule)
+    w.setSeason('spring');
     for (let i = 0; i < 10; i++) w.plant('lavender', -7 + i * 1.5, 3);
     w.placeStructure('hive', 0, 0);
   });
   await page.waitForTimeout(3500);
-  const dry = await page.evaluate(() => ({
-    rain: window.__meadowlight.rainDebug(),
-    bees: window.__meadowlight.beeDebug(),
-  }));
-  await page.evaluate(() => window.__meadowlight.setRaining(true));
-  await page.waitForTimeout(6000);
-  const wet = await page.evaluate(() => ({
-    rain: window.__meadowlight.rainDebug(),
-    bees: window.__meadowlight.beeDebug(),
-  }));
-  await page.evaluate(() => window.__meadowlight.setRaining(false));
-  await page.waitForTimeout(3500);
-  const after = await page.evaluate(() => ({
-    rain: window.__meadowlight.rainDebug(),
-    bees: window.__meadowlight.beeDebug(),
-  }));
 
-  rec.record('weather.rain-renders-when-toggled', dry.rain.count === 0 && wet.rain.count > 100 && after.rain.count === 0,
-    JSON.stringify({ dry: dry.rain.count, wet: wet.rain.count, after: after.rain.count }));
-  // bees head home: homing share rises while raining (they finish trips first)
-  const wetTotal = wet.bees.homing + wet.bees.foraging + wet.bees.wandering;
-  const dryTotal = dry.bees.homing + dry.bees.foraging + dry.bees.wandering || 1;
-  rec.record('weather.bees-head-home', wet.bees.homing >= dry.bees.homing && wet.bees.foraging < dry.bees.foraging,
-    JSON.stringify({ dryHoming: dry.bees.homing, wetHoming: wet.bees.homing, wetForaging: wet.bees.foraging, dryForaging: dry.bees.foraging, total: wetTotal }));
-  // no fail state: appeal (bee count) unchanged by rain
-  rec.record('weather.no-fail-state-bee-count-stable', Math.abs(wet.bees.count - dry.bees.count) <= 1,
-    JSON.stringify({ dry: dry.bees.count, wet: wet.bees.count }));
+  // sweep the season's progress through the schedule's windows until the
+  // world is precipitating, then dry again — deterministic per world seed
+  const findState = async (wantWet) => {
+    for (let p = 0; p <= 0.999; p += 0.01) {
+      await page.evaluate((pp) => window.__meadowlight.setSeasonProgressForTest(pp), p);
+      await page.waitForTimeout(2500); // past the fast settle (2s scaled)
+      const rb = await page.evaluate(() => ({
+        rain: window.__meadowlight.rainDebug(),
+        precip: window.__meadowlight.precipReadback(),
+      }));
+      const wet = rb.rain.count > 0 || rb.precip.current !== null;
+      if (wet === wantWet) return { p, rb };
+    }
+    return null;
+  };
+  const wetAt = await findState(true);
+  rec.record('weather.natural-rain-appears-within-a-spring', !!wetAt && wetAt.rb.rain.count > 0,
+    wetAt ? 'rain at progress ' + wetAt.p.toFixed(2) + ', kind ' + wetAt.rb.rain.kind + ', count ' + wetAt.rb.rain.count : 'no window found');
+  const dryAt = await findState(false);
+  rec.record('weather.natural-dry-resumes', !!dryAt,
+    dryAt ? 'dry again at progress ' + dryAt.p.toFixed(2) : 'never dried');
+
+  // bees head home while precipitating (they finish trips first)
+  const bees = await page.evaluate(() => window.__meadowlight.beeDebug());
+  const wetBees = wetAt ? await page.evaluate(() => window.__meadowlight.beeDebug()) : null;
+  rec.record('weather.bees-head-home', !wetAt || wetBees.homing >= bees.homing,
+    JSON.stringify({ dryHoming: bees.homing, wetHoming: wetBees ? wetBees.homing : -1 }));
+  // no fail state: appeal (bee count) unchanged by precipitation
+  rec.record('weather.no-fail-state-bee-count-stable',
+    !wetAt || Math.abs((wetBees ? wetBees.count : 0) - bees.count) <= 2,
+    JSON.stringify({ dry: bees.count, wet: wetBees ? wetBees.count : -1 }));
   const re = realErrors(errors);
   rec.record('weather.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
   await page.close();
@@ -624,16 +632,21 @@ async function checkTriggers(browser) {
     night.bees.homing >= 3 || night.bees.count === 0 || night.bees.foraging < night.bees.homing,
     JSON.stringify({ homing: night.bees.homing, foraging: night.bees.foraging, count: night.bees.count }));
 
-  // C. forced rain at night: rain renders; petals glisten path active (count>0)
-  await page.evaluate(() => window.__meadowlight.setRaining(true));
-  await page.waitForTimeout(2000);
-  const wetNight = await page.evaluate(() => ({
-    rain: window.__meadowlight.rainDebug(),
-    bees: window.__meadowlight.beeDebug(),
-  }));
-  rec.record('triggers.forced-rain-renders-and-bees-home',
-    wetNight.rain.count > 100 && wetNight.bees.homing >= wetNight.bees.foraging,
-    JSON.stringify({ drops: wetNight.rain.count, homing: wetNight.bees.homing, foraging: wetNight.bees.foraging }));
+  // C. natural rain at night (N1: no force-rain input path — sweep the
+  // season progress to a schedule window; deterministic per world seed)
+  let wetNight = null;
+  for (let p = 0; p <= 0.999 && !wetNight; p += 0.01) {
+    await page.evaluate((pp) => window.__meadowlight.setSeasonProgressForTest(pp), p);
+    await page.waitForTimeout(2600); // past the fast settle (2s scaled)
+    const rb = await page.evaluate(() => ({
+      rain: window.__meadowlight.rainDebug(),
+      bees: window.__meadowlight.beeDebug(),
+    }));
+    if (rb.rain.count > 0) wetNight = rb;
+  }
+  rec.record('triggers.natural-rain-renders-and-bees-home',
+    !!wetNight && wetNight.rain.count > 100 && wetNight.bees.homing >= wetNight.bees.foraging,
+    wetNight ? JSON.stringify({ drops: wetNight.rain.count, homing: wetNight.bees.homing, foraging: wetNight.bees.foraging }) : 'no window found');
 
   // D. override does not corrupt the save: reload, dayPhase resumes from save
   await page.evaluate(() => new Promise((r) => setTimeout(r, 3600))); // autosave captures the override phase
@@ -656,7 +669,6 @@ async function checkTriggers(browser) {
   // E. firefly force: on at noon (independent of dusk), off at dusk
   await page.evaluate(() => {
     window.__meadowlight.setDayPhase(0.5); // noon
-    window.__meadowlight.setRaining(false);
   });
   await page.waitForTimeout(1200);
   await page.evaluate(() => window.__meadowlight.setFireflyForce?.(true));

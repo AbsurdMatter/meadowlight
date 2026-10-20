@@ -76,7 +76,7 @@ const { PLANTS, PLANT_BY_ID } = require(OUT + '/data/plants.js');
 const { groundAt, waterSurfaceHeight, pondFloorHeight } = require(OUT + '/engine/ground.js');
 const { LAKE, TERRAIN_SHAPE, shapedHeight, POND_FLAT_HEIGHT } = require(OUT + '/data/environment.js');
 const { MEADOW_SIZE, terrainHeight } = require(OUT + '/engine/terrain.js');
-const { isRaining, setRaining } = require(OUT + '/engine/weather.js');
+const { isRaining, setPrecipitatingForTest } = require(OUT + '/engine/weather.js');
 const { skyPaletteAt, GOLDEN_HOUR, sunElevation, isDaylight, isDusk, DUSK_START, DUSK_END, DAY_CYCLE_SECONDS, dayPhase, setDayPhase, advanceDay, resumeDayCycle, dayCycleOverridden } = require(OUT + '/engine/dayCycle.js');
 const { SEASONS, SEASON_SECONDS } = require(OUT + '/data/seasons.js');
 const { seasonProgress, advanceSeasons, forceSeason, resumeSeasonClock, seasonClockOverridden, setSeasonProgressForTest, nextSeason } = require(OUT + '/engine/seasonClock.js');
@@ -100,8 +100,7 @@ const { SEEDING_TUNING, SEEDING_FACTS } = require(OUT + '/data/seeding.js');
 const { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, FIREFLY_SUMMER_TUNING, HOVERFLY_AUTUMN_TUNING, isEarlySpring } = require(OUT + '/data/seasonalVisitors.js');
 const { isPlantableCell, groundAt: groundAtReadback } = require(OUT + '/engine/ground.js');
 const { hillsCover: hillsCoverReadback } = require(OUT + '/engine/hillsLayout.js');
-const { tickRainSchedule, naturalRainNow, rainManualOverride, resolveNaturalRain, setManualRain, clearManualRain } = require(OUT + '/engine/rainSchedule.js');
-const { RAIN_SCHEDULE_TUNING } = require(OUT + '/data/rain.js');
+const { seasonWindows, precipReadback, tickPrecipScheduleForTest, nextWindowAfter } = require(OUT + '/engine/rainSchedule.js');
 
 const mkItem = (plantId, x = 0, z = 0) => ({ id: plantId + ':' + x + ':' + z, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
 const mkStruct = (structureId, x = 0, z = 0) => ({ id: structureId + ':' + x + ':' + z, structureId, position: [x, 0, z], rotationY: 0 });
@@ -531,9 +530,9 @@ test('rain never lowers appeal: the no-fail invariant', () => {
     season: 'summer',
   };
   const dry = computeAppeal({ x: 0, z: 0 }, w, FORAGE_RADIUS);
-  setRaining(true);
+  setPrecipitatingForTest(true);
   const wet = computeAppeal({ x: 0, z: 0 }, w, FORAGE_RADIUS);
-  setRaining(false);
+  setPrecipitatingForTest(false);
   assert.strictEqual(dry.score, wet.score, 'rain must not change appeal (no fail state)');
   assert.strictEqual(isRaining(), false, 'rain toggles back off');
 });
@@ -1086,74 +1085,96 @@ test('placement collision: flowers respect structure footprints; structures resp
   assert.ok(!structureBlocked(8, 8, 'bath', [hive], []), 'far bath must be free');
 });
 
-// ---------- session 8 N1: natural, seasonally-weighted rain ----------
-// Deterministic windows on the shared season clock: the same (worldSeed,
-// season, progress-quantum) always weathers the same; winter weights wetter
-// than summer structurally (the wetShare ceiling IS the weighting); the P
-// override masks the schedule while it holds and releases cleanly.
-test('N1 rain schedule: deterministic — the same world+season+quantum weathers the same', () => {
-  resumeSeasonClock();
-  setSeasonProgressForTest(0.5);
-  tickRainSchedule(1, 'winter', 1234);
-  const a = naturalRainNow();
-  tickRainSchedule(1, 'winter', 1234);
-  assert.strictEqual(naturalRainNow(), a, 'same inputs give the same verdict');
-  tickRainSchedule(1, 'winter', 1235);
-  const b = naturalRainNow();
-  assert.ok(typeof b === 'boolean');
-  // a DIFFERENT world may weather differently — determinism is per-world
-  setSeasonProgressForTest(0.5);
-  tickRainSchedule(1, 'winter', 999999);
-  assert.ok(typeof naturalRainNow() === 'boolean');
+// ---------- session 8 N1 (round 2): natural, seasonally-weighted precipitation ----------
+// Binary windows, seeded per (worldSeed, ordinal): same world = same weather
+// calendar; spring/fall wet, summer dry, winter = SNOW (decided); windows
+// arrive and end MID-SEASON (never tied to boundaries); the 8x rule —
+// one accelerated year visibly precipitates several times.
+const wetShareOf = (windows) => {
+  let wet = 0;
+  for (const win of windows) wet += Math.min(win.end, 1) - win.start;
+  return Math.max(0, wet);
+};
+
+test('N1 determinism: same seed + ordinal = same weather calendar', () => {
+  const a = seasonWindows(1234, 3, 'spring');
+  const b = seasonWindows(1234, 3, 'spring');
+  assert.deepStrictEqual(a, b, 'same inputs replay identically');
+  assert.notDeepStrictEqual(seasonWindows(1234, 3, 'autumn'), a, 'different season weathers differently');
+  assert.notDeepStrictEqual(seasonWindows(9999, 3, 'spring'), a, 'different world weathers differently');
+  assert.notDeepStrictEqual(seasonWindows(1234, 4, 'spring'), a, 'next year weathers differently (ordinal)');
 });
 
-test('N1 rain schedule: seasonal weighting is structural — winter wets more than summer', () => {
-  // across many worlds and the whole season, winter's expected wet share
-  // exceeds summer's by the tuned weights (the RNG parity lesson: assert
-  // the SOURCE's structure, one shared source, no reimplementation)
-  const share = (season, seedLo, seedHi) => {
-    let wet = 0;
-    let n = 0;
-    for (let seed = seedLo; seed <= seedHi; seed++) {
-      for (let q = 0; q < RAIN_SCHEDULE_TUNING.quantum; q++) {
-        setSeasonProgressForTest((q + 0.5) / RAIN_SCHEDULE_TUNING.quantum);
-        tickRainSchedule(1, season, seed);
-        wet += naturalRainNow() ? 1 : 0;
-        n++;
+test('N1 seasonal weights: spring+fall wetter than summer; windows are mid-season', () => {
+  const share = (season) => {
+    let s = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      for (let ord = 0; ord < 4; ord++) {
+        s += wetShareOf(seasonWindows(seed, ord, season));
       }
     }
-    return wet / n;
+    return s / 80;
   };
-  const winterShare = share('winter', 1, 30);
-  const summerShare = share('summer', 1, 30);
-  assert.ok(
-    winterShare > summerShare + 0.15,
-    'winter wetter than summer by structure (winter ' + winterShare.toFixed(2) + ' vs summer ' + summerShare.toFixed(2) + ')',
-  );
-  assert.ok(summerShare < 0.35, 'summer stays mostly dry (cozy, never a washout)');
+  const spring = share('spring');
+  const autumn = share('autumn');
+  const summer = share('summer');
+  assert.ok(spring > summer + 0.1, 'spring wetter than summer by structure (' + spring.toFixed(2) + ' vs ' + summer.toFixed(2) + ')');
+  assert.ok(autumn > summer + 0.1, 'fall wetter than summer by structure');
+  assert.ok(summer < 0.25, 'summer stays mostly dry (cozy)');
+  assert.ok(spring > 0.2, 'spring is observably wet (the 8x rule: weather must happen)');
 });
 
-test('N1 rain schedule: pause holds — zero delta never flips the verdict', () => {
-  resumeSeasonClock();
-  setSeasonProgressForTest(0.5);
-  tickRainSchedule(5, 'autumn', 42);
-  const held = naturalRainNow();
-  tickRainSchedule(0, 'autumn', 42);
-  assert.strictEqual(naturalRainNow(), held, 'a zero (paused) delta is a no-op');
+test('N1 winter-is-snow: every winter window is snow; spring/summer/autumn are rain', () => {
+  for (let seed = 1; seed <= 10; seed++) {
+    for (const win of seasonWindows(seed, 7, 'winter')) {
+      assert.strictEqual(win.kind, 'snow', 'winter precipitation is SNOW (decided)');
+    }
+    for (const s of ['spring', 'summer', 'autumn']) {
+      for (const win of seasonWindows(seed, 7, s)) {
+        assert.strictEqual(win.kind, 'rain', s + ' precipitation is rain');
+      }
+    }
+  }
 });
 
-test('N1 rain schedule: P-panel override masks the schedule and releases cleanly', () => {
+test('N1 windows live mid-season: a boundary crossing never resets or silences weather', () => {
+  // windows are continuous on the 0..1 progress axis and may spill past 1 —
+  // a storm in progress at the rollover keeps falling (the round-2 bug
+  // report: "rain stopped with the season change")
+  let sawMidSeason = false;
+  let sawSpill = false;
+  for (let seed = 1; seed <= 40; seed++) {
+    for (let ord = 0; ord < 4; ord++) {
+      const w = seasonWindows(seed, ord, 'spring');
+      for (const win of w) {
+        if (win.start > 0.15 && win.end < 0.9) sawMidSeason = true;
+        if (win.end > 1) sawSpill = true;
+      }
+    }
+  }
+  assert.ok(sawMidSeason, 'windows start/end mid-season, not only at boundaries');
+  assert.ok(sawSpill, 'some windows spill past the boundary (weather survives rollover)');
+  // and the resolver keeps evaluating: a forced season holds progress 0,
+  // so the verdict comes from the season OPENING windows, never a stale carry
   resumeSeasonClock();
   setSeasonProgressForTest(0.5);
-  tickRainSchedule(1, 'summer', 7);
-  const natural = naturalRainNow();
-  setManualRain(true);
-  assert.strictEqual(resolveNaturalRain(), true, 'ON override forces rain regardless of schedule');
-  setManualRain(false);
-  assert.strictEqual(resolveNaturalRain(), false, 'OFF override forces dry regardless of schedule');
-  clearManualRain();
-  assert.strictEqual(resolveNaturalRain(), natural, 'release drops back to the schedule verdict, no step');
-  assert.strictEqual(rainManualOverride(), null, 'no override remains');
+  tickPrecipScheduleForTest(5, 2, 'autumn');
+  const held = precipReadback().current;
+  tickPrecipScheduleForTest(5, 2, 'autumn');
+  assert.deepStrictEqual(precipReadback().current, held, 'same world point = same live verdict');
+});
+
+test('N1 8x observability: every season of every world precipitates multiple times', () => {
+  // the gate case made structural: an accelerated year MUST visibly rain
+  // (spring/autumn), snow (winter), and mostly dry (summer) — weather that
+  // cannot be observed is a bug, not subtlety.
+  for (let seed = 1; seed <= 12; seed++) {
+    for (let ord = 0; ord < 4; ord++) {
+      assert.ok(seasonWindows(seed, ord, 'spring').length >= 2, 'spring has several windows (seed ' + seed + ')');
+      assert.ok(seasonWindows(seed, ord, 'autumn').length >= 2, 'autumn has several windows');
+      assert.ok(seasonWindows(seed, ord, 'winter').length >= 2, 'winter has several snow windows');
+    }
+  }
 });
 `;
   mkdirSync(join(work, 'tests'), { recursive: true });

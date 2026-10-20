@@ -6,8 +6,8 @@ import { FOG, HILLS, shapedHeight } from '../data/environment';
 import { skyPaletteAt, dayPhase, advanceDay } from '../engine/dayCycle';
 import { advanceSeasons, seasonClockOverridden } from '../engine/seasonClock';
 import { timeMultiplier } from '../engine/timeControl';
-import { tickScaledTime } from '../engine/scaledTime';
-import { tickRainSchedule } from '../engine/rainSchedule';
+import { tickScaledTime, scaledDelta } from '../engine/scaledTime';
+import { tickPrecipSchedule, setPrecipDeltaSource } from '../engine/rainSchedule';
 import { usePlacementStore } from './placementStore';
 
 /**
@@ -67,6 +67,10 @@ export function Sky() {
     // animation system consumes scaledDelta()/scaledElapsed() from it, so
     // speed changes and pause reach the whole world through one multiply.
     tickScaledTime(delta);
+    // N1: the precipitation schedule consumes the shared scaled dt for its
+    // fast settle — injected ONCE here so the module stays engine-pure
+    // (never an R3F import inside engine).
+    setPrecipDeltaSource(scaledDelta);
     // ONE time system: this is the single site that advances both clocks
     // (day cycle + #11 season calendar). Nothing else may tick either —
     // a second advance site is how two clocks drift apart. The speed
@@ -75,15 +79,15 @@ export function Sky() {
     // phase/season) still hold their clocks exactly as before.
     const scaled = delta * timeMultiplier();
     advanceDay(scaled);
-    // N1 (session 8): the natural rain schedule advances at the SAME single
-    // time site with the SAME scaled delta — pause fully freezes rain
-    // planning (multiplier 0) and the 1x-8x control scales the weather with
-    // everything else. A forced season holds the calendar at progress 0,
-    // so the schedule holds the season's opening verdict while held — one
-    // time system, not a second clock.
+    // N1 (session 8): natural precipitation advances at the SAME single time
+    // site — windows derive from (worldSeed, season ordinal, progress); the
+    // ordinal rides seedingEpoch (the store's rollover count, advanced at
+    // the ONE season-advance site) so the weather calendar never repeats
+    // box-fresh each year. Pause fully freezes it (scaled = 0); 1x-8x scales
+    // the weather with everything else. No input path exists.
     {
       const store = usePlacementStore.getState();
-      tickRainSchedule(scaled, store.season, store.worldSeed);
+      tickPrecipSchedule(store.worldSeed, store.seedingEpoch, store.season);
     }
     if (!seasonClockOverridden()) {
       const store = usePlacementStore.getState();
