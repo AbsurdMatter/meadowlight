@@ -1,6 +1,20 @@
 export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
 
 export const SEASONS: Season[] = ['spring', 'summer', 'autumn', 'winter'];
+/**
+ * #11 (session 6): auto-advancing season length, seconds. 12 sits in the
+ * approved 10–15 min window and pairs with the 12-minute day — one day
+ * of in-world light per season reads as a gentle "week" of meadow time.
+ * Tuning value: lives here, never hardcoded in components.
+ */
+export const SEASON_SECONDS = 720;
+/** gentle toast copy when the calendar rolls into a new season (#11) */
+export const SEASON_ARRIVAL: Record<Season, string> = {
+  spring: 'The meadow turns to spring — early blooms wake the queens.',
+  summer: 'The meadow turns to summer — lavender and borage hum before you see them.',
+  autumn: 'The meadow turns to autumn — asters keep the table set late.',
+  winter: 'The meadow settles into winter — the hive clusters, cozy and quiet.',
+};
 
 export const SEASON_INFO: Record<Season, { label: string; emoji: string; tip: string }> = {
   spring: {

@@ -12,6 +12,11 @@ import { fireflyDebug } from '../render/Fireflies';
 import { setDayPhase } from './dayCycle';
 import { setRaining } from './weather';
 import { dayPhase } from './dayCycle';
+import { seasonProgress, seasonClockOverridden } from './seasonClock';
+import { honeyDebug } from '../render/BeeSwarm';
+import { setSpeedStep, setPaused, isPaused, currentSpeedStep, timeMultiplier, type SpeedStep } from './timeControl';
+import { isPlantableCell } from './ground';
+import { hillsBoxes } from './hillsLayout';
 import { setFireflyForce } from '../render/Fireflies';
 import { rainDebug } from '../render/Rain';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
@@ -30,6 +35,39 @@ declare global {
       structures: () => PlacedStructure[];
       clear: () => void;
       setSeason: (season: 'spring' | 'summer' | 'autumn' | 'winter') => void;
+      /** #11: release the manual/P-panel season override */
+      resumeSeasonClock: () => void;
+      /** #11: 0..1 progress through the current season (readback) */
+      seasonProgressReadback: () => number;
+      /** #11: tests only — drive the calendar position directly */
+      setSeasonProgressForTest: (p: number) => void;
+      /** #11: true while the calendar is held by an override */
+      seasonClockOverridden: () => boolean;
+      /** #9: discovered recipe ids (persisted) */
+      foundRecipes: () => string[];
+      /** #9: rescans for newly formed recipes (the plant() path calls it) */
+      checkCompanions: () => void;
+      /** #9: currently-formed recipe ids (readback) */
+      activeRecipes: () => string[];
+      /** #10: per-hive comb fill readback (hiveId -> 0..1) */
+      hiveCombs: () => Record<string, number>;
+      /** #10: force a hive's comb fill (the P panel trigger) */
+      setComb: (hiveId: string, fill: number) => void;
+      /** #10: try harvesting a hive (false if not full); jars readback */
+      harvestHoney: (hiveId: string) => boolean;
+      honeyJars: () => number;
+      honeyDebug: () => { foragingBees: number; appeal: number };
+      /** #36 item 2: time controls (pause + 1x/2x/4x/8x + jump) via the test hook */
+      timeSetSpeed: (step: number) => void;
+      timeSetPaused: (paused: boolean) => void;
+      timeIsPaused: () => boolean;
+      timeSpeed: () => number;
+      timeMultiplierReadback: () => number;
+      /** #36 item 4: the classification query readbacks (deterministic gate) */
+      isPlantableCellReadback: (x: number, z: number) => boolean;
+      /** #36 hive popup: open/close via the store path the click uses */
+      openHivePopup: (hiveId: string) => void;
+      hillsBoxesReadback: () => { x: number; z: number; half: number }[];
       milestones: () => string[];
       beeCount: () => number;
       beeDebug: () => unknown;
@@ -135,6 +173,27 @@ export function installTestHook() {
     structures: () => usePlacementStore.getState().structures,
     clear: () => usePlacementStore.setState({ items: [], structures: [] }),
     setSeason: (season) => usePlacementStore.getState().setSeason(season),
+    resumeSeasonClock: () => usePlacementStore.getState().resumeSeasonClock(),
+    seasonProgressReadback: () => seasonProgress(),
+    setSeasonProgressForTest: (p) => usePlacementStore.getState().setSeasonProgressForTest(p),
+    seasonClockOverridden: () => seasonClockOverridden(),
+    foundRecipes: () => usePlacementStore.getState().foundRecipes,
+    checkCompanions: () => usePlacementStore.getState().checkCompanions(),
+    activeRecipes: () => usePlacementStore.getState().activeRecipes(),
+    hiveCombs: () => ({ ...usePlacementStore.getState().hiveCombs }),
+    setComb: (hiveId, fill) => usePlacementStore.getState().setComb(hiveId, fill),
+    harvestHoney: (hiveId) => usePlacementStore.getState().harvestHoney(hiveId),
+    honeyJars: () => usePlacementStore.getState().honeyJars,
+    honeyDebug: () => ({ foragingBees: honeyDebug.lastForagingBees, appeal: honeyDebug.lastAppeal }),
+    /** #36 item 2: time-control triggers (pause/steps/jump) + readbacks */
+    timeSetSpeed: (step: number) => setSpeedStep(step as SpeedStep),
+    timeSetPaused: (paused: boolean) => setPaused(paused),
+    timeIsPaused: () => isPaused(),
+    timeSpeed: () => currentSpeedStep(),
+    timeMultiplierReadback: () => timeMultiplier(),
+    isPlantableCellReadback: (x, z) => isPlantableCell(x, z),
+    openHivePopup: (hiveId) => usePlacementStore.getState().openHivePopup(hiveId),
+    hillsBoxesReadback: () => hillsBoxes().map((b) => ({ x: b.x, z: b.z, half: b.half })),
     milestones: () => usePlacementStore.getState().milestones,
     beeCount: () => beeDebug.count,
     beeDebug: () => ({ ...beeDebug }),

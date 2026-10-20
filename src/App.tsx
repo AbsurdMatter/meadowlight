@@ -19,12 +19,13 @@ import { DebugBridge } from './render/DebugBridge';
 import { CellMapLayer } from './ui/CellMap';
 import { OrbitControlsLite } from './render/OrbitControlsLite';
 import { Palette } from './ui/Palette';
-import { SeasonDial } from './ui/SeasonDial';
+import { SeasonDial, TimeControls } from './ui/SeasonDial';
 import { ResetDialog } from './ui/ResetDialog';
 import { CornerControls } from './ui/CornerControls';
 import { Onboarding } from './ui/Onboarding';
 import { Toasts } from './ui/Toasts';
 import { Notebook } from './ui/Notebook';
+import { HivePopup } from './ui/HivePopup';
 import { MilestoneWatcher } from './ui/MilestoneWatcher';
 import { PerfOverlay } from './ui/PerfOverlay';
 import { usePlacementStore } from './render/placementStore';
@@ -154,8 +155,9 @@ export default function App() {
       </Canvas>
       {loaded && <Palette />}
       {loaded && <SeasonDial />}
+      {loaded && <TimeControls />}
       {loaded && (
-        <div style={{ position: 'absolute', top: 64, right: 12 }}>
+        <div style={{ position: 'absolute', top: 108, right: 12 }}>
           <ResetDialog />
         </div>
       )}
@@ -163,6 +165,7 @@ export default function App() {
       {loaded && <Onboarding />}
       {loaded && <Toasts />}
       {loaded && <Notebook />}
+      {loaded && <HivePopup />}
       <MilestoneWatcher />
       {PerfOverlay && <PerfOverlay />}
       <div

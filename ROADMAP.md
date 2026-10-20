@@ -87,7 +87,9 @@ Commit: "session 3: polish, audio, postcards — v0.1".
 
 Never de-scope: freeform placement, bee simulation, notebook facts, seasons.
 
-# v0.1 post-mortems (all three sessions):
+# Session post-mortems
+
+## v0.1 (sessions 1–3)
 
 ### Session 1 — Voxel meadow (COMPLETE)
 Delivered: Vite + TS + React + three.js (@react-three/fiber) scaffold; freeform
@@ -167,6 +169,8 @@ vision readback disagree, look at the ground truth (the mask) — the cell-map
 overlay (#30) exists because of this; "it never touches the pond" is not the
 same as "harmless" when a structural misalignment is the root cause.
 
+## v2 (sessions 4–6)
+
 ### Session 4 — Chrome & tooling (post-merge record, PR #32, merge f49c462)
 Delivered: token/theme module + self-hosted Pixelify Sans (zero runtime font fetch); full chrome restyle (one font/border/palette across notebook, reset, palette, toasts, onboarding, popover, dial, header); typography weight hierarchy from tokens (weightHeading/weightEmphasis/headingStyle); postcard stats strip as organized list (warm, never scores); composed postcard (parchment, honey border, "Greetings from Meadowlight", stats on the card, layout computed from measured font metrics); embed polish verified at 4 odd ratios in iframes; P-panel expansion (#30): cell-map overlay (classified by the exact groundAt()/isBuildable() queries — placement-box AND, not kind alone), save-state inspector, honest reload-from-save (real load path, no save first), live milestone checklist; dev tooling excluded from prod build (lazy dev-gate); WebGL context-leak fix (one shared thumbnail renderer); reload given observable feedback (console + toast) and the <3s autosave test window documented in the tooltip.
 Post-review fixes: reload button was window.location.reload() (beforeunload save overwrote the blob being tested); cell-map overlay leaked into dist and the first classification mislabeled hills plantable (groundAt kind is 'meadow' on all dry land; the placement-box AND is the truth); postcard caption band fixed at 170px clipped the fourth stat on real GPU (headless has no font rasterizer — invisible text cannot fail a pixel check; layout now derived from measureText().actualBoundingBox, unit-tested); "Too many active WebGL contexts" traced NOT to the postcard path but to palette thumbnails creating a renderer each (StrictMode double-mount -> 22 contexts past the ~16 cap; renderer.dispose() does not release the context — the canvas holds it until GC).
@@ -176,6 +180,74 @@ Lessons: measure, don't assume, font metrics in canvas layouts — and when the 
 Delivered: flower roster 6->10 (crocus makes all-four-seasons reachable; borage/aster facts verified against sources); terrain shaping #31 (flat pond plateau, water 0.27u below banks everywhere; gentler rim then bowl lift to 0.9 after user composition verdicts; one shared shapedHeight() for oracle + renderer; distant ridge re-anchored to terrain, sunk 4.5u below anchor, hills' own palette after two rounds of floating-boxes fixes — "reads as clouds/mist" was a redesign request, not tuning); placeable Berry Bush + ambient bushlets (seeded per-instance rotation + scale jitter); banded voxel sky + composed clouds; butterflies + hoverflies on the fixed #34 steering with wildDebug telemetry; 12-min day/night cycle (golden-hour default, fireflies at dusk); gentle rain (bees home, petals glisten, audio hushes; appeal byte-identical dry vs wet — no fail state by test); P-panel trigger suite (rain, time-of-day overrides with hold/resume, firefly force) wired through the test hook; corner-overhang placement refusal via the raw cell hit.
 Post-review fixes (the user real-GPU loop caught six): ghost voxel unparked (gated instanced meshes left mounted); ridge anchoring, then ridge bottoms (visual legibility is the acceptance criterion — distant terrain must read as terrain in the hills' language); bush rotation; bees-stuck regression — isDaylight used sunElevation>0.05, reading the golden-hour default (0.82) as night, so the swarm homed from every boot and survived reload while the panel printed day; fixed as the palette's own lit window (dawn 0.22 -> dusk 0.88, epsilon-tolerant, ONE shared source for bees/panel/save — two definitions of "day" is how the panel and the bees disagreed); corner placement — the raycast CLAMPED hits into the placement box, silently misclassifying overhang cells as valid; now the raw cell hit is checked against the same isPlantableCell query the cell-map overlay uses (one source, no divergence). The trigger suite found a behavioral gap on its own: bees never homed at night (rain-homing existed, day/night never touched bee behavior) — fixed per real colonies, count untouched, no punishment.
 Lessons: state semantics need ONE shared definition — the panel said day while bees said night because two modules each defined it (same class as session-4's reload round-trip bug); instrument the RAW query, not a clamped/projection one (the raycast clamp made overlay, ghost, and placement disagree while each was locally "right"); a trigger suite pays for itself by exposing behavioral holes the feature gates can't see (night-homing found while verifying the triggers); gates go stale against feature commits — fix the detector, never bend behavior to a stale detector; the custom OrbitControls re-asserts the camera every frame, so proposal screenshots need a working camera path (an honest environment finding, not a "no difference" shrug); terrain acceptance is the user's composition verdict, not slope numbers; taste-first held through three terrain rounds — proposal screenshots before commit, per change; camera-path tooling is part of the proposal workflow now.
+
+### Session 6 — Depth mechanics (post-merge record, PR #36)
+
+Delivered: auto-advancing seasons (save v6 additive seasonProgress, ONE
+advance site shared with the day clock, override dial = P-panel force
+path, boundary interpretation has one home in advanceSeasons); garden
+recipes (5 verified companion pairs, strictly additive — non-recipes
+neutral by test, discovery toast + notebook section with cozy locked
+entries, save v6 foundRecipes); honey (comb fills from observed foraging
+effort, comb-as-filling-jar glow — honey voxels GROW with fill, harvest
+via the hive popup and the P panel through one shared harvestHoney,
+ceremony dip + fact toast on both); the hive popup itself (warm
+fill-state lines, the gentle not-yet read, ground-truth hive
+resolution); time controls (pause + 1x/2x/4x/8x above the season dial,
+"morning" jump reusing the existing force paths, not persisted — reload
+resumes natural); corner classification fix (the exact rendered hills
+layout in one shared hillsLayout.ts consumed by renderer AND classifier,
+hillsCover ANDed into isPlantableCell — the deterministic census caught
+a fast-reject diagonal bug a sampled matrix missed); terrain retunes
+(edge-anchored shallow bowl, 0.2u step, rim palette bridge with per-cell
+dither, fog 34/120); bare-minimum deploy (Pages workflow, default URL;
+subdomain + og:image documented post-deploy).
+
+Perf (user real-GPU stress): PASS — 183.4fps @ 221 items (avg 5.45ms,
+p95 8.3ms, max 11.1ms, budget 20ms); vs the session-3 93.8fps @ 229
+baseline the safe claim is no regression with comfortable headroom at
+every percentile (environments differ; not 2x). Session 6's full stack
+added no measurable frame cost under load.
+
+Lessons: the state-source pattern ran through the whole session —
+isDaylight (s5) -> popup/panel hive disagreement -> wrong-hive comb
+attribution (first hiveCombs entry) -> duplicate state strings -> a
+seasonal fact stored as an evergreen base; the one-source rule now
+includes auditing EVERY UI surface that renders a semantic (predicate,
+string, and attribution). Sandbox-edit loss: a change not present in
+the committed tree does not exist — commit messages describe intent,
+not contents; after any history rewrite the full gate suite re-runs
+before any state claim (the reflog audit showed identical trees — the
+edit was lost BEFORE staging; a commit described a hunk it never
+contained, and a default-camera-only gate passed it). Camera-coupling:
+a world-anchored popup is camera-state-dependent by definition — test
+matrices must include the ZOOM EXTREMES, not just the default camera;
+a span-based lift shrinks with distance while the popup's pixel height
+doesn't (clearance collapsed at zoom-out), and the x-clamp must use
+the popup's full rendered width (the extended matrix caught a ~23px
+edge overflow the default-camera check couldn't see); a second offset
+source in the style layer silently overrides the projection (removed —
+the projection is the single anchor source). Corner geometry: radial
+hills vs square placement box — the standing fix is classification-
+level footprint checks reading the renderer's own placement data. Gate
+infrastructure under SwiftShader: long in-page evaluates die silently
+('page closed', three different symptoms = the rabbit-hole signature)
+— node-side scans (one evaluate per pixel), fresh pages per case,
+deterministic classification census over sampled click matrices, and
+skip-honestly instead of flake; R3F ThreeEvent raycasts don't fire
+headless at all (canvas events verified arriving) — store-driven
+verification + real-DOM button clicks, with the canvas-click flow on
+the user's manual list. Terrain-retune tail: every profile change
+carries dependent visuals tuned to the old profile (the brown rim band
+was tuned for the ~1u bowl; the base hive fact carried seasonal copy;
+fog was tuned to the pre-retune composition).
+
+Post-merge polish backlog (user decisions): popup anchor jitter during
+camera rotation (candidates: recompute on the damped camera only or
+temporal smoothing; round the projected position to whole pixels for
+the pixel-font chrome; batch the anchor update with the camera-asserted
+frame); habitat corners — scenery covering the unplantable corner folds
+(session 7's scenery unit, on the v3 roadmap).
 
 ---
 
@@ -250,8 +322,78 @@ better than one who doesn't.
 ## Post-session-6: deploy (user-driven)
 
 Build dist/, upload, point portfolio subdomain, HTTPS. First public look =
-completed v2.
+completed v2. (Session 6 landed the bare-minimum Pages workflow + default URL;
+the subdomain/CNAME + og:image origin swap are the documented post-deploy
+steps.)
 
 ## Parked until world + chrome final
 
 #19 mobile/PWA, #20 broader i18n & harness expansion beyond #30's scope.
+
+---
+
+# v3 — The meadow grows (proposed, sessions 7–8)
+
+Goal: v2 made the world alive, deep, and public; v3 makes the meadow grow on
+its own and lets meadows travel between people. Same constitution: cozy,
+educational, no fail states, voxel language, one shared source per semantic.
+Session-7 planning refines this against the real deployed meadow.
+
+## Session 7 — Seed & life (world deepening)
+
+1. Self-seeding (#new): flowers occasionally volunteer a seedling in a nearby
+   plantable cell — rare, capped per region, roster-compatible neighbors;
+   seedlings clearable, never reading as "weeds." Tuning in src/data/; gate:
+   no invasive growth pattern across an accelerated 4-season run (the v2
+   speed control is the verification instrument).
+2. Seasonal wild visitors (#new): extend the butterfly/hoverfly pattern —
+   evening lavender moths, spring queen bumbles on crocus, summer firefly
+   blooms, autumn hoverfly stragglers. Notebook records who visited when.
+   Same trigger-suite rule: conditions force-able from day one; no direct
+   spawn-force masking the natural condition.
+3. Bee lifecycles, gently (#new): hive population breathes with the seasons —
+   colony grows in spring, winter cluster (the EDUCATION.md winter-cluster
+   fact earns its visual). Hard constraint: winter reads as winter, never as
+   loss or decline.
+4. Pond & tree habitat scenery (#new): dragonflies over the pond, pond-edge
+   plants (forget-me-not already in roster), cozy ground detail around trees,
+   and habitat corners — scenery (bush clusters, rocks, a log, fern-like
+   detail) covering the corner fold regions where the hills intrude into the
+   placement box and nothing can be planted (user decision, session 6): the
+   unplantable folds read as intentional wild corners, never empty seams.
+   Scenery first; no placement mechanics in scope. Facts verified, in-file
+   sources.
+5. Night sky & cloud translucency (#new): (a) clouds more translucent —
+   softly veiled, never blocking the view, never gone (the session-5
+   legibility criterion, in reverse); (b) stars at night, composed with the
+   day/night grade through the same palette-lit window logic (ONE shared
+   phase source, epsilon-tolerant boundaries), brightest in winter's long
+   nights. Trigger-first: force-night/evening gates assert star visibility
+   per phase. Eyeball: translucency feel, star density/drift.
+
+Success test: a returning spring visitor finds their meadow changed but
+never diminished — new seedlings they didn't plant, queens on the crocuses,
+the hive waking — and the night sky gives the slow phases something to look at.
+
+## Session 8 — Sharing & the wider door
+
+6. Seed codes (#new): a seed string captures species + positions
+   (deterministic from the seeded placement hash, NOT the save — season,
+   jars, notebook stay local). Input at the world's front door: "start from a
+   friend's seed" in the reset/new-meadow flow. Output: gentle "share this
+   meadow's seed" near the postcard. Gate: same seed -> same layout across
+   reloads and machines; unknown-version seed -> fresh world + preserved
+   backup (the corrupt-blob pattern, applied to seeds).
+7. i18n (#19 partially, #20): Slovenian first — the deployed meadow greets
+   its actual audience. All copy through the existing copy modules; no
+   hardcoded strings.
+
+Success test: a friend's meadow grows the same from the seed code, and a
+Slovenian visitor reads every line in their own words.
+
+## Carry-overs standing
+
+One shared source per semantic (seed hash joins dayPhase/season as named
+state with exactly one definition); raw-query placement for anything that
+checks cells; trigger-first; save v7 additive; tuning in src/data/;
+taste-first with proposal screenshots for anything visual.

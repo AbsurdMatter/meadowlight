@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { PLANTS } from '../data/plants';
+import { combStateLine } from '../data/honey';
 import { usePlacementStore } from '../render/placementStore';
 import {
   choosePlantFact,
@@ -74,7 +75,22 @@ export function Notebook() {
     if (entry.kind === 'structure') {
       const choice = chooseStructureFact(entry.id, s.season, s.seenFacts);
       const name = entry.id.charAt(0).toUpperCase() + entry.id.slice(1);
-      return { title: name, choice, hint: null };
+      // #10: the hive carries its comb state — a warm hint, never pressure
+      let hint: string | null = null;
+      if (entry.id === 'hive') {
+        // #36: read THE instance's comb (the clicked hive, when the panel
+        // opened via the popup's 'more'), and render the ONE shared state
+        // line — popup and panel can never disagree (the two-sources bug)
+        const instance = entry.instanceId
+          ? s.structures.find((st) => st.id === entry.instanceId && st.structureId === 'hive')
+          : s.structures.find((st) => st.structureId === 'hive');
+        const v = instance ? s.hiveCombs[instance.id] ?? 0 : 0;
+        // the shared state line only — the harvest affordance lives in
+        // the hive POPUP's real button (a 'click the hive' instruction
+        // here was a dead end: clicking the hive opens the popup)
+        hint = combStateLine(v);
+      }
+      return { title: name, choice, hint };
     }
     const choice = chooseMeadowFact(s.season, s.seenFacts);
     const blooming = PLANTS.filter((p) => p.bloom.includes(s.season)).map((p) => p.name);

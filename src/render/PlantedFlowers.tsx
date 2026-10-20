@@ -6,6 +6,8 @@ import { usePlacementStore } from './placementStore';
 import { noVariation } from '../engine/variation';
 import { inBloom } from '../engine/pollinator';
 import { isRaining, RAIN_TUNING } from '../engine/weather';
+import { companionSet } from '../engine/companions';
+import { RECIPE_TUNING } from '../data/recipes';
 
 const tmpColor = new THREE.Color();
 const dullColor = new THREE.Color();
@@ -62,6 +64,12 @@ function FlowerInstances() {
   useFrame(({ clock, camera }) => {
     const r = refs.current;
     const t = clock.elapsedTime;
+    // #9: companion vigor — recipe partners bloom a touch fuller. Strictly
+    // additive (a gentle scale-up on blessed flowers); unblessed flowers
+    // keep the exact pre-recipe look, so nothing ever reads as penalized.
+    // Rescanned on the same item set the render loop reads; cheap because
+    // only recipe-relevant species enter the scan.
+    const { blessed } = companionSet(items);
     // #14: rain makes blooming petals glisten (washes the colors brighter)
     const glisten = RAIN_TUNING.glisten && isRaining();
     let glistened = false;
@@ -89,7 +97,8 @@ function FlowerInstances() {
           const part = def.parts[pi];
           const petal = part.petal === true;
           const partSway = part.offset[1] / Math.max(def.height, 0.001);
-          const bloomScale = !petal || blooming ? 1 : OFF_BLOOM_SCALE;
+          const vigor = blessed.has(item.id) ? RECIPE_TUNING.vigorScale : 1;
+          const bloomScale = (!petal || blooming ? 1 : OFF_BLOOM_SCALE) * vigor;
           tmpMat.makeTranslation(
             item.position[0],
             item.position[1] + variation.heightJitter,

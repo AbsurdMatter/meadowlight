@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { STRUCTURES } from '../data/structures';
 import { usePlacementStore } from './placementStore';
 import { noVariation } from '../engine/variation';
+import { combReady } from '../engine/honey';
+import { HONEY_TUNING } from '../data/honey';
 
 /** Deterministic 0..1 hash from two integers (the grass pattern) — stable
  *  across reloads, no RNG state, saves stay byte-stable. */
@@ -14,7 +16,6 @@ function hash2(x: number, z: number, salt: number): number {
   return (h >>> 0) / 4294967296;
 }
 
-
 const tmpMat = new THREE.Matrix4();
 const rotYMat = new THREE.Matrix4();
 const tiltXMat = new THREE.Matrix4();
@@ -22,6 +23,14 @@ const tiltZMat = new THREE.Matrix4();
 const offsetMat = new THREE.Matrix4();
 const scaleMat = new THREE.Matrix4();
 const tmpColor = new THREE.Color();
+/** #10: a DEDICATED color object — combColor must never alias tmpColor.
+ * The original honey-glow bug: combColor aliased tmpColor, so each part's
+ * `tmpColor.set(part.color)` overwrite (STRAW, DARK_WOOD…) replaced the
+ * lerp result before the honey parts' setColorAt read it — the glow wrote
+ * the previous part's color and NOTHING changed with fill. */
+const combColor = new THREE.Color();
+const combFloor = new THREE.Color(HONEY_TUNING.combColorFloor);
+const combFull = new THREE.Color(HONEY_TUNING.combColorFull);
 
 /** generous fixed capacity per structure type (never recreated on place/remove) */
 const CAPACITY_PER_STRUCTURE = 60;
@@ -37,12 +46,39 @@ export function PlacedStructures() {
     e.stopPropagation();
     const s = usePlacementStore.getState();
     if (s.selectedPlantId || s.selectedStructureId) return;
+    // #10: a FULL hive gives a jar — the harvest ceremony (dip + toast)
+    // fires from the store; a not-yet-full hive still opens the notebook
+    if (structureId === 'hive') {
+      // #36 residual (the instanceId class, one lifecycle step earlier):
+      // resolving via the idMaps index could hand back a STALE hive id on
+      // a just-placed hive (the map rebuilds next frame), opening the
+      // popup for a DIFFERENT hive whose comb may be full. Resolve by
+      // ground truth: the nearest placed hive to the click's world hit.
+      const hit = e.point;
+      const nearest = s.structures
+        .filter((st) => st.structureId === 'hive')
+        .map((st) => ({ st, d: Math.hypot(st.position[0] - hit.x, st.position[2] - hit.z) }))
+        .sort((a, b) => a.d - b.d)[0];
+      const hiveId =
+        nearest && nearest.d <= 1.5 ? nearest.st.id : undefined;
+      if (hiveId) {
+        // #36 hive popup: the harvest moment happens AT the hive — the
+        // popup carries the fill state + harvest button (ONE shared
+        // harvestHoney path under it and the P panel); the info panel
+        // stays reachable via the popup's 'more' link (which attributes
+        // THIS hive so the panel's comb hint reads the same comb — the
+        // isDaylight lesson applied to hive state)
+        s.openHivePopup(hiveId);
+        return;
+      }
+    }
     openNotebook({ kind: 'structure', id: structureId });
   };
 
   useFrame(({ clock }) => {
     const r = refs.current;
     const t = clock.elapsedTime;
+    const store = usePlacementStore.getState();
     for (const def of STRUCTURES) {
       const mesh = r.meshes[def.id];
       if (!mesh) continue;
@@ -65,10 +101,38 @@ export function PlacedStructures() {
           bushRotY = hash2(qx, qz, 901) * Math.PI * 2;
           bushScale = 0.88 + hash2(qx, qz, 902) * 0.28;
         }
-        for (const part of def.parts) {
+        // #10: the harvest ceremony — the hive dips and settles over
+        // harvestDipSeconds (a gentle thank-you bow, then back to rest)
+        let dip = 0;
+        if (s.structureId === 'hive') {
+          const startedAt = store.harvestDips[s.id];
+          if (typeof startedAt === 'number') {
+            const age = (performance.now() - startedAt) / 1000;
+            const dur = HONEY_TUNING.harvestDipSeconds;
+            if (age < dur) {
+              // smooth down-and-settle: sin ease in, settle back
+              const phase = age / dur;
+              dip = -Math.sin(phase * Math.PI) * HONEY_TUNING.harvestDip;
+            }
+          }
+        }
+        // #10 comb-as-filling-jar (user retune): the honey parts GROW with
+        // fill (thin warm core -> full band, scale lerp from tuning) AND
+        // saturate floor-amber -> deep honey gold. The empty end stays
+        // warm ("settling in", never sad); the full end is unmistakable at
+        // a glance — a bigger, more saturated honey silhouette.
+        const combFill = s.structureId === 'hive' ? store.hiveCombs[s.id] ?? 0 : 0;
+        combColor.copy(combFloor).lerp(combFull, combFill);
+        const combScale =
+          HONEY_TUNING.combScaleFloor +
+          (HONEY_TUNING.combScaleFull - HONEY_TUNING.combScaleFloor) * combFill;
+        for (let pi = 0; pi < def.parts.length; pi++) {
+          const part = def.parts[pi];
+          const isHoneyPart =
+            s.structureId === 'hive' && HONEY_TUNING.combPartIndices.includes(pi);
           tmpMat.makeTranslation(
             s.position[0],
-            s.position[1] + variation.heightJitter,
+            s.position[1] + variation.heightJitter + dip,
             s.position[2],
           );
           rotYMat.makeRotationY(s.rotationY + variation.rotationY + bushRotY);
@@ -79,14 +143,19 @@ export function PlacedStructures() {
           tmpMat.multiply(tiltZMat);
           offsetMat.makeTranslation(part.offset[0], part.offset[1], part.offset[2]);
           tmpMat.multiply(offsetMat);
+          const partScale = isHoneyPart ? combScale : bushScale;
           scaleMat.makeScale(
-            part.size[0] * bushScale,
-            part.size[1] * bushScale,
-            part.size[2] * bushScale,
+            part.size[0] * partScale,
+            part.size[1] * partScale,
+            part.size[2] * partScale,
           );
           tmpMat.multiply(scaleMat);
           mesh.setMatrixAt(i, tmpMat);
-          mesh.setColorAt(i, tmpColor.set(part.color));
+          if (isHoneyPart) {
+            mesh.setColorAt(i, combColor);
+          } else {
+            mesh.setColorAt(i, tmpColor.set(part.color));
+          }
           i++;
         }
       }
@@ -94,8 +163,8 @@ export function PlacedStructures() {
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
+    void combReady; // engine import kept for the click path's store check
   });
-
   return (
     <group>
       {STRUCTURES.map((def) => (

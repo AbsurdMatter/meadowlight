@@ -11,6 +11,7 @@ import {
   backgroundHeight,
 } from '../data/environment';
 import { groundAt } from '../engine/ground';
+import { hillsBoxes } from '../engine/hillsLayout';
 
 function makeRng(seed: number) {
   let s = seed;
@@ -70,32 +71,25 @@ function Hills() {
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
-    const rng = makeRng(20260101);
     const mat = new THREE.Matrix4();
     const color = new THREE.Color();
     const fogColor = new THREE.Color(FOG.color);
     const meadow = HILLS.meadowGrassColors.map((c) => new THREE.Color(c));
     const hills = HILLS.hillColors.map((c) => new THREE.Color(c));
-    const step = HILLS.step;
     let i = 0;
-    const outer = HILLS.outerRadius;
-    for (let x = -outer; x <= outer; x += step) {
-      for (let z = -outer; z <= outer; z += step) {
-        const r = Math.hypot(x, z);
-        if (r < HILLS.innerRadius || r > outer) continue;
-        // pond-as-terrain, ONE cell map (#29 pass 2): the boundary is
-        // EXACT on the shared lattice — the band claims every cell whose
-        // box would touch it (center within maxD + half-diagonal), and
-        // hills skips exactly that set. No straddling box can cut in.
-        if (isPondBandCell(x, z)) continue;
-        // no jitter near the band so hills boxes meet the band flush
-        const lakeDB = Math.hypot(x - LAKE.center[0], z - LAKE.center[1]);
-        const nearBand = lakeDB < LAKE.radius + LAKE.shoreWidth + step * 1.5;
-        const jitterScale = nearBand ? 0 : HILLS.jitter;
-        const jx = x + (rng() - 0.5) * step * jitterScale;
-        const jz = z + (rng() - 0.5) * step * jitterScale;
+    // #36 item 4: the box layout (lattice, jitter, sizes) lives in ONE
+    // shared source — engine/hillsLayout — consumed by both this renderer
+    // and isPlantableCell's footprint check, so classification can never
+    // diverge from what renders. The RNG draws (color picks) still run
+    // here, in the same order the layout module reserved.
+    const rng = makeRng(20260101);
+    for (const box of hillsBoxes()) {
+        // color-draw parity with hillsLayout's RNG sequence
+        rng(); rng(); rng(); rng(); // layout consumed: jx, jz, size, spare
+        const jx = box.x;
+        const jz = box.z;
+        const size = box.half * 2;
         const h = backgroundHeight(jx, jz);
-        const size = step * (HILLS.minSize + rng() * (HILLS.maxSize - HILLS.minSize));
         const extraDepth = Math.max(0, h - backgroundHeight(0, 0)) + 4;
         const boxH = HILLS.boxHeight + extraDepth;
         mat.makeScale(size, boxH, size);
@@ -114,7 +108,6 @@ function Hills() {
         color.copy(base).lerp(fogColor, t * HILLS.fogBlendStrength);
         mesh.setColorAt(i, color);
         i++;
-      }
     }
     mesh.count = i;
     mesh.instanceMatrix.needsUpdate = true;

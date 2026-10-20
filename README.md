@@ -47,6 +47,23 @@ PNG of your meadow), and **?** for the controls reminder. The season dial
 (spring → winter) shows bloom succession — a single-species meadow visibly
 runs out of food.
 
+## The living meadow (v2)
+
+- **Seasons drift by on their own** (spring → winter, ~12 minutes each).
+  Leave for the afternoon and you'll come back mid-season — never
+  punished, never “you missed it.” The manual dial stays if you want to
+  jump ahead, and a soft underline shows how far the season has come.
+- **Some flowers love company.** Plant the right pair as neighbors and
+  the notebook learns a garden recipe — borage beside cosmos, lavender
+  with thyme. Recipes only ever reward; anything else is simply two
+  flowers minding their own business.
+- **The hive fills with honey** as your bees forage. When the comb glows
+  full, click it for a jar — the notebook keeps the tally, and a real
+  beekeeping fact comes with the harvest. The bees always keep a share:
+  they're residents, not machines.
+- **A day passes while you garden** — golden hour fades to dusk, fireflies
+  rise, and rain sends the bees home to wait it out.
+
 ## Developing
 
 ```bash
@@ -86,12 +103,24 @@ npm run build
   `https://meadowlight.example/og-image.png` (1200×630) — swap in the real
   deployment origin at deploy time and drop a real-GPU screenshot at
   `/og-image.png`. No other og tag needs touching.
-- **Embed checklist (re-run, session 4).** Verified headlessly in an iframe
+- **Embed checklist (re-run, session 6 deploy unit).** Verified headlessly in an iframe
   at 1280×300, 480×900, 600×600, and 914×391: canvas fills the frame
   exactly, zero horizontal/vertical scroll, zero console errors, fonts
   self-hosted (no runtime fetch). Known gap: the palette panel clips in
   frames narrower than ~700px (#33) — mobile/touch layout is parked until
   the world + chrome finalize.
+
+## Deploying (bare minimum this session)
+
+The repo ships a GitHub Pages workflow (`.github/workflows/deploy-pages.yml`):
+on every push to `main` it runs the smoke gate, builds `dist/`, and publishes
+it to GitHub Pages. Enable it once in **Settings → Pages → Source: GitHub
+Actions**; the site then serves at the default Pages URL.
+
+**Post-deploy step (documented, not done this session):** point the portfolio
+subdomain at the Pages URL (a `CNAME` file in `dist` + your DNS CNAME record),
+then swap the og:image placeholder origin in `index.html` and drop the
+real-GPU `/og-image.png` at the deploy origin.
 
 ## Credits
 

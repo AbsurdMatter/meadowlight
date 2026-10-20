@@ -1,6 +1,7 @@
 import { terrainHeight } from './terrain';
 import { LAKE, MEADOW_BOWL, shapedHeight } from '../data/environment';
 import { MEADOW_SIZE } from './terrain';
+import { hillsCover } from './hillsLayout';
 
 /**
  * Ground oracle — the single module answering "what is at this cell of the
@@ -96,5 +97,15 @@ export function isBuildable(x: number, z: number): boolean {
  */
 export function isPlantableCell(x: number, z: number): boolean {
   if (!isBuildable(x, z)) return false;
-  return Math.abs(x) <= MEADOW_SIZE / 2 - 1 && Math.abs(z) <= MEADOW_SIZE / 2 - 1;
+  if (Math.abs(x) > MEADOW_SIZE / 2 - 1 || Math.abs(z) > MEADOW_SIZE / 2 - 1) return false;
+  // #36 item 4 (corner overlap): a rendered hills box must not cover the
+  // cell — the scenic corner fold is laid by the hills lattice, which is
+  // RADIAL while the placement box is a SQUARE, so boxes near r >= 21.5
+  // spill into the square's corner wedge. The check reads the RENDERER's
+  // exact footprints (engine/hillsLayout: same lattice, same RNG, same
+  // jitter/size rules — the raw-data-over-projection lesson) and is ANDed
+  // into the one query the overlay, ghost, and click path all classify
+  // with, so the fix lands in all three at once.
+  if (hillsCover(x, z)) return false;
+  return true;
 }

@@ -11,6 +11,7 @@ import {
   type FactEntry,
 } from '../data/facts';
 import { MILESTONES } from '../data/milestones';
+import { RECIPES } from '../data/recipes';
 import { usePlacementStore } from '../render/placementStore';
 import { theme, headingStyle } from './theme';
 
@@ -68,6 +69,7 @@ function HubInner() {
   const [open, setOpen] = useState(false);
   const seenFacts = usePlacementStore((s) => s.seenFacts);
   const milestones = usePlacementStore((s) => s.milestones);
+  const foundRecipes = usePlacementStore((s) => s.foundRecipes);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -151,6 +153,27 @@ function HubInner() {
             ) : null;
           })}
 
+          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>GARDEN RECIPES</h4>
+          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
+            Some flowers love company — plant the right pair as neighbors and see.
+          </div>
+          {RECIPES.map((r) => {
+            const found = foundRecipes.includes(r.id);
+            return (
+              <div
+                key={r.id}
+                style={{
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  marginBottom: 6,
+                  opacity: found ? 1 : 0.6,
+                }}
+              >
+                {found ? '\u2728' : '\u{1F514}'} <strong>{found ? r.label : 'A recipe, still undiscovered'}</strong>
+                {found ? ` — ${r.fact}` : ' — two flowers that grow happily together…'}
+              </div>
+            );
+          })}
           <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>MILESTONES</h4>
           {MILESTONES.map((m) => {
             const unlocked = milestones.includes(m.id);

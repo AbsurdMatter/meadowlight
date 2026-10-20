@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -78,7 +78,12 @@ const { LAKE, TERRAIN_SHAPE, shapedHeight, POND_FLAT_HEIGHT } = require(OUT + '/
 const { MEADOW_SIZE, terrainHeight } = require(OUT + '/engine/terrain.js');
 const { isRaining, setRaining } = require(OUT + '/engine/weather.js');
 const { skyPaletteAt, GOLDEN_HOUR, sunElevation, isDaylight, isDusk, DUSK_START, DUSK_END, DAY_CYCLE_SECONDS, dayPhase, setDayPhase, advanceDay, resumeDayCycle, dayCycleOverridden } = require(OUT + '/engine/dayCycle.js');
-const { SEASONS } = require(OUT + '/data/seasons.js');
+const { SEASONS, SEASON_SECONDS } = require(OUT + '/data/seasons.js');
+const { seasonProgress, advanceSeasons, forceSeason, resumeSeasonClock, seasonClockOverridden, setSeasonProgressForTest, nextSeason } = require(OUT + '/engine/seasonClock.js');
+const { companionSet, newlyFormed, recipeBetween } = require(OUT + '/engine/companions.js');
+const { RECIPES, RECIPE_TUNING, recipeFor } = require(OUT + '/data/recipes.js');
+const { advanceComb, combReady, fillAfterHarvest } = require(OUT + '/engine/honey.js');
+const { HONEY_TUNING, HONEY_FORAGING_SEASONS, HONEY_FACTS } = require(OUT + '/data/honey.js');
 const { checkMilestones } = require(OUT + '/engine/milestones.js');
 const { variationFor, rollVariation, noVariation, VARIATION_TUNING } = require(OUT + '/engine/variation.js');
 const { choosePlantFact, chooseStructureFact, chooseMeadowFact } = require(OUT + '/engine/factSelection.js');
@@ -370,6 +375,136 @@ test('dusk window: fireflies appear only in 0.79-0.92', () => {
   assert.ok(isDusk(0.79) && isDusk(0.92), 'window is inclusive');
   assert.ok(!isDusk(0.5), 'noon is not dusk');
   assert.ok(!isDusk(0.95) && !isDusk(0.78), 'night and late afternoon are not dusk');
+});
+
+// ---------- session 6 U1 (#11): auto-advancing season calendar ----------
+test('season clock: 12-minute season, rollover reports the crossed season', () => {
+  assert.strictEqual(SEASON_SECONDS, 720, 'season length per approved plan (10-15 min window)');
+  resumeSeasonClock();
+  setSeasonProgressForTest(0);
+  let crossed = advanceSeasons(360, 'summer');
+  assert.strictEqual(crossed.length, 0, 'half a season crosses nothing');
+  assert.ok(Math.abs(seasonProgress() - 0.5) < 1e-9, 'progress is half');
+  crossed = advanceSeasons(360, 'summer');
+  assert.deepStrictEqual(crossed, ['autumn'], 'a full season rolls into autumn');
+  assert.ok(Math.abs(seasonProgress() - 0) < 1e-9, 'rollover leaves progress at season start');
+});
+
+test('season clock: winter wraps to spring; huge deltas cross several seasons', () => {
+  resumeSeasonClock();
+  setSeasonProgressForTest(0.9);
+  const crossed = advanceSeasons(SEASON_SECONDS * 2.5, 'winter');
+  assert.deepStrictEqual(crossed, ['spring', 'summer', 'autumn'], 'wrap + multi-cross in order');
+  assert.ok(Math.abs(seasonProgress() - 0.4) < 1e-9, 'fractional remainder preserved');
+});
+
+test('season clock: forceSeason holds (manual dial = P panel = one override path)', () => {
+  forceSeason('spring');
+  assert.ok(seasonClockOverridden(), 'the dial/panel override must hold the calendar');
+  assert.strictEqual(seasonProgress(), 0, 'an override starts the forced season at its beginning');
+  assert.deepStrictEqual(advanceSeasons(9999, 'spring'), [], 'held clock never advances');
+  assert.strictEqual(seasonProgress(), 0, 'held clock position is stable');
+  resumeSeasonClock();
+  assert.ok(!seasonClockOverridden(), 'resume releases the override');
+});
+
+test('season clock: boundary interpretation — 0.999 saves resume the SAME season, never pre-roll', () => {
+  // the save->reload->resume path: a position < 1 is mid-season by
+  // definition; only advanceSeasons may cross a boundary, so a reload
+  // can never re-interpret a near-boundary save as the next season
+  resumeSeasonClock();
+  setSeasonProgressForTest(0.999);
+  assert.ok(seasonProgress() < 1, 'a saved 0.999 loads as the same season');
+  const crossed = advanceSeasons(10, 'summer');
+  assert.deepStrictEqual(crossed, ['autumn'], 'only real advancement crosses the boundary');
+  assert.ok(seasonProgress() < 0.02, 'crossing lands at the next season start (tiny residue from the crossing step is fine)');
+  // exact wrap: 1.0 units of time from 0 is the NEXT season's start, not a skip
+  setSeasonProgressForTest(0);
+  assert.deepStrictEqual(advanceSeasons(SEASON_SECONDS, 'spring'), ['summer'], 'exactly one season advances one step');
+  assert.ok(Math.abs(seasonProgress()) < 1e-9, 'exact wrap has zero residue');
+});
+
+test('season clock: nextSeason ordering', () => {
+  assert.strictEqual(nextSeason('spring'), 'summer');
+  assert.strictEqual(nextSeason('summer'), 'autumn');
+  assert.strictEqual(nextSeason('autumn'), 'winter');
+  assert.strictEqual(nextSeason('winter'), 'spring');
+});
+
+// ---------- session 6 U2 (#9): companion recipes ----------
+test('recipes: adjacency forms a recipe, distance does not', () => {
+  const near = [mkItem('lavender', 0, 0), mkItem('thyme', 1.5, 0)];
+  const { blessed, active } = companionSet(near);
+  assert.ok(active.some((r) => r.id === 'recipe:lavender-thyme'), 'adjacent pair forms the recipe');
+  assert.ok(blessed.has(near[0].id) && blessed.has(near[1].id), 'both partners are blessed');
+  const far = [mkItem('lavender', 0, 0), mkItem('thyme', RECIPE_TUNING.adjacencyRadius + 0.5, 0)];
+  const farRes = companionSet(far);
+  assert.strictEqual(farRes.blessed.size, 0, 'too far = no recipe, and NO penalty (just neutral)');
+  assert.strictEqual(farRes.active.length, 0);
+});
+
+test('recipes: order-free lookup; non-recipe pairs are simply neutral', () => {
+  assert.strictEqual(recipeBetween('thyme', 'lavender')?.id, 'recipe:lavender-thyme');
+  assert.strictEqual(recipeBetween('lavender', 'thyme')?.id, 'recipe:lavender-thyme');
+  assert.strictEqual(recipeBetween('lavender', 'poppy'), undefined, 'not a recipe = neutral, never negative');
+  // a meadow of random non-recipe flowers must bless NOTHING (no ranking)
+  const random = [mkItem('lavender', 0, 0), mkItem('poppy', 0.5, 0), mkItem('sunflower', 1, 0)];
+  const res = companionSet(random);
+  assert.strictEqual(res.blessed.size, 0, 'non-recipe neighbors stay exactly neutral');
+});
+
+test('recipes: newlyFormed respects the adjacency radius and dedupes discoveries', () => {
+  const items = [mkItem('borage', 0, 0), mkItem('cosmos', 1, 1)];
+  const fresh1 = newlyFormed(items, []);
+  assert.ok(fresh1.some((r) => r.id === 'recipe:borage-cosmos'), 'first formation is new');
+  const fresh2 = newlyFormed(items, ['recipe:borage-cosmos']);
+  assert.strictEqual(fresh2.length, 0, 'already discovered = not re-announced');
+});
+
+test('recipes: every pairing references real roster species (buildable in play)', () => {
+  const ids = new Set(PLANTS.map((p) => p.id));
+  for (const r of RECIPES) {
+    assert.ok(ids.has(r.pair[0]) && ids.has(r.pair[1]), 'recipe ' + r.id + ' uses planted species');
+    assert.ok(r.fact.length > 20, 'recipe ' + r.id + ' has a warm fact');
+  }
+  assert.ok(RECIPE_TUNING.vigorScale > 1, 'vigor is a bonus multiplier');
+});
+
+// ---------- session 6 U3 (#10): honey ----------
+test('honey: comb fills from foraging effort, gated by daylight + season', () => {
+  // active foraging: increases
+  let f = advanceComb(0, 10, 8, 0.8, 'summer', true);
+  assert.ok(f > 0, 'active foraging fills the comb');
+  // night or winter: only the gentle idle trickle
+  const night = advanceComb(0, 10, 8, 0.8, 'summer', false);
+  const winter = advanceComb(0, 10, 8, 0.8, 'winter', true);
+  assert.ok(night > 0 && night < f, 'night trickles, never zero — residents, not machines');
+  assert.strictEqual(night, winter, 'same gentle trickle off-season');
+  assert.ok(night <= HONEY_TUNING.idleFillPerSecond * 10 + 1e-9, 'idle rate matches tuning');
+  // no bees at all: still fills, slowly (no pressure, no fail)
+  const lonely = advanceComb(0, 60, 0, 0, 'summer', true);
+  assert.ok(lonely > 0, 'an empty meadow still fills the comb slowly');
+  // appeal scales the rate
+  const rich = advanceComb(0, 10, 8, 1, 'summer', true);
+  const poor = advanceComb(0, 10, 8, 0.1, 'summer', true);
+  assert.ok(rich > poor, 'appeal scales fill');
+});
+
+test('honey: fill caps at 1; harvest resets partial, never zero', () => {
+  const full = advanceComb(0.99, 60, 20, 1, 'summer', true);
+  assert.strictEqual(full, 1, 'fill caps at 1');
+  assert.ok(combReady(1), 'a full comb is harvestable');
+  assert.ok(!combReady(0.99), 'not-yet-full is not harvestable');
+  const after = fillAfterHarvest();
+  assert.ok(after > 0 && after < 1, 'harvest leaves a partial comb');
+  assert.strictEqual(after, HONEY_TUNING.afterHarvest, 'after-harvest fill matches tuning');
+  assert.ok(after >= 0.3, 'the bees keep a generous share — residents, not machines');
+});
+
+test('honey: facts verified against sources; winter is not a foraging season', () => {
+  assert.ok(!HONEY_FORAGING_SEASONS.includes('winter'), 'winter is quiet');
+  assert.ok(HONEY_FACTS.harvest.length > 20 && HONEY_FACTS.filling.length > 20, 'facts exist');
+  assert.ok(HONEY_TUNING.combColorFloor !== HONEY_TUNING.combColorFull, 'glow palette has range');
 });
 
 // ---------- session 5 U7 (#14): weather — cozy, no fail state ----------

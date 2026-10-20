@@ -10,6 +10,11 @@ import { fireflyDebug, setFireflyForce, fireflyForced } from '../render/Fireflie
 import { setCellMapVisible, cellMapVisible } from '../render/CellMapOverlay';
 import { CELL_KINDS } from '../render/CellMapOverlay';
 import { MILESTONES } from '../data/milestones';
+import {
+  seasonProgress,
+  seasonClockOverridden,
+  setSeasonProgressForTest,
+} from '../engine/seasonClock';
 
 const MEASURE_SECONDS = 10;
 const STRESS_ITEMS = 200;
@@ -335,6 +340,9 @@ function PerfOverlayPanel() {
         {cellMapOn && <CellMapLegend />}
       </div>
       <Session5Triggers />
+      <Session6SeasonTriggers />
+      <Session6RecipeTriggers />
+      <Session6HoneyTriggers />
       <SaveInspector />
       <MilestoneChecklist />
     </div>
@@ -401,6 +409,160 @@ function Session5Triggers() {
         {btn('force off', () => setFireflyForce(false), fireflyForced() === false, 'ff-off')}
         {btn('natural', () => setFireflyForce(null), fireflyForced() === null, 'ff-natural')}
         <span style={{ fontSize: 11, opacity: 0.7 }}> {fireflyDebug.count} glowing</span>
+      </div>
+    </div>
+  );
+}
+
+/** session 6 trigger section: the season calendar (#11) — force seasons
+ *  (same override path as the manual dial), resume natural drift, and a
+ *  fast-forward for rollover/toast testing. Dev-only (prod-excluded). */
+function Session6SeasonTriggers() {
+  const [, forceRender] = useState(0);
+  const refresh = () => forceRender((n) => n + 1);
+  const season = usePlacementStore((s) => s.season);
+  const btn = (label: string, onClick: () => void, active: boolean, key?: string) => (
+    <button
+      key={key}
+      data-perf-s6={key}
+      onClick={() => {
+        onClick();
+        refresh();
+      }}
+      style={{
+        margin: '2px 4px 2px 0',
+        padding: '5px 9px',
+        borderRadius: 8,
+        border: 'none',
+        background: active ? '#7a9d54' : '#666',
+        color: '#fff',
+        fontFamily: 'inherit',
+        fontSize: 12,
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>season calendar (#11)</div>
+      <div>
+        {btn('force spring', () => usePlacementStore.getState().setSeason('spring'), season === 'spring', 'season-spring')}
+        {btn('force summer', () => usePlacementStore.getState().setSeason('summer'), season === 'summer', 'season-summer')}
+        {btn('force autumn', () => usePlacementStore.getState().setSeason('autumn'), season === 'autumn', 'season-autumn')}
+        {btn('force winter', () => usePlacementStore.getState().setSeason('winter'), season === 'winter', 'season-winter')}
+        {btn('resume natural', () => usePlacementStore.getState().resumeSeasonClock(), !seasonClockOverridden(), 'season-resume')}
+      </div>
+      <div>
+        {btn('progress → 0.95', () => { setSeasonProgressForTest(0.95); refresh(); }, false, 'season-near-end')}
+        {btn('progress → 0.999…', () => { setSeasonProgressForTest(0.999999); refresh(); }, false, 'season-boundary')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {' '}progress {seasonProgress().toFixed(3)} {seasonClockOverridden() ? '(held)' : '(drifting)'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** session 6 trigger section: companion recipes (#9) — form a recipe via
+ *  the test path (plant both species adjacent, rescan) and read the state.
+ *  Dev-only (prod-excluded via PerfOverlay.tsx). */
+function Session6RecipeTriggers() {
+  const [, forceRender] = useState(0);
+  const refresh = () => forceRender((n) => n + 1);
+  const found = usePlacementStore((s) => s.foundRecipes);
+  const btn = (label: string, onClick: () => void, key?: string) => (
+    <button
+      key={key}
+      data-perf-s6={key}
+      onClick={() => {
+        onClick();
+        refresh();
+      }}
+      style={{
+        margin: '2px 4px 2px 0',
+        padding: '5px 9px',
+        borderRadius: 8,
+        border: 'none',
+        background: '#666',
+        color: '#fff',
+        fontFamily: 'inherit',
+        fontSize: 12,
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>companion recipes (#9)</div>
+      <div>
+        {btn('form lavender+thyme', () => {
+          const w = (window as unknown as { __meadowlight?: { plant: (id: string, x: number, z: number) => void } }).__meadowlight;
+          w?.plant('lavender', 2, 2);
+          w?.plant('thyme', 2.6, 2);
+          usePlacementStore.getState().checkCompanions();
+        }, 'recipe-form')}
+        {btn('rescan', () => usePlacementStore.getState().checkCompanions(), 'recipe-rescan')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {' '}discovered {found.length}/5 · active {usePlacementStore.getState().activeRecipes().length}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** session 6 trigger section: honey (#10) — force comb fill, harvest a
+ *  ready hive, read the live foraging inputs. Dev-only (prod-excluded). */
+function Session6HoneyTriggers() {
+  const [, forceRender] = useState(0);
+  const refresh = () => forceRender((n) => n + 1);
+  const combs = usePlacementStore((s) => s.hiveCombs);
+  const jars = usePlacementStore((s) => s.honeyJars);
+  const btn = (label: string, onClick: () => void, key?: string) => (
+    <button
+      key={key}
+      data-perf-s6={key}
+      onClick={() => {
+        onClick();
+        refresh();
+      }}
+      style={{
+        margin: '2px 4px 2px 0',
+        padding: '5px 9px',
+        borderRadius: 8,
+        border: 'none',
+        background: '#666',
+        color: '#fff',
+        fontFamily: 'inherit',
+        fontSize: 12,
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+  const hives = usePlacementStore
+    .getState()
+    .structures.filter((st) => st.structureId === 'hive');
+  const firstHive = hives[0];
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>honey (#10)</div>
+      <div>
+        {btn("fill hive (popup's when open)", () => {
+          const s = usePlacementStore.getState();
+          const target = s.hivePopup ?? firstHive?.id;
+          if (target) s.setComb(target, 1);
+        }, 'honey-fill')}
+        {btn('harvest first hive', () => {
+          if (firstHive) usePlacementStore.getState().harvestHoney(firstHive.id);
+        }, 'honey-harvest')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {' '}jars {jars} · combs {hives.map((h) => (combs[h.id] ?? 0).toFixed(2)).join(',') || '-'}
+        </span>
       </div>
     </div>
   );
