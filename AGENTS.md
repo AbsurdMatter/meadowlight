@@ -220,3 +220,7 @@ updating it — caught by the user, not the process.)
   a "resting" state whenever paused. The paused/speed semantic lives in
   engine/timeControl.ts as the one named source; every surface (dial row,
   P panel, gates) renders from it.
+- Colony force jumps (P panel / dial) KEEP THE EASE — a forced winter reads
+  as the world settling into its cluster over a few seconds, never a step
+  change (user decision, PR #37; the ease is the no-step-at-boundaries
+  rationale applied to inspection too).
