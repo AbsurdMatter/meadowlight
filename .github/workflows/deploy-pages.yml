@@ -6,12 +6,11 @@ name: Deploy to GitHub Pages
 # POST-DEPLOY step (README "Embedding & deploying").
 
 on:
-  # DISABLED until the deploy session (PR #37 user decision, comment #6298625613;
-  # v3 ROADMAP "Post-session-6: deploy"). Re-enable: delete the `if: false`
-  # line below — one line, nothing else.
+  # Session 8 deploy unit: RE-ENABLED (the deploy session arrived — v3 plan
+  # of record; was disabled per PR #37 comment #6298625613). Runs on push to
+  # main only (merge), so the branch CI stays smoke-only.
   push:
     branches: [main]
-    if: false
   workflow_dispatch:
 
 permissions:
