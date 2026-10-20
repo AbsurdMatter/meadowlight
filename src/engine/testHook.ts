@@ -16,6 +16,7 @@ import { seasonProgress, seasonClockOverridden } from './seasonClock';
 import { honeyDebug } from '../render/BeeSwarm';
 import { setSpeedStep, setPaused, isPaused, currentSpeedStep, timeMultiplier, type SpeedStep } from './timeControl';
 import { scaledElapsed } from './scaledTime';
+import { colonyReadback } from './lifecycle';
 import { isPlantableCell } from './ground';
 import { hillsBoxes } from './hillsLayout';
 import { setFireflyForce } from '../render/Fireflies';
@@ -51,6 +52,8 @@ declare global {
       volunteersReadback: () => { id: string; plantId: string; volunteer: boolean }[];
       /** U2: visitor-window log — (visitorId, season) pairs, one per window */
       visitorWindowsReadback: () => string[];
+      /** U3: the colony breath — live intensity + the season's line (one source) */
+      colonyReadback: () => { line: string; intensity: number; target: number };
       /** write the save NOW (the same store save() the autosave uses) */
       save: () => void;
       /** #9: discovered recipe ids (persisted) */
@@ -200,6 +203,7 @@ export function installTestHook() {
         volunteer: it.volunteer === true,
       })),
     visitorWindowsReadback: () => usePlacementStore.getState().visitorWindows,
+    colonyReadback: () => colonyReadback(usePlacementStore.getState().season, seasonProgress()),
     save: () => usePlacementStore.getState().save(),
     foundRecipes: () => usePlacementStore.getState().foundRecipes,
     checkCompanions: () => usePlacementStore.getState().checkCompanions(),

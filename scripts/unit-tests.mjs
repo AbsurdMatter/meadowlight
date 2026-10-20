@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -90,6 +90,8 @@ const { choosePlantFact, chooseStructureFact, chooseMeadowFact } = require(OUT +
 const { flowerBlocked, structureBlocked } = require(OUT + '/engine/collision.js');
 const { computeCaptionLayout, fallbackMetrics } = require(OUT + '/engine/postcardLayout.js');
 const { rollVolunteers, compatibleSeedling } = require(OUT + '/engine/seeding.js');
+const { colonyIntensityTarget, LIFECYCLE_LINES } = require(OUT + '/data/lifecycle.js');
+const { advanceColony, colonyIntensity: colonyIntensityExport, colonyReadback: colonyReadbackExport, setColonyIntensityForTest } = require(OUT + '/engine/lifecycle.js');
 const { SEEDING_TUNING, SEEDING_FACTS } = require(OUT + '/data/seeding.js');
 const { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, FIREFLY_SUMMER_TUNING, HOVERFLY_AUTUMN_TUNING, isEarlySpring } = require(OUT + '/data/seasonalVisitors.js');
 const { isPlantableCell } = require(OUT + '/engine/ground.js');
@@ -850,6 +852,47 @@ test('visitors: notebook windows are one per (visitor, season) and round-trip', 
   const back = loadWorld();
   assert.deepStrictEqual(back.visitorWindows.sort(), ['moth:summer', 'queenbumble:spring'], 'dedup + round-trip');
   clearSavedWorld();
+});
+
+// ---------- session 7 U3: bee lifecycles, gently ----------
+
+test('lifecycle: full-year trace — rise, hold, cluster, reawaken', () => {
+  const spring = [0, 0.25, 0.5, 0.75, 1].map((p) => colonyIntensityTarget('spring', p));
+  const summer = [0, 0.5, 1].map((p) => colonyIntensityTarget('summer', p));
+  const autumn = [0, 0.5, 1].map((p) => colonyIntensityTarget('autumn', p));
+  const winter = [0, 0.25, 0.5, 0.75, 1].map((p) => colonyIntensityTarget('winter', p));
+  assert.ok(spring[4] > spring[0], 'spring grows');
+  assert.ok(Math.abs(summer[0] - summer[2]) < 1e-9, 'summer holds (no mid-summer decline)');
+  assert.ok(summer[0] >= spring[4] - 1e-9, 'summer is the peak');
+  assert.ok(autumn[2] < autumn[0] && autumn[2] >= 0.49, 'autumn thins to the straggler floor, no further');
+  assert.ok(winter[2] <= 0.08, 'midwinter is the tucked cluster');
+  assert.ok(winter[4] > winter[3], 'late winter stirs (cleansing flights -> first foragers)');
+  assert.ok(spring[0] < spring[4], 'the breath repeats');
+});
+
+test('lifecycle: the live breath eases toward the target and freezes under pause (dt=0)', () => {
+  setColonyIntensityForTest(0.2);
+  for (let i = 0; i < 40; i++) advanceColony('summer', 0.5, 0.5);
+  const eased = colonyIntensityExport();
+  assert.ok(eased > 0.2 && eased <= 0.86, 'eases up gently: ' + eased.toFixed(3));
+  const before = colonyIntensityExport();
+  for (let i = 0; i < 10; i++) advanceColony('winter', 0.5, 0);
+  assert.strictEqual(colonyIntensityExport(), before, 'pause (dt 0) = full freeze');
+  for (let i = 0; i < 400; i++) advanceColony('summer', 0.5, 0.5);
+  assert.ok(Math.abs(colonyIntensityExport() - colonyIntensityTarget('summer', 0.5)) < 0.01, 'settles at target');
+});
+
+test('lifecycle: NO DECLINE FRAMING — every surface line is winter-safe (the constitution scan)', () => {
+  const forbidden = /declin|die|died|dead|loss|losing|shrink|fail|gone|perish|starv|sick|weaken|disappear/i;
+  for (const [season, line] of Object.entries(LIFECYCLE_LINES)) {
+    assert.ok(!forbidden.test(line), 'the ' + season + ' line must never read as decline: ' + JSON.stringify(line));
+    assert.ok(line.length > 20, 'the ' + season + ' line exists');
+  }
+  assert.ok(LIFECYCLE_LINES.winter.includes('clustered snug'), 'winter reads as tucked-in, never as empty');
+  assert.ok(LIFECYCLE_LINES.winter.includes('21'), 'carries the verified 21\u00b0C fact (EDUCATION.md)');
+  const rb = colonyReadbackExport('winter', 0.5);
+  assert.strictEqual(rb.line, LIFECYCLE_LINES.winter, 'the readback renders the one source');
+  assert.ok(rb.target <= 0.08, 'midwinter target is the cluster');
 });
 
 // ---------- collision ----------

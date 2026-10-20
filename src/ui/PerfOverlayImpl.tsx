@@ -345,6 +345,7 @@ function PerfOverlayPanel() {
       <Session6HoneyTriggers />
       <Session7SeedingReadback />
       <Session7VisitorTriggers />
+      <Session7ColonyReadback />
       <SaveInspector />
       <MilestoneChecklist />
     </div>
@@ -674,6 +675,51 @@ function Session7VisitorTriggers() {
           w?.placeStructure('wildcorner', -4.5, 5);
         }, 'visitor-fireflies')}
         <span style={{ fontSize: 11, opacity: 0.7 }}> windows: {usePlacementStore.getState().visitorWindows.length}</span>
+      </div>
+    </div>
+  );
+}
+
+/** session 7 readback section: bee lifecycles (#U3) — the colony breath.
+ *  Trigger-first: force season/progress (the natural inputs), read the ONE
+ *  shared semantic (engine/lifecycle). No direct population force exists. */
+function Session7ColonyReadback() {
+  const [, forceRender] = useState(0);
+  const refresh = () => forceRender((n) => n + 1);
+  const btn = (label: string, onClick: () => void, key?: string) => (
+    <button
+      key={key}
+      data-perf-s7={key}
+      onClick={() => {
+        onClick();
+        refresh();
+      }}
+      style={{
+        margin: '2px 4px 2px 0',
+        padding: '5px 9px',
+        borderRadius: 8,
+        border: 'none',
+        background: '#666',
+        color: '#fff',
+        fontFamily: 'inherit',
+        fontSize: 12,
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+  const w = (window as unknown as { __meadowlight?: { setSeason: (s: 'spring' | 'summer' | 'autumn' | 'winter') => void; setSeasonProgressForTest: (p: number) => void; colonyReadback: () => { line: string; intensity: number; target: number } } }).__meadowlight;
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
+      <div style={{ fontWeight: 'bold' }}>colony breath (U3)</div>
+      <div>
+        {btn('winter mid', () => { w?.setSeason('winter'); w?.setSeasonProgressForTest(0.4); }, 'colony-winter')}
+        {btn('spring start', () => { w?.setSeason('spring'); w?.setSeasonProgressForTest(0.05); }, 'colony-spring')}
+        {btn('summer full', () => { w?.setSeason('summer'); w?.setSeasonProgressForTest(0.5); }, 'colony-summer')}
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {' '}live {w ? w.colonyReadback().intensity.toFixed(2) : '?'} → target {w ? w.colonyReadback().target.toFixed(2) : '?'}
+        </span>
       </div>
     </div>
   );

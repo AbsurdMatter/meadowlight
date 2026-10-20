@@ -405,7 +405,102 @@ async function checkTimeControlsUI() {
   await page.close();
 }
 
-const map = { seeding: checkSeeding, visitors: checkVisitors, timecontrols: checkTimeControlsUI };
+/** U3: bee lifecycles, gently — the colony breath */
+async function checkColony() {
+  const { page, errors } = await newPage(browser, url);
+
+  // 1. forced conditions read correctly per season (P-panel path = the
+  //    natural inputs; no direct population force exists)
+  {
+    const seasons = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      const out = {};
+      for (const [season, p] of [['spring', 0.1], ['summer', 0.5], ['autumn', 0.9], ['winter', 0.5]]) {
+        w.setSeason(season);
+        w.setSeasonProgressForTest(p);
+        await new Promise((r) => setTimeout(r, 500));
+        out[season] = w.colonyReadback();
+      }
+      return out;
+    });
+    const ok =
+      seasons.spring.target > 0.2 &&
+      seasons.summer.target > seasons.spring.target &&
+      Math.abs(seasons.summer.target - seasons.autumn.target) < 0.5 &&
+      seasons.winter.target < 0.15 &&
+      seasons.winter.line.includes('clustered snug') &&
+      seasons.spring.line.includes('waking');
+    rec.record(
+      'colony.forced-seasons-read-correctly',
+      ok,
+      JSON.stringify(seasons, null, 1),
+    );
+  }
+
+  // 2. full-year accelerated trace: population rises through spring, holds
+  //    summer, clusters in winter, reawakens — via the natural calendar at 8x
+  {
+    const trace = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.clear();
+      w.placeStructure('hive', 0, 0);
+      w.plant('lavender', 2, 2);
+      w.plant('cosmos', 4, 2);
+      w.plant('clover', 6, 2);
+      w.setSeason('spring');
+      w.setSeasonProgressForTest(0.0);
+      w.resumeSeasonClock();
+      w.timeSetPaused(false);
+      w.timeSetSpeed(8);
+      const samples = [];
+      // ~4 seasons x ~92s at 8x = ~6min; sample each ~45s
+      for (let i = 0; i < 9; i++) {
+        await new Promise((r) => setTimeout(r, 45000));
+        const rb = w.colonyReadback();
+        samples.push({ i, intensity: +rb.intensity.toFixed(3), target: +rb.target.toFixed(3) });
+      }
+      w.timeSetSpeed(1);
+      return samples;
+    });
+    // the breath shape across the trace: some rise, some low cluster phase
+    const rises = trace.some((s, i) => i > 0 && s.intensity > trace[i - 1].intensity + 0.05);
+    const clusters = trace.some((s) => s.target < 0.15);
+    const peaks = trace.some((s) => s.intensity > 0.5);
+    rec.record(
+      'colony.full-year-accelerated-trace',
+      rises && clusters && peaks,
+      JSON.stringify(trace) + ' (rise + hold + cluster phases observed)',
+    );
+  }
+
+  // 3. no decline framing on ANY rendered surface (the constitution scan):
+  //    every UI string the surfaces can render for the colony
+  {
+    const scan = await page.evaluate(() => {
+      const w = window.__meadowlight;
+      const forbidden = /declin|die|died|dead|loss|losing|shrink|fail|gone|perish|starv|sick|weaken|disappear/i;
+      const lines = [];
+      for (const [season, p] of [['spring', 0.5], ['summer', 0.5], ['autumn', 0.5], ['winter', 0.5]]) {
+        const w2 = window.__meadowlight;
+        w2.setSeason(season);
+        w2.setSeasonProgressForTest(p);
+        lines.push({ season, line: w2.colonyReadback().line });
+      }
+      return { lines, bad: lines.filter((l) => forbidden.test(l.line)) };
+    });
+    rec.record(
+      'colony.no-decline-framing-any-surface',
+      scan.bad.length === 0 && scan.lines.length === 4,
+      JSON.stringify(scan),
+    );
+  }
+
+  const re = realErrors(errors);
+  rec.record('colony.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
+const map = { seeding: checkSeeding, visitors: checkVisitors, timecontrols: checkTimeControlsUI, colony: checkColony };
 for (const c of checks.split(',')) {
   if (map[c]) await map[c]();
   else rec.record(`unknown-check:${c}`, false, 'no such check in session7-gate');
