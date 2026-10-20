@@ -65,6 +65,8 @@ declare global {
       timeMultiplierReadback: () => number;
       /** #36 item 4: the classification query readbacks (deterministic gate) */
       isPlantableCellReadback: (x: number, z: number) => boolean;
+      /** #36 hive popup: open/close via the store path the click uses */
+      openHivePopup: (hiveId: string) => void;
       hillsBoxesReadback: () => { x: number; z: number; half: number }[];
       milestones: () => string[];
       beeCount: () => number;
@@ -190,6 +192,7 @@ export function installTestHook() {
     timeSpeed: () => currentSpeedStep(),
     timeMultiplierReadback: () => timeMultiplier(),
     isPlantableCellReadback: (x, z) => isPlantableCell(x, z),
+    openHivePopup: (hiveId) => usePlacementStore.getState().openHivePopup(hiveId),
     hillsBoxesReadback: () => hillsBoxes().map((b) => ({ x: b.x, z: b.z, half: b.half })),
     milestones: () => usePlacementStore.getState().milestones,
     beeCount: () => beeDebug.count,

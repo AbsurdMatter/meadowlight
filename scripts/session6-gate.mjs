@@ -723,7 +723,112 @@ async function checkCornerFold() {
   await page.close();
 }
 
-const map = { seasons: checkSeasons, recipes: checkRecipes, honey: checkHoney, time: checkTimeControls, corners: checkCornerFold };
+/** #36 hive popup: fill states + harvest through the popup UI + ONE
+ *  shared harvest path. NOTE: R3F ThreeEvent raycasts do not fire under
+ *  headless swiftshader (canvas events verified reaching the canvas;
+ *  handlers silent) — the popup is driven here through the STORE path the
+ *  click handler calls (openHivePopup), the popup's rendered DOM is
+ *  asserted present + in-viewport, and the harvest button is CLICKED FOR
+ *  REAL (DOM button, not canvas). The real canvas click->popup flow is
+ *  user-proven in real browsers and stays on the manual list. */
+async function checkHivePopup() {
+  const { page, errors } = await newPage(browser, url);
+  const hiveId = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    w.clear();
+    w.placeStructure('hive', 0, 0);
+    return w.structures()[0].id;
+  });
+  // 1. early stage: popup shows the gentle not-yet read, no harvest button
+  const early = await page.evaluate(async (id) => {
+    const w = window.__meadowlight;
+    w.setComb(id, 0.05);
+    // the store path the click handler calls (exposed on the test hook)
+    w.openHivePopup(id);
+    await new Promise((res) => setTimeout(res, 400));
+    const el = document.querySelector('[data-hive-popup]');
+    if (!el) return { open: false };
+    const rect = el.getBoundingClientRect();
+    return {
+      open: true,
+      inViewport: rect.top >= 0 && rect.bottom <= innerHeight && rect.width > 0,
+      gentleText: el.textContent.includes('settling in') || el.textContent.includes('still working'),
+      hasHarvestBtn: !!el.querySelector('[data-hive-popup-harvest]'),
+      hasMore: !!el.querySelector('[data-hive-popup-more]'),
+    };
+  }, hiveId);
+  rec.record(
+    'hivepopup.early-stage-gentle-not-yet',
+    early.open && early.inViewport && early.gentleText && !early.hasHarvestBtn && early.hasMore,
+    JSON.stringify(early),
+  );
+  // 2. full comb: harvest button shows; clicking it (REAL DOM click) gives
+  //    jar+1, comb partial, popup closes, ceremony + fact toast
+  const ready = await page.evaluate(async (id) => {
+    const w = window.__meadowlight;
+    w.setComb(id, 1);
+    await new Promise((res) => setTimeout(res, 300));
+    const el = document.querySelector('[data-hive-popup]');
+    return el
+      ? { open: true, hasHarvest: !!el.querySelector('[data-hive-popup-harvest]'), brim: el.textContent.includes('brim') }
+      : { open: false };
+  }, hiveId);
+  rec.record('hivepopup.full-comb-shows-harvest', ready.open && ready.hasHarvest, JSON.stringify(ready));
+  let harvested = false;
+  if (ready.hasHarvest) {
+    const before = await page.evaluate(() => ({ jars: window.__meadowlight.honeyJars(), comb: window.__meadowlight.hiveCombs() }));
+    await page.click('[data-hive-popup-harvest]');
+    await page.waitForTimeout(600);
+    const after = await page.evaluate((id) => ({
+      jars: window.__meadowlight.honeyJars(),
+      comb: window.__meadowlight.hiveCombs()[id],
+      popupOpen: !!document.querySelector('[data-hive-popup]'),
+      toast: [...document.querySelectorAll('div')].some((d) => d.textContent.includes('A jar of honey!')),
+    }), hiveId);
+    harvested =
+      after.jars === before.jars + 1 &&
+      Math.abs(after.comb - 0.35) < 0.05 &&
+      !after.popupOpen &&
+      after.toast;
+    rec.record(
+      'hivepopup.harvest-jar-ceremony-toast',
+      harvested,
+      `jars ${before.jars}->${after.jars}, comb->${(+after.comb).toFixed(2)}, popup closed: ${!after.popupOpen}, toast: ${after.toast}`,
+    );
+  }
+  // 3. 'more' reaches the info panel (no feature removed)
+  await page.evaluate((id) => window.__meadowlight.openHivePopup(id), hiveId);
+  await page.waitForTimeout(300);
+  await page.click('[data-hive-popup-more]');
+  await page.waitForTimeout(400);
+  const notebook = await page.evaluate(() => !!document.querySelector('#notebook-card'));
+  rec.record('hivepopup.more-reaches-info-panel', notebook, `notebook open: ${notebook}`);
+  // 4. the P-panel path is the SAME action (one code path under both)
+  const ppanel = await page.evaluate((id) => {
+    const w = window.__meadowlight;
+    w.setComb(id, 1);
+    const jars0 = w.honeyJars();
+    const ok = w.harvestHoney(id);
+    return { ok, jarsDelta: w.honeyJars() - jars0, comb: w.hiveCombs()[id] };
+  }, hiveId);
+  rec.record(
+    'hivepopup.ppanel-same-path',
+    ppanel.ok && ppanel.jarsDelta === 1 && Math.abs(ppanel.comb - 0.35) < 0.05,
+    JSON.stringify(ppanel),
+  );
+  // 5. close cleanly
+  await page.evaluate((id) => window.__meadowlight.openHivePopup(id), hiveId);
+  await page.waitForTimeout(200);
+  await page.click('[data-hive-popup-close]');
+  await page.waitForTimeout(200);
+  const closed = await page.evaluate(() => !document.querySelector('[data-hive-popup]'));
+  rec.record('hivepopup.closes-cleanly', closed, `closed: ${closed}`);
+  const re = realErrors(errors);
+  rec.record('hivepopup.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
+const map = { seasons: checkSeasons, recipes: checkRecipes, honey: checkHoney, time: checkTimeControls, corners: checkCornerFold, hivepopup: checkHivePopup };
 for (const c of checks.split(',')) {
   if (map[c]) await map[c]();
   else rec.record(`unknown-check:${c}`, false, 'no such check in session6-gate');

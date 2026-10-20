@@ -52,7 +52,14 @@ export function PlacedStructures() {
     // fires from the store; a not-yet-full hive still opens the notebook
     if (structureId === 'hive') {
       const hiveId = idMaps.current[structureId]?.[e.instanceId ?? -1];
-      if (hiveId && s.harvestHoney(hiveId)) return;
+      if (hiveId) {
+        // #36 hive popup: the harvest moment happens AT the hive — the
+        // popup carries the fill state + harvest button (ONE shared
+        // harvestHoney path under it and the P panel); the info panel
+        // stays reachable via the popup's 'more' link
+        s.openHivePopup(hiveId);
+        return;
+      }
     }
     openNotebook({ kind: 'structure', id: structureId });
   };

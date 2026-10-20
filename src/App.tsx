@@ -25,6 +25,7 @@ import { CornerControls } from './ui/CornerControls';
 import { Onboarding } from './ui/Onboarding';
 import { Toasts } from './ui/Toasts';
 import { Notebook } from './ui/Notebook';
+import { HivePopup } from './ui/HivePopup';
 import { MilestoneWatcher } from './ui/MilestoneWatcher';
 import { PerfOverlay } from './ui/PerfOverlay';
 import { usePlacementStore } from './render/placementStore';
@@ -164,6 +165,7 @@ export default function App() {
       {loaded && <Onboarding />}
       {loaded && <Toasts />}
       {loaded && <Notebook />}
+      {loaded && <HivePopup />}
       <MilestoneWatcher />
       {PerfOverlay && <PerfOverlay />}
       <div

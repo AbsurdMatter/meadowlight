@@ -82,6 +82,10 @@ export interface PlacementState {
   harvestHoney: (hiveId: string) => boolean;
   /** #10: hive ids currently mid-harvest-dip (the render reads this) */
   harvestDips: Record<string, number>;
+  /** #36 hive popup: the hive the popup is anchored to (null = closed) */
+  hivePopup: string | null;
+  openHivePopup: (hiveId: string) => void;
+  closeHivePopup: () => void;
   earnMilestone: (id: MilestoneId, label: string, detail: string) => void;
   dismissToast: (id: number) => void;
   openNotebook: (entry: PlacementState['notebook']) => void;
@@ -220,6 +224,9 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   },
   honeyJars: initial.honeyJars ?? 0,
   harvestDips: {},
+  hivePopup: null,
+  openHivePopup: (hiveId) => set({ hivePopup: hiveId }),
+  closeHivePopup: () => set({ hivePopup: null }),
   harvestHoney: (hiveId) => {
     const s = get();
     const fill = s.hiveCombs[hiveId] ?? 0;
@@ -271,6 +278,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       hiveCombs: {},
       honeyJars: 0,
       harvestDips: {},
+      hivePopup: null,
     });
     forceSeason('summer');
     resumeSeasonClock();
