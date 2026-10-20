@@ -204,3 +204,19 @@ updating it — caught by the user, not the process.)
   object and all milestones — locked milestones stay visible as gentle locked
   entries. Notebook opens only when no placement tool is selected
   (click-with-tool = planting, per standard builder UX).
+
+## Session 7 decisions (context for later sessions)
+
+- Pause fully freezes the world — simulation AND animation. There is no
+  sim-frozen-but-animating state (user decision, PR #37). Implementation:
+  ONE shared scaled dt (engine/scaledTime.ts) ticked from Sky.tsx's single
+  time site, `dt * timeMultiplier()`, exactly 0 when paused. Every animation
+  system (bees, visitors, fireflies, sway, rain, clouds, glow) consumes
+  `scaledDelta()`/`scaledElapsed()` from it — never R3F's raw delta or
+  `clock.elapsedTime` for world motion. Perf/frame-time measurement is the
+  one exception and stays RAW (a device's real frame cost must be observable
+  even while the world is paused).
+- Pause must be OBSERVABLE at a glance: the time-controls row dims and shows
+  a "resting" state whenever paused. The paused/speed semantic lives in
+  engine/timeControl.ts as the one named source; every surface (dial row,
+  P panel, gates) renders from it.
