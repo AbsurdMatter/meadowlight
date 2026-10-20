@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import * as THREE from 'three';
 import { usePlacementStore } from '../render/placementStore';
 import { STRUCTURE_BY_ID } from '../data/structures';
-import { HONEY_TUNING } from '../data/honey';
+import { combReady } from '../engine/honey';
 import { theme, headingStyle } from './theme';
 
 /**
@@ -52,7 +52,9 @@ export function HivePopup() {
 
   if (!hive || !screen) return null;
   const fill = hiveCombs[hive.id] ?? 0;
-  const ready = fill >= HONEY_TUNING.fullAt - 1e-9;
+  // ONE shared predicate: the same combReady the harvest path uses
+  // (the isDaylight lesson — no second definition of full)
+  const ready = combReady(fill);
   const name = STRUCTURE_BY_ID.hive?.name ?? 'Hive';
   const fillLine =
     ready

@@ -46,9 +46,11 @@ export function advanceComb(
   );
 }
 
-/** true when the comb is full and a harvest would give a jar */
+/** true when the comb is full and a harvest would give a jar — the ONE
+ * shared fullness predicate (popup state line, harvest path, P panel,
+ * gate all call this); epsilon from tuning, perceptual not float-sized */
 export function combReady(fill: number): boolean {
-  return fill >= HONEY_TUNING.fullAt - 1e-9;
+  return fill >= HONEY_TUNING.fullAt - HONEY_TUNING.fullEpsilon;
 }
 
 /** the fill after a harvest — partial, never zero (residents, not machines) */

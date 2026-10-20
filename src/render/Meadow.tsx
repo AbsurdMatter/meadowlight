@@ -5,7 +5,14 @@ import { groundAt } from '../engine/ground';
 
 const GRASS_COLORS = ['#94b364', '#8fae5f', '#87a75a', '#7d9f54'];
 /** bowl cross-section: the same earth tones the hills use */
-const EARTH_COLORS = ['#8a7350', '#7d6646', '#93795a'];
+/*
+ * #36 terrain retune: the rim band was EARTH brown (#8a7350 family, the
+ * bowl-cross-section read), tuned when the bowl was ~1u deep — at the new
+ * 0.2u shallow rim the brown strip protruded visually against the green
+ * outer terrain. The rim top now reads as a DRIER GRASS tone — the
+ * meadow-to-outer-meadow transition family, so the seam is grass-to-grass.
+ */
+const RIM_GRASS_COLORS = ['#a8a45f', '#9aa057', '#b0a768'];
 
 export function Meadow() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -46,9 +53,9 @@ export function Meadow() {
         mat.setPosition(x, h - depth * 0.5, z);
         mesh.setMatrixAt(i, mat);
         if (isRim) {
-          color.set(EARTH_COLORS[
+          color.set(RIM_GRASS_COLORS[
             Math.abs(Math.floor(Math.sin(ix * 12.9898 + iz * 78.233) * 43758.5)) %
-              EARTH_COLORS.length
+              RIM_GRASS_COLORS.length
           ]);
         } else {
           color.set(

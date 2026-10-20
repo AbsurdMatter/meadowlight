@@ -2,8 +2,15 @@ import { terrainHeight, MEADOW_SIZE } from '../engine/terrain';
 
 export const FOG = {
   color: '#f0c48a',
-  near: 26,
-  far: 74,
+  /**
+   * #36 fog retune (eyeball round 3): the falloff was perspective-coupled
+   * and read too heavy — mid-distance terrain (the outer rim, ~35-50u)
+   * was veiled solid. Softly veiled, never blocked: the near/far pair
+   * now starts deeper and ends much deeper, so the mid band keeps
+   * visible detail while only the far horizon melts into the sky.
+   */
+  near: 34,
+  far: 120,
 };
 
 export const CAMERA_BOUNDS = {

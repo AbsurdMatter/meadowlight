@@ -803,6 +803,50 @@ async function checkHivePopup() {
   await page.waitForTimeout(400);
   const notebook = await page.evaluate(() => !!document.querySelector('#notebook-card'));
   rec.record('hivepopup.more-reaches-info-panel', notebook, `notebook open: ${notebook}`);
+  // 3b. THE END-TO-END READBACK AT FULL (eyeball round 3 bug: popup read
+  // 'still gathering' at a force-filled comb). Force-fill 1.0 with the
+  // popup OPEN (reactive re-read, not a snapshot), assert the fill-state
+  // line reads brimming AND the harvest button is enabled, then harvest
+  // end-to-end from the popup. Also the epsilon case: 0.9999 reads full.
+  const atFull = await page.evaluate(async (id) => {
+    const w = window.__meadowlight;
+    w.openHivePopup(id);
+    await new Promise((res) => setTimeout(res, 250));
+    w.setComb(id, 1);
+    await new Promise((res) => setTimeout(res, 350));
+    const el = document.querySelector('[data-hive-popup]');
+    if (!el) return { open: false };
+    return {
+      open: true,
+      brimmingText: el.textContent.includes('brim'),
+      harvestEnabled: !!el.querySelector('[data-hive-popup-harvest]'),
+      noStillWorking: !el.textContent.includes('still working'),
+    };
+  }, hiveId);
+  rec.record(
+    'hivepopup.full-readback-brimming-and-enabled',
+    atFull.open && atFull.brimmingText && atFull.harvestEnabled && atFull.noStillWorking,
+    JSON.stringify(atFull),
+  );
+  // epsilon: 0.9999 is full (the isDaylight boundary lesson)
+  const atEps = await page.evaluate(async (id) => {
+    const w = window.__meadowlight;
+    w.setComb(id, 0.9999);
+    await new Promise((res) => setTimeout(res, 300));
+    const el = document.querySelector('[data-hive-popup]');
+    return el ? { harvestEnabled: !!el.querySelector('[data-hive-popup-harvest]') } : { open: false };
+  }, hiveId);
+  rec.record('hivepopup.epsilon-0.9999-reads-full', !!atEps.harvestEnabled, JSON.stringify(atEps));
+  // end-to-end harvest from the popup at full
+  const e2eBefore = await page.evaluate(() => window.__meadowlight.honeyJars());
+  await page.click('[data-hive-popup-harvest]');
+  await page.waitForTimeout(500);
+  const e2eAfter = await page.evaluate(() => ({ jars: window.__meadowlight.honeyJars(), popupOpen: !!document.querySelector('[data-hive-popup]') }));
+  rec.record(
+    'hivepopup.end-to-end-harvest-at-full',
+    e2eAfter.jars === e2eBefore + 1 && !e2eAfter.popupOpen,
+    `jars ${e2eBefore}->${e2eAfter.jars}, popup closed: ${!e2eAfter.popupOpen}`,
+  );
   // 4. the P-panel path is the SAME action (one code path under both)
   const ppanel = await page.evaluate((id) => {
     const w = window.__meadowlight;

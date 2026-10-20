@@ -552,8 +552,10 @@ function Session6HoneyTriggers() {
     <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
       <div style={{ fontWeight: 'bold' }}>honey (#10)</div>
       <div>
-        {btn('fill first hive', () => {
-          if (firstHive) usePlacementStore.getState().setComb(firstHive.id, 1);
+        {btn("fill hive (popup's when open)", () => {
+          const s = usePlacementStore.getState();
+          const target = s.hivePopup ?? firstHive?.id;
+          if (target) s.setComb(target, 1);
         }, 'honey-fill')}
         {btn('harvest first hive', () => {
           if (firstHive) usePlacementStore.getState().harvestHoney(firstHive.id);

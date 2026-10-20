@@ -29,6 +29,13 @@ export const HONEY_TUNING = {
   idleFillPerSecond: 0.00025,
   /** fill level at which the comb reads "full" and can be harvested */
   fullAt: 1,
+  /**
+   * fullness epsilon (the isDaylight boundary lesson): a comb within
+   * this of fullAt IS full — 0.9999 reads brimming and harvestable.
+   * ONE shared tolerance, consumed by combReady (popup + harvest path
+   * + gate all read the same predicate).
+   */
+  fullEpsilon: 1e-4,
   /** harvest leaves the comb at this fill (residents, not machines) */
   afterHarvest: 0.35,
   /**
