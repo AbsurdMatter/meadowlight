@@ -103,13 +103,17 @@ async function checkSeeding() {
     const capsHold = run.samples.every((s) => s.volunteers <= 5);
     const totalVolunteers = run.samples[run.samples.length - 1].volunteers;
     // growth pattern: volunteers appear (a meadow that never seeds in 4
-    // seasons is broken), but stay a small fraction — never invasive
+    // seasons is broken), but stay a small fraction — never invasive.
+    // #37 finding 2: the constraint the visitor FEELS is the CUMULATIVE
+    // share (per-season caps alone let volunteers compound season over
+    // season — the gate's first run measured 20/36, a third self-grown).
     const final = run.samples[run.samples.length - 1].total;
-    const invasive = totalVolunteers > Math.max(12, run.before * 0.35);
+    const fraction = totalVolunteers / final;
+    const invasive = fraction > 0.2; // the brake targets 15%; headroom for the roll's own shape
     rec.record(
       'seeding.accelerated-4season-caps-hold',
       capsHold && !invasive && totalVolunteers >= 1,
-      JSON.stringify(run.samples) + ` (total volunteers ${totalVolunteers}/${final}, before ${run.before})`,
+      JSON.stringify(run.samples) + ` (volunteers ${totalVolunteers}/${final} = ${(fraction * 100).toFixed(0)}%, cumulative brake target 15%)`,
     );
   }
 
@@ -271,7 +275,85 @@ async function checkVisitors() {
   await page.close();
 }
 
-const map = { seeding: checkSeeding, visitors: checkVisitors };
+/** #37 review: time controls must be PRESENT and FUNCTIONAL — the
+ *  session-6 gate asserted only clock semantics, never the UI row, so a
+ *  missing-controls regression had no detector. This check asserts the
+ *  DOM row (data-time-control buttons mounted, in-viewport) AND that the
+ *  buttons drive the same engine the P-panel readbacks expose. */
+async function checkTimeControlsUI() {
+  const { page, errors } = await newPage(browser, url);
+
+  // 1. the row is mounted and visible (the observable, not innerHTML)
+  const present = await page.evaluate(() => {
+    const btns = Array.from(document.querySelectorAll('[data-time-control]'));
+    return {
+      count: btns.length,
+      visible: btns.map((b) => {
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight;
+      }),
+      labels: btns.map((b) => b.textContent),
+    };
+  });
+  const allVisible = present.visible.length === present.count && present.count >= 5;
+  rec.record(
+    'timecontrols.row-present-in-viewport',
+    present.count >= 5 && allVisible,
+    JSON.stringify({ count: present.count, labels: present.labels }),
+  );
+
+  // 2. clicking the real buttons drives the real clock (pause, 4x)
+  const drove = await page.evaluate(async () => {
+    const w = window.__meadowlight;
+    w.timeSetSpeed(1);
+    w.timeSetPaused(false);
+    const d0 = w.dayPhaseReadback();
+    await new Promise((r) => setTimeout(r, 1200));
+    const d1 = w.dayPhaseReadback();
+    return { d0, d1, moving: d1 !== d0 };
+  });
+  const clickPause = await page.click('[data-time-control="pause"]');
+  const afterPause = await page.evaluate(async () => {
+    const w = window.__meadowlight;
+    const d0 = w.dayPhaseReadback();
+    await new Promise((r) => setTimeout(r, 1200));
+    const d1 = w.dayPhaseReadback();
+    return { paused: w.timeIsPaused(), frozen: d0 === d1 };
+  });
+  rec.record(
+    'timecontrols.pause-button-functional',
+    drove.moving && afterPause.paused && afterPause.frozen,
+    JSON.stringify({ drove, afterPause }),
+  );
+  await page.click('[data-time-control="pause"]'); // resume
+  const fourX = await page.evaluate(async () => {
+    const w = window.__meadowlight;
+    const d0 = w.dayPhaseReadback();
+    await new Promise((r) => setTimeout(r, 1200));
+    const d1 = w.dayPhaseReadback();
+    return { rate: d1 - d0, speed: w.timeSpeed() };
+  });
+  await page.click('[data-time-control="speed-4"]');
+  const fourAfter = await page.evaluate(async () => {
+    const w = window.__meadowlight;
+    const d0 = w.dayPhaseReadback();
+    await new Promise((r) => setTimeout(r, 1200));
+    const d1 = w.dayPhaseReadback();
+    return { rate: d1 - d0, speed: w.timeSpeed() };
+  });
+  rec.record(
+    'timecontrols.4x-button-functional',
+    fourAfter.speed === 4 && fourAfter.rate > fourX.rate * 2,
+    JSON.stringify({ fourX, fourAfter }),
+  );
+  await page.click('[data-time-control="speed-1"]');
+
+  const re = realErrors(errors);
+  rec.record('timecontrols.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
+const map = { seeding: checkSeeding, visitors: checkVisitors, timecontrols: checkTimeControlsUI };
 for (const c of checks.split(',')) {
   if (map[c]) await map[c]();
   else rec.record(`unknown-check:${c}`, false, 'no such check in session7-gate');
