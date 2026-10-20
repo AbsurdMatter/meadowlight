@@ -158,6 +158,16 @@ export const TREES = {
   clusters: [
     { x: 30, z: 12, count: 16, spread: 9 },
     { x: -27, z: -21, count: 14, spread: 8 },
+    /**
+     * U4 revision 3/3 (PROPOSAL, #6297184564): trees behind the pond —
+     * the pond is at (36,-14); a small deterministic cluster on its far
+     * side (from the meadow-center viewing angle) frames the water and
+     * gives the scene depth. Positions are derived from the cluster rule
+     * (deterministic layout), not hand-placed; behind = beyond the pond
+     * center along the meadow->pond axis. COMMIT ONLY AFTER the user's
+     * proposal-screenshot pass (taste-first).
+     */
+    { x: 45, z: -21, count: 9, spread: 6 },
   ],
   variants: [
     {
