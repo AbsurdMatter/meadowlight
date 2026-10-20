@@ -64,12 +64,28 @@ export const HABITAT_TUNING = {
     perCorner: [3, 6] as [number, number],
     colors: ['#4f7a3c', '#5d8a48', '#446e35'],
   },
-  /** pond-edge plants: forget-me-not is already in the roster (fact reuse) */
+  /**
+   * Pond edge (U4 revision, user verdict #6297184564): the shore ring read
+   * too symmetrical — a regular band. The fix is CONTROLLED VARIANCE, not
+   * jitter (the session-3 lesson: jitter clashed with the voxel language):
+   * the shoreline is split into SEGMENTS; each segment carries its own
+   * seeded density, cluster size, and band width/depth derived from a
+   * seeded noise curve along the shore angle — organic, deterministic,
+   * and assertible (per-segment variance must be non-zero and bounded).
+   */
   pondEdge: {
     /** the band ring where edge plants sit (on terrain, outside water) */
     ringInner: LAKE.radius + 0.6,
     ringOuter: LAKE.radius + LAKE.shoreWidth * 0.9,
-    count: 14,
+    /** the ring is split into this many angular segments */
+    segments: 12,
+    /** per-segment plant density (plants per segment) — seeded, varied */
+    density: { min: 1, max: 5 } as { min: number; max: number },
+    /** cluster sizes: some segments carry tight clusters, some lone plants */
+    clusterSpread: { min: 0.35, max: 1.4 } as { min: number; max: number },
+    /** the band's width/depth drift along the shore via a seeded noise
+     *  curve: fraction of the ring that is "wet fringe" vs "dry grass" */
+    bandDrift: { min: 0.15, max: 0.85 } as { min: number; max: number },
     /** the shore band's own family + a hint of the flower for reads */
     colors: ['#7a9d54', '#6f9fd8', '#89b4e6'],
   },
@@ -133,6 +149,49 @@ export function cornerFoldCells(): { x: number; z: number }[] {
 /** the four corner regions keyed by quadrant sign, for per-corner caps */
 export function cornerKey(x: number, z: number): string {
   return `${x < 0 ? '-' : '+'}${z < 0 ? '-' : '+'}`;
+}
+
+/**
+ * The pond-edge layout (ONE source, the layout key): per-segment parameters
+ * derived from seeded noise along the shore angle. Exported for unit tests
+ * and the gate's asymmetry assertion — the renderer consumes exactly this.
+ *
+ * The noise is a smooth seeded curve (not per-plant jitter): segment s's
+ * parameters derive from hashes of ITS OWN index, so neighboring segments
+ * can differ, but each segment is internally coherent — clusters read as
+ * clusters, gaps as gaps. That is the controlled-variance model: variance
+ * BETWEEN segments, calm WITHIN each.
+ */
+export interface PondSegment {
+  /** segment index, 0..segments-1 */
+  index: number;
+  /** plants this segment carries (density.min..density.max) */
+  plants: number;
+  /** cluster spread factor (tight..loose) */
+  spread: number;
+  /** how far into the ring band this segment's plants sit (0..1) */
+  bandDepth: number;
+  /** band width fraction for this segment (0..1 of ringInner..ringOuter) */
+  bandWidth: number;
+}
+
+export function pondSegments(): PondSegment[] {
+  const t = HABITAT_TUNING.pondEdge;
+  const out: PondSegment[] = [];
+  for (let s = 0; s < t.segments; s++) {
+    const densityRoll = sceneryHash(s, 101, 950);
+    const spreadRoll = sceneryHash(s, 103, 951);
+    const depthRoll = sceneryHash(s, 107, 952);
+    const widthRoll = sceneryHash(s, 109, 953);
+    out.push({
+      index: s,
+      plants: t.density.min + Math.floor(densityRoll * (t.density.max - t.density.min + 1)),
+      spread: t.clusterSpread.min + spreadRoll * (t.clusterSpread.max - t.clusterSpread.min),
+      bandDepth: t.bandDrift.min + depthRoll * (t.bandDrift.max - t.bandDrift.min),
+      bandWidth: 0.3 + widthRoll * 0.6,
+    });
+  }
+  return out;
 }
 
 /** deterministic 0..1 hash for scenery layout (the grass pattern's math) */

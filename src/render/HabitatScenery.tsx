@@ -7,6 +7,7 @@ import {
   cornerFoldCells,
   cornerKey,
   sceneryHash,
+  pondSegments,
 } from '../data/habitatScenery';
 import { groundAt } from '../engine/ground';
 import { LAKE } from '../data/environment';
@@ -129,24 +130,38 @@ function buildCornerPieces(): Piece[] {
 
 /** pond-edge plants on the shore band ring (deterministic) */
 function buildPondEdgePieces(): Piece[] {
+  // U4 revision: the controlled-variance shore — segments from the layout
+  // key (data/habitatScenery pondSegments, the ONE source). Each segment
+  // carries its own density/cluster/band parameters; plants land WITHIN
+  // their segment's angular span and band slice, so clusters read as
+  // clusters and gaps as gaps (no per-plant jitter — the session-3 rule).
   const t = HABITAT_TUNING.pondEdge;
+  const segments = pondSegments();
   const out: Piece[] = [];
-  for (let i = 0; i < t.count; i++) {
-    const a = (i / t.count) * Math.PI * 2 + sceneryHash(i, 7, 900) * 0.35;
-    const d = t.ringInner + sceneryHash(i, 11, 901) * (t.ringOuter - t.ringInner);
-    const x = LAKE.center[0] + Math.cos(a) * d;
-    const z = LAKE.center[1] + Math.sin(a) * d;
-    const g = groundAt(x, z);
-    if (g.isWater) continue;
-    const s = 0.35 + sceneryHash(i, 13, 902) * 0.3;
-    out.push({
-      x,
-      z,
-      y: g.height + s * 0.4,
-      size: [s, s * 0.9, s],
-      color: t.colors[Math.floor(sceneryHash(i, 17, 903) * t.colors.length)],
-      rotY: 0,
-    });
+  for (const seg of segments) {
+    const a0 = (seg.index / t.segments) * Math.PI * 2;
+    const a1 = ((seg.index + 1) / t.segments) * Math.PI * 2;
+    const bandLo = t.ringInner + (t.ringOuter - t.ringInner) * seg.bandDepth * (1 - seg.bandWidth);
+    const bandHi = t.ringInner + (t.ringOuter - t.ringInner) * Math.min(1, seg.bandDepth + seg.bandWidth * 0.5);
+    for (let p = 0; p < seg.plants; p++) {
+      // within-segment coherence: positions derive from the segment's own
+      // cluster center + spread, not a fresh uniform roll per plant
+      const ca = (a0 + a1) / 2 + (sceneryHash(seg.index, p * 31 + 3, 955) - 0.5) * seg.spread * (a1 - a0) * 2.2;
+      const cd = bandLo + sceneryHash(seg.index, p * 17 + 5, 956) * Math.max(0.001, bandHi - bandLo);
+      const x = LAKE.center[0] + Math.cos(ca) * cd;
+      const z = LAKE.center[1] + Math.sin(ca) * cd;
+      const g = groundAt(x, z);
+      if (g.isWater) continue;
+      const s = 0.35 + sceneryHash(seg.index, p * 13 + 7, 957) * 0.3;
+      out.push({
+        x,
+        z,
+        y: g.height + s * 0.4,
+        size: [s, s * 0.9, s],
+        color: t.colors[Math.floor(sceneryHash(seg.index, p * 19 + 11, 958) * t.colors.length)],
+        rotY: 0,
+      });
+    }
   }
   return out;
 }

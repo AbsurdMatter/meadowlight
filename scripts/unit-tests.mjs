@@ -91,7 +91,7 @@ const { flowerBlocked, structureBlocked } = require(OUT + '/engine/collision.js'
 const { computeCaptionLayout, fallbackMetrics } = require(OUT + '/engine/postcardLayout.js');
 const { rollVolunteers, compatibleSeedling } = require(OUT + '/engine/seeding.js');
 const { colonyIntensityTarget, LIFECYCLE_LINES } = require(OUT + '/data/lifecycle.js');
-const { HABITAT_TUNING, cornerFoldCells, cornerKey } = require(OUT + '/data/habitatScenery.js');
+const { HABITAT_TUNING, cornerFoldCells, cornerKey, pondSegments } = require(OUT + '/data/habitatScenery.js');
 const { NIGHT_SKY_TUNING, CLOUDS_OPACITY_BEFORE } = require(OUT + '/data/nightSky.js');
 const { starVisibility } = require(OUT + '/engine/nightSky.js');
 const { advanceColony, colonyIntensity: colonyIntensityExport, colonyReadback: colonyReadbackExport, setColonyIntensityForTest } = require(OUT + '/engine/lifecycle.js');
@@ -962,6 +962,31 @@ test('clouds: translucent — softer than the composed original, never gone', ()
   const now = NIGHT_SKY_TUNING.clouds.opacity;
   assert.ok(now < CLOUDS_OPACITY_BEFORE, 'more translucent than the 0.92 original');
   assert.ok(now >= 0.35 && now <= 0.75, 'softly veiled, not gone and not a ghost: ' + now);
+});
+
+// ---------- session 7 U4 revision: pond edge (controlled variance) ----------
+test('pond edge: per-segment variance is non-zero and bounded (asymmetric but deterministic)', () => {
+  const segs = pondSegments();
+  assert.strictEqual(segs.length, HABITAT_TUNING.pondEdge.segments, 'the shore splits into the tuned segment count');
+  const plants = segs.map((s) => s.plants);
+  const spreads = segs.map((s) => s.spread);
+  const depths = segs.map((s) => s.bandDepth);
+  // asymmetry: the ring is NOT uniform — segments differ
+  const pVar = Math.max(...plants) - Math.min(...plants);
+  const sVar = Math.max(...spreads) - Math.min(...spreads);
+  const dVar = Math.max(...depths) - Math.min(...depths);
+  assert.ok(pVar >= 2, 'per-segment density varies: ' + pVar);
+  assert.ok(sVar > 0.5, 'cluster spread varies: ' + sVar.toFixed(2));
+  assert.ok(dVar > 0.4, 'band depth varies: ' + dVar.toFixed(2));
+  // bounded: every segment stays inside its tuned envelope
+  for (const s of segs) {
+    assert.ok(s.plants >= HABITAT_TUNING.pondEdge.density.min && s.plants <= HABITAT_TUNING.pondEdge.density.max, 'density in bounds');
+    assert.ok(s.spread >= HABITAT_TUNING.pondEdge.clusterSpread.min - 1e-9 && s.spread <= HABITAT_TUNING.pondEdge.clusterSpread.max + 1e-9, 'spread in bounds');
+    assert.ok(s.bandDepth >= HABITAT_TUNING.pondEdge.bandDrift.min - 1e-9 && s.bandDepth <= HABITAT_TUNING.pondEdge.bandDrift.max + 1e-9, 'band depth in bounds');
+    assert.ok(s.bandWidth > 0.25 && s.bandWidth <= 0.92, 'band width in bounds');
+  }
+  // deterministic: the same segments derive every call
+  assert.deepStrictEqual(pondSegments(), segs, 'the shore layout is stable across calls');
 });
 
 // ---------- collision ----------

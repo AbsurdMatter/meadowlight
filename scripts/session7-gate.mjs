@@ -604,6 +604,23 @@ async function checkHabitat() {
     cls.plantable > 300 && cls.unplantable > 10,
     JSON.stringify(cls) + ' (scenery never reclassifies ground)',
   );
+  // 3. pond-edge asymmetry (U4 revision): per-segment density variance
+  //    non-zero and bounded — the shore reads organic, not a regular band
+  {
+    const asym = await page.evaluate(() => {
+      const w = window.__meadowlight;
+      return w.habitatReadback ? w.pondSegmentsReadback() : null;
+    });
+    if (asym) {
+      const plants = asym.map((s) => s.plants);
+      const pVar = Math.max(...plants) - Math.min(...plants);
+      rec.record(
+        'habitat.pond-edge-asymmetry',
+        pVar >= 2 && plants.every((p) => p >= 1 && p <= 5),
+        'per-segment density ' + JSON.stringify(plants) + ' (variance ' + pVar + ')',
+      );
+    }
+  }
   const re = realErrors(errors);
   rec.record('habitat.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
   await page.close();
