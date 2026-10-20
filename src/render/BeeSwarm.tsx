@@ -1,6 +1,8 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { scaledDelta, scaledElapsed } from '../engine/scaledTime';
+import { advanceColony, colonyIntensity } from '../engine/lifecycle';
+import { seasonProgress } from '../engine/seasonClock';
 import * as THREE from 'three';
 import { BEE_TUNING } from '../data/bees';
 import { PLANT_BY_ID } from '../data/plants';
@@ -146,6 +148,12 @@ export function BeeSwarm() {
       }
     }
 
+    // U3: the colony breath — advance the live intensity toward the
+    // season's target with the shared scaled dt (frozen under pause),
+    // then scale the population by it. One source: the popup, panel,
+    // and P inspector read the same colonyIntensity().
+    advanceColony(s.season, seasonProgress(), delta);
+    const intensity = colonyIntensity();
     // target bee counts per hive from local appeal
     const perHive = hives.map((hive) => {
       const appeal = computeAppeal(
@@ -153,9 +161,12 @@ export function BeeSwarm() {
         world,
         FORAGE_RADIUS,
       ).score;
-      return foraging
-        ? beesForHive(appeal, BEE_TUNING.beesPerHive, BEE_TUNING.maxBeesPerHive)
-        : Math.round(BEE_TUNING.maxBeesPerHive * BEE_TUNING.winterBeeFraction);
+      const full = beesForHive(appeal, BEE_TUNING.beesPerHive, BEE_TUNING.maxBeesPerHive);
+      // the breath scales the OUT colony; the rest are inside, clustered
+      // (never lost — winter's read is "tucked in", and the popup says so).
+      // Out-of-season (winter) foraging is 0 anyway, so the intensity
+      // alone shapes the year: grow spring, hold summer, thin autumn.
+      return Math.max(1, Math.round(full * intensity));
     });
     const targetTotal = Math.min(
       adaptiveCap.current,

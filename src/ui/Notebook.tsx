@@ -8,6 +8,8 @@ import {
   chooseMeadowFact,
 } from '../engine/factSelection';
 import { theme, headingStyle } from './theme';
+import { colonyReadback } from '../engine/lifecycle';
+import { seasonProgress } from '../engine/seasonClock';
 
 /**
  * Ambient info panel: shows a fact for the inspected object, varies content
@@ -88,7 +90,11 @@ export function Notebook() {
         // the shared state line only — the harvest affordance lives in
         // the hive POPUP's real button (a 'click the hive' instruction
         // here was a dead end: clicking the hive opens the popup)
-        hint = combStateLine(v);
+        // U3: the colony line joins it — same source as the popup/P panel
+        hint = `${combStateLine(v)} ${colonyReadback(
+          s.season,
+          seasonProgress(),
+        ).line}`;
       }
       return { title: name, choice, hint };
     }

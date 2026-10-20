@@ -4,6 +4,8 @@ import { usePlacementStore } from '../render/placementStore';
 import { STRUCTURE_BY_ID } from '../data/structures';
 import { combReady } from '../engine/honey';
 import { combStateLine } from '../data/honey';
+import { colonyReadback } from '../engine/lifecycle';
+import { seasonProgress } from '../engine/seasonClock';
 import { theme, headingStyle } from './theme';
 
 /**
@@ -91,6 +93,10 @@ export function HivePopup() {
   // the ONE shared state line (src/data/honey) — the info panel's hive
   // hint renders the same strings, so both surfaces always agree
   const fillLine = combStateLine(fill);
+  // U3: the colony-breath line — ONE shared source (engine/lifecycle);
+  // the popup, the info panel, and the P inspector all render this exact
+  // string set, so no surface can ever disagree (or invent a decline read)
+  const colony = colonyReadback(usePlacementStore.getState().season, seasonProgress());
 
   // the projection is the SINGLE anchor source (raised + clamped); the
   // style layer must not apply a second offset
@@ -133,6 +139,7 @@ export function HivePopup() {
         </button>
       </div>
       <div style={{ fontSize: theme.font.smallSize, lineHeight: 1.4, marginTop: 4 }}>{fillLine}</div>
+      <div style={{ fontSize: theme.font.smallSize, lineHeight: 1.4, marginTop: 4 }}>{colony.line}</div>
       {ready ? (
         <button
           data-hive-popup-harvest
