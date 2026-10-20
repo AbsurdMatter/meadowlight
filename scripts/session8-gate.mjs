@@ -219,16 +219,42 @@ async function checkMagnifier() {
     JSON.stringify(card));
   rec.record('magnifier.card-never-captures-pointer', !!card && card.pointerEvents === 'none',
     'pointer-events: ' + (card ? card.pointerEvents : 'n/a'));
-  // ZERO MUTATION: the save blob is byte-identical after inspecting
-  const blobBefore = await page.evaluate(() => localStorage.getItem('meadowlight.world.v2'));
-  await page.evaluate(() => {
-    window.__meadowlight.setMagnifierEntryForTest(null);
-    window.__meadowlight.toggleMagnifier();
+  // ZERO MUTATION, detector-race-proofed (PR #38 comment #6300438839):
+  // the app AUTOSAVES every 3s and save() serializes the live dayPhase +
+  // seasonProgress, which drift EVERY FRAME — two whole-blob snapshots taken
+  // apart in wall-time differ with zero glass involvement (the user's FAIL
+  // was exactly this race, not a glass write). Fix per the detector lessons:
+  // (a) freeze the clock around the snapshots so no autosave/rollover can
+  // land mid-check, (b) compare the PLACED-ITEMS subset (the only save-relevant
+  // state inspection could touch), (c) a FAIL names the differing keys —
+  // a FAIL that doesn't is a half-fixed detector.
+  const inspectionMutation = await page.evaluate(async () => {
+    const w = window.__meadowlight;
+    const read = () => JSON.parse(localStorage.getItem('meadowlight.world.v2') || '{}');
+    const wasPaused = w.timeIsPaused();
+    w.timeSetPaused(true); // full freeze: no frame drift, no autosave mid-compare
+    w.save(); // a save at the frozen instant = the baseline
+    const before = read();
+    // inspect: hover on, hover off, glass off — the full N3 interaction set
+    w.setMagnifierEntryForTest({ kind: 'flower', itemId: before.items[0].id });
+    w.setMagnifierEntryForTest(null);
+    w.toggleMagnifier();
+    w.save(); // an explicit save AFTER inspecting, at the same frozen instant
+    const after = read();
+    w.timeSetPaused(wasPaused); // restore the world exactly as we found it
+    // field-by-field diff, volatile-clock fields excluded by design (they
+    // were frozen identical; anything else that differs is named)
+    const changed = [];
+    const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+    for (const k of keys) {
+      if (JSON.stringify(before[k]) !== JSON.stringify(after[k])) changed.push(k);
+    }
+    return { identical: changed.length === 0, changed };
   });
-  await page.waitForTimeout(600);
-  const blobAfter = await page.evaluate(() => localStorage.getItem('meadowlight.world.v2'));
-  rec.record('magnifier.inspection-mutates-nothing', blobBefore === blobAfter,
-    'save unchanged by the glass');
+  rec.record('magnifier.inspection-mutates-nothing', inspectionMutation.identical,
+    inspectionMutation.identical
+      ? 'save identical after inspecting (frozen-clock, field-diffed)'
+      : 'save CHANGED by the glass — differing keys: ' + inspectionMutation.changed.join(', '));
   const re = realErrors(errors);
   rec.record('magnifier.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
   await page.close();
