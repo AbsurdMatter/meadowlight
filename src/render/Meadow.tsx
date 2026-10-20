@@ -36,7 +36,10 @@ export function Meadow() {
         // green top is the terrain top here, not a floating layer
         const h = groundAt(x, z).height;
         const r = Math.hypot(x, z);
-        const isEdge = r > MEADOW_SIZE / 2 - step * 1.5;
+        // #36 round-6: the rim band spans THREE cells (was 1.5) so the
+        // palette-bridge dither has room to drift — a one-cell band read
+        // as a distinct surface no matter its colors
+        const isEdge = r > MEADOW_SIZE / 2 - step * 3;
         // edge boxes reach down past the bowl wall so the join with the
         // hills lattice reads as terrain rising, never as a layer edge
         const depth = isEdge ? 8 + 0.6 : 1.4;
