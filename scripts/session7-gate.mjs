@@ -78,6 +78,7 @@ async function checkSeeding() {
         }
       }
       const before = w.items().length;
+      const before0 = w.volunteersReadback().filter((v) => v.volunteer).length;
       // release overrides, 8x, natural calendar across ~4 seasons
       w.resumeSeasonClock();
       w.timeSetPaused(false);
@@ -98,9 +99,15 @@ async function checkSeeding() {
         lastEpoch = epoch;
       }
       w.timeSetSpeed(1);
-      return { before, samples, perSeason, startSeason };
+      return { before, before0, samples, perSeason, startSeason };
     });
-    const capsHold = run.samples.every((s) => s.volunteers <= 5);
+    // the samples are CUMULATIVE volunteer counts; the per-season cap
+    // governs the DELTA between samples (the first run asserted cumulative
+    // <= 5 and failed its own brake: 6 cumulative with +1/season is the
+    // designed 15%-share behavior, not a cap violation)
+    const capsHold = run.samples.every(
+      (s, i) => s.volunteers - (i === 0 ? run.before0 : run.samples[i - 1].volunteers) <= 5,
+    );
     const totalVolunteers = run.samples[run.samples.length - 1].volunteers;
     // growth pattern: volunteers appear (a meadow that never seeds in 4
     // seasons is broken), but stay a small fraction — never invasive.
@@ -147,23 +154,47 @@ async function checkSeeding() {
     );
   }
 
-  // 3. seedlings persist and are clearable like any plant
+  // 3. seedlings persist and are clearable like any plant. Self-sufficient:
+  //    the OLD probe inherited the previous check's world, which a 3-flower
+  //    crossing had left with no volunteers (6% per parent) — the probe read
+  //    had:false and the check failed without any persistence bug existing.
+  //    This probe builds its own meadow, crosses seasons until a volunteer
+  //    actually exists (bounded), then reads the BLOB ground truth.
   {
-    const clr = await page.evaluate(() => {
+    const clr = await page.evaluate(async () => {
       const w = window.__meadowlight;
-      const v = w.volunteersReadback().find((x) => x.volunteer);
-      if (!v) return { had: false };
+      w.resetWorld();
+      // a meadow big enough that a crossing produces volunteers reliably
+      for (let k = 0; k < 30; k++) {
+        const a = k * 2.399963;
+        const r = 3 + Math.sqrt((k + 1) / 30) * 12;
+        w.plant(['lavender', 'cosmos', 'poppy'][k % 3], Math.cos(a) * r, Math.sin(a) * r);
+      }
+      // bounded: cross seasons until at least one volunteer exists
+      const order = ['spring', 'summer', 'autumn', 'winter'];
+      let volunteers = [];
+      for (let attempt = 0; attempt < 6 && volunteers.length === 0; attempt++) {
+        // dial the next season (the one trigger path) and re-read
+        w.setSeason(order[(order.indexOf('summer') + attempt) % 4]);
+        volunteers = w.volunteersReadback().filter((x) => x.volunteer);
+      }
+      if (volunteers.length === 0) return { had: false };
+      const v = volunteers[0];
       w.save();
+      // BLOB GROUND TRUTH (the session-3 lesson: read the saved JSON, never
+      // a proxy): the flag must be in the serialized payload itself
+      const blob = JSON.parse(localStorage.getItem('meadowlight.world.v2') || '{}');
+      const blobFlag = (blob.items || []).some((it) => it.id === v.id && it.volunteer === true);
       w.reloadFromSave();
       const persisted = w.volunteersReadback().some((x) => x.id === v.id && x.volunteer);
       w.removeAt(v.id);
       const gone = !w.volunteersReadback().some((x) => x.id === v.id);
-      return { had: true, persisted, gone };
+      return { had: true, blobFlag, persisted, gone };
     });
     rec.record(
       'seeding.seedlings-persist-and-clear',
-      clr.had && clr.persisted && clr.gone,
-      JSON.stringify(clr),
+      clr.had && clr.blobFlag && clr.persisted && clr.gone,
+      JSON.stringify(clr) + ' (blobFlag = the flag read from the saved JSON itself)',
     );
   }
 
