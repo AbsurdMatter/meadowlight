@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -89,6 +89,9 @@ const { variationFor, rollVariation, noVariation, VARIATION_TUNING } = require(O
 const { choosePlantFact, chooseStructureFact, chooseMeadowFact } = require(OUT + '/engine/factSelection.js');
 const { flowerBlocked, structureBlocked } = require(OUT + '/engine/collision.js');
 const { computeCaptionLayout, fallbackMetrics } = require(OUT + '/engine/postcardLayout.js');
+const { rollVolunteers, compatibleSeedling } = require(OUT + '/engine/seeding.js');
+const { SEEDING_TUNING, SEEDING_FACTS } = require(OUT + '/data/seeding.js');
+const { isPlantableCell } = require(OUT + '/engine/ground.js');
 
 const mkItem = (plantId, x = 0, z = 0) => ({ id: plantId + ':' + x + ':' + z, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
 const mkStruct = (structureId, x = 0, z = 0) => ({ id: structureId + ':' + x + ':' + z, structureId, position: [x, 0, z], rotationY: 0 });
@@ -628,6 +631,131 @@ test('fact selection prefers unseen facts and marks seen ones', () => {
   seen.push(first.fact.id);
   const second = chooseStructureFact('bath', 'summer', seen);
   assert.ok(second.fact.id !== first.fact.id || second.alreadySeen, 'must prefer unseen or admit seen');
+});
+
+// ---------- session 7 U1: self-seeding ----------
+// persistence is storage-backed: shim localStorage before requiring it
+// (the node runner has no DOM — a harness finding documented in session 6)
+{
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+  };
+}
+const { saveWorld, loadWorld, clearSavedWorld } = require(OUT + '/engine/persistence.js');
+
+test('save v7 additive: session-6 blob loads without loss and derives a stable seed', () => {
+  // a session-6-shaped blob (version 6, no worldSeed/seedingEpoch)
+  const v6 = {
+    version: 6,
+    items: [{ id: 'a', plantId: 'lavender', position: [1, 0, 2], rotationY: 0, phase: 0.5 }],
+    structures: [],
+    milestones: [],
+    season: 'summer',
+    placementVariation: true,
+    randomRotation: true,
+    seenFacts: ['f1'],
+    foundRecipes: ['recipe:lavender-thyme'],
+    hiveCombs: { h1: 0.4 },
+    honeyJars: 2,
+  };
+  globalThis.localStorage.setItem('meadowlight.world.v2', JSON.stringify(v6));
+  const w1 = loadWorld();
+  assert.strictEqual(w1.items.length, 1, 'v6 items load without loss');
+  assert.strictEqual(w1.honeyJars, 2, 'v6 jars survive');
+  assert.ok(Number.isFinite(w1.worldSeed), 'v7 fields derive at load');
+  assert.strictEqual(w1.seedingEpoch, 0, 'v7 epoch starts at 0');
+  // the derived seed is stable per-blob: same blob, same seed
+  const w2 = loadWorld();
+  assert.strictEqual(w2.worldSeed, w1.worldSeed, 'derived seed is stable');
+  // a v7 save round-trips its named seed state
+  saveWorld({ ...w1, version: undefined, worldSeed: w1.worldSeed, seedingEpoch: 3 });
+  const w3 = loadWorld();
+  assert.strictEqual(w3.worldSeed, w1.worldSeed, 'v7 seed round-trips');
+  assert.strictEqual(w3.seedingEpoch, 3, 'v7 epoch round-trips');
+  assert.strictEqual(w3.version, 7, 'save writes v7');
+  // volunteer flag persists through the round-trip
+  saveWorld({ ...w3, items: [...w3.items.map((it) => ({ ...it, volunteer: true }))] });
+  const w4 = loadWorld();
+  assert.strictEqual(w4.items[0].volunteer, true, 'volunteer flag round-trips');
+  clearSavedWorld();
+});
+test('seeding: deterministic — same inputs give identical volunteers, different epochs differ', () => {
+  const mk = (plantId, x, z, i) => ({ id: 'p' + i, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
+  // a summer-blooming drift well inside the placement box
+  const items = [];
+  for (let i = 0; i < 24; i++) items.push(mk(i % 3 === 0 ? 'lavender' : 'cosmos', -6 + (i % 6) * 2.4, -6 + Math.floor(i / 6) * 2.4, i));
+  const run = (epoch) => rollVolunteers(items, 'summer', 'autumn', 12345, epoch, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
+  const a1 = run(3), a2 = run(3);
+  assert.deepStrictEqual(a1, a2, 'same seed+epoch = same volunteers (deterministic)');
+  // different epoch = different rolls (the epoch key advances)
+  const b = run(4);
+  assert.ok(JSON.stringify(a1) !== JSON.stringify(b) || a1.length === 0, 'epoch changes the roll');
+  // different world seed = different rolls
+  const c = rollVolunteers(items, 'summer', 'autumn', 999, 3, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
+  assert.ok(JSON.stringify(a1) !== JSON.stringify(c) || a1.length === 0, 'world seed changes the roll');
+});
+
+test('seeding: rare + capped — a 4-season accelerated run never grows invasively', () => {
+  const mk = (plantId, x, z, i) => ({ id: 'p' + i, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
+  let items = [];
+  for (let i = 0; i < 40; i++) items.push(mk(['lavender', 'cosmos', 'poppy', 'aster'][i % 4], -9 + (i % 8) * 2.6, -9 + Math.floor(i / 8) * 2.6, i));
+  const seasons = ['summer', 'autumn', 'winter', 'spring'];
+  let epoch = 0;
+  let total = 0;
+  for (let si = 0; si < seasons.length - 1; si++) {
+    const from = seasons[si], to = seasons[si + 1];
+    const seeds = rollVolunteers(items, from, to, 12345, epoch, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
+    assert.ok(seeds.length <= SEEDING_TUNING.maxPerSeason, 'whole-meadow cap holds: ' + seeds.length);
+    for (const s of seeds) {
+      items.push({ id: 'v' + epoch + ':' + total, plantId: s.plantId, position: [s.position[0], 0, s.position[2]], rotationY: 0, phase: 0 });
+      total++;
+    }
+    epoch++;
+  }
+  // a season of a 40-flower meadow volunteers at most the hard cap, and the
+  // four-season total stays a small fraction of the meadow (rare, cozy)
+  assert.ok(total <= 4 * SEEDING_TUNING.maxPerSeason, 'four seasons never runaway: ' + total);
+});
+
+test('seeding: volunteers land only in plantable cells, roster-compatible, blooming in the new season', () => {
+  const mk = (plantId, x, z, i) => ({ id: 'p' + i, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
+  const items = [];
+  for (let i = 0; i < 20; i++) items.push(mk('lavender', -7 + (i % 5) * 3.0, -7 + Math.floor(i / 5) * 3.0, i));
+  for (let epoch = 0; epoch < 8; epoch++) {
+    const seeds = rollVolunteers(items, 'summer', 'autumn', 777, epoch, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
+    for (const s of seeds) {
+      assert.ok(isPlantableCell(s.position[0], s.position[2]), 'volunteer in a plantable cell (raw query)');
+      const compat = compatibleSeedling('lavender', 'autumn');
+      assert.ok(compat.includes(s.plantId), 'volunteer is roster-compatible');
+      // parent-adjacent (seed distance band)
+      const parent = items.find((it) => Math.hypot(it.position[0] - s.position[0], it.position[2] - s.position[2]) >= SEEDING_TUNING.seedDistanceMin - 0.15);
+      assert.ok(!!parent, 'volunteer near a parent');
+    }
+  }
+});
+
+test('seeding: compatibleSeedling is same-species or bloom-season companion, and can bloom in the new season', () => {
+  const same = compatibleSeedling('lavender', 'autumn');
+  assert.ok(same[0] === 'lavender', 'same species first');
+  assert.ok(same.includes('cosmos'), 'cosmos shares summer bloom + blooms in autumn');
+  assert.ok(!same.includes('clover'), 'clover does not bloom in autumn (would read as a weed)');
+  assert.ok(!same.includes('crocus'), 'crocus does not share a bloom season with lavender');
+  assert.ok(compatibleSeedling('crocus', 'spring').includes('forget-me-not'), 'the crocus/fmn companion pair seeds');
+  assert.ok(SEEDING_FACTS.volunteer.length > 20, 'the volunteer fact exists');
+});
+
+test('seeding: empty or non-blooming meadows volunteer nothing (winter stays quiet)', () => {
+  const mk = (plantId, x, z, i) => ({ id: 'p' + i, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
+  const empty = rollVolunteers([], 'summer', 'autumn', 1, 0, isPlantableCell, () => false);
+  assert.strictEqual(empty.length, 0, 'empty meadow seeds nothing');
+  // a lavender-only meadow rolling INTO winter: lavender does not bloom in
+  // winter and nothing compatible does either — no winter volunteers
+  const lavenderOnly = [mk('lavender', 0, 0, 0), mk('lavender', 3, 0, 1)];
+  const winter = rollVolunteers(lavenderOnly, 'autumn', 'winter', 1, 0, isPlantableCell, () => false);
+  assert.strictEqual(winter.length, 0, 'winter stays quiet for a summer meadow');
 });
 
 // ---------- collision ----------

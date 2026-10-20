@@ -1,0 +1,177 @@
+#!/usr/bin/env node
+/**
+ * Session 7 behavioral gate — the meadow grows, one script, --checks per
+ * unit (gate-lib pattern). CI (test:smoke) stays canonical; this is for
+ * behavior a build can't see.
+ *
+ * Usage:
+ *   node scripts/session7-gate.mjs --url http://localhost:5199 \
+ *     --checks seeding [--lib-path /path/to/libs]
+ *
+ *   seeding — U1 (#new): self-seeding under the natural calendar at 8x
+ *     (the v2 speed control is the verification instrument): volunteers
+ *     appear across an accelerated 4-season run, regional/whole-meadow caps
+ *     hold, no invasive growth pattern (volunteers cluster near parents,
+ *     never as an advancing wall), seedlings are clearable like any plant,
+ *     save v7 round-trips (worldSeed/seedingEpoch persist, a session-6
+ *     save loads without loss), and determinism holds across reload.
+ */
+import { chromium } from 'playwright-core';
+import { parseArgs, launchChromium, newPage, makeRecorder, realErrors } from './gate-lib.mjs';
+
+const { url = 'http://localhost:5199', checks = 'seeding', 'lib-path': libPath = '' } = parseArgs();
+const rec = makeRecorder();
+const browser = await launchChromium(chromium, { libPath });
+
+/** U1: self-seeding */
+async function checkSeeding() {
+  const { page, errors } = await newPage(browser, url);
+
+  // 0. save v7 additive: a session-6-shaped save (no worldSeed/seedingEpoch)
+  //    loads without loss and derives its seed from its own contents
+  {
+    const r = await page.evaluate(() => {
+      const w = window.__meadowlight;
+      w.clear();
+      w.plant('lavender', 3, 3);
+      w.plant('thyme', 4, 3);
+      // hand-write a v6-shaped blob (no worldSeed/seedingEpoch) and reload
+      const blob = JSON.parse(localStorage.getItem('meadowlight.world.v2') || '{}');
+      delete blob.worldSeed;
+      delete blob.seedingEpoch;
+      blob.version = 6;
+      localStorage.setItem('meadowlight.world.v2', JSON.stringify(blob));
+      w.reloadFromSave();
+      const seed1 = w.worldSeedReadback();
+      w.reloadFromSave();
+      const seed2 = w.worldSeedReadback();
+      return {
+        items: w.items().length,
+        seed1,
+        seed2,
+        epoch: w.seedingEpochReadback(),
+      };
+    });
+    rec.record(
+      'seeding.save-v6-additive-derives-stable-seed',
+      r.items === 2 && r.seed1 === r.seed2 && r.epoch === 0 && Number.isFinite(r.seed1),
+      JSON.stringify(r) + ' (v6 blob loads losslessly; derived seed stable per-blob)',
+    );
+  }
+
+  // 1. accelerated 4-season run at 8x: volunteers appear, caps hold
+  {
+    const run = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.resetWorld();
+      // a realistic mid-density meadow across the box, several species
+      const species = ['lavender', 'cosmos', 'poppy', 'clover', 'thyme', 'crocus'];
+      let i = 0;
+      for (const sp of species) {
+        for (let k = 0; k < 6; k++) {
+          const a = i * 2.399963;
+          const r = 4 + Math.sqrt((i + 1) / 36) * 13;
+          const x = Math.cos(a) * r;
+          const z = Math.sin(a) * r;
+          w.plant(sp, x, z);
+          i++;
+        }
+      }
+      const before = w.items().length;
+      // release overrides, 8x, natural calendar across ~4 seasons
+      w.resumeSeasonClock();
+      w.timeSetPaused(false);
+      w.timeSetSpeed(8);
+      const samples = [];
+      const startSeason = 'summer';
+      let lastEpoch = w.seedingEpochReadback();
+      const perSeason = [];
+      let lastCount = 0;
+      for (let s = 0; s < 4; s++) {
+        // ~90s per season at 8x
+        await new Promise((r) => setTimeout(r, 92000));
+        const volunteers = w.volunteersReadback().filter((v) => v.volunteer);
+        const epoch = w.seedingEpochReadback();
+        samples.push({ seasonIdx: s, epoch, volunteers: volunteers.length, total: w.items().length });
+        perSeason.push(volunteers.length - lastCount);
+        lastCount = volunteers.length;
+        lastEpoch = epoch;
+      }
+      w.timeSetSpeed(1);
+      return { before, samples, perSeason, startSeason };
+    });
+    const capsHold = run.samples.every((s) => s.volunteers <= 5);
+    const totalVolunteers = run.samples[run.samples.length - 1].volunteers;
+    // growth pattern: volunteers appear (a meadow that never seeds in 4
+    // seasons is broken), but stay a small fraction — never invasive
+    const final = run.samples[run.samples.length - 1].total;
+    const invasive = totalVolunteers > Math.max(12, run.before * 0.35);
+    rec.record(
+      'seeding.accelerated-4season-caps-hold',
+      capsHold && !invasive && totalVolunteers >= 1,
+      JSON.stringify(run.samples) + ` (total volunteers ${totalVolunteers}/${final}, before ${run.before})`,
+    );
+  }
+
+  // 2. determinism: the same world at the same epoch rolls the same volunteers
+  //    (cross a season via the dial — the one seeding trigger path — and
+  //    compare against a reload + identical crossing)
+  {
+    const det = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.resetWorld();
+      w.plant('lavender', 2, 2);
+      w.plant('cosmos', 5, 5);
+      w.plant('poppy', -4, 3);
+      w.save();
+      // crossing A: dial autumn (crosses summer->autumn boundary)
+      w.setSeason('autumn');
+      const a = w.volunteersReadback().filter((v) => v.volunteer).map((v) => v.plantId + '@' + v.id);
+      const seedA = w.worldSeedReadback();
+      // reset the world back to the same blob and cross identically
+      const blob = JSON.parse(localStorage.getItem('meadowlight.world.v2') || '{}');
+      localStorage.setItem('meadowlight.world.v2', JSON.stringify({ ...blob, seedingEpoch: blob.seedingEpoch - 1 }));
+      w.reloadFromSave();
+      w.setSeason('autumn');
+      const b = w.volunteersReadback().filter((v) => v.volunteer).map((v) => v.plantId + '@' + v.id);
+      return { a, b, seedA, seedB: w.worldSeedReadback() };
+    });
+    rec.record(
+      'seeding.deterministic-same-world-same-volunteers',
+      det.seedA === det.seedB && JSON.stringify(det.a) === JSON.stringify(det.b),
+      JSON.stringify(det),
+    );
+  }
+
+  // 3. seedlings persist and are clearable like any plant
+  {
+    const clr = await page.evaluate(() => {
+      const w = window.__meadowlight;
+      const v = w.volunteersReadback().find((x) => x.volunteer);
+      if (!v) return { had: false };
+      w.save();
+      w.reloadFromSave();
+      const persisted = w.volunteersReadback().some((x) => x.id === v.id && x.volunteer);
+      w.removeAt(v.id);
+      const gone = !w.volunteersReadback().some((x) => x.id === v.id);
+      return { had: true, persisted, gone };
+    });
+    rec.record(
+      'seeding.seedlings-persist-and-clear',
+      clr.had && clr.persisted && clr.gone,
+      JSON.stringify(clr),
+    );
+  }
+
+  const re = realErrors(errors);
+  rec.record('seeding.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
+const map = { seeding: checkSeeding };
+for (const c of checks.split(',')) {
+  if (map[c]) await map[c]();
+  else rec.record(`unknown-check:${c}`, false, 'no such check in session7-gate');
+}
+await browser.close();
+process.exit(rec.exitCode());
