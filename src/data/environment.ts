@@ -85,14 +85,14 @@ export const TERRAIN_SHAPE = {
   outerRimStartRadius: 34,
   outerRimLiftPerRadius: 0.12,
   /**
-   * #36 item 3 (session 6): edge anchoring. Just outside the meadow square
-   * the terrain continues the MEADOW's own wave plus this constant step —
-   * so the rim margin is the same from every side (the survey found the
-   * radial profile giving 0.32u on one edge vs 1.81u on the opposite).
-   * edgeStep is the gentle height of the surrounding terrain above the
-   * meadow surface: enough to read as a rim, small enough to stay cozy.
+   * #36 item 3 + depth retune (session 6): edge anchoring. Just outside
+   * the meadow square the terrain continues the MEADOW's own wave plus
+   * this constant step — so the rim margin is the same from every side.
+   * edgeStep is the TOTAL visible step from the meadow surface to the
+   * surrounding terrain; the user's depth verdict capped it at ~0.2u —
+   * a SHALLOW bowl: not flush (0 is not the target), not a block down.
    */
-  edgeStep: 0.25,
+  edgeStep: 0.2,
   /** the blend band (u) from the square edge, anchored -> radial profile */
   edgeBlend: 6,
 } as const;
@@ -249,7 +249,7 @@ export function shapedHeight(x: number, z: number): number {
   const pondGoverned = pd < t.pondFlatFeatherEnd;
   if (!pondGoverned && outside < t.edgeBlend) {
     const radial = radialHeight(x, z, r, t);
-    const anchored = terrainHeight(x, z) + MEADOW_BOWL.depth + t.edgeStep;
+    const anchored = terrainHeight(x, z) - MEADOW_BOWL.depth + t.edgeStep;
     const f = Math.min(1, Math.max(0, outside / t.edgeBlend));
     return radial * f + anchored * (1 - f);
   }
