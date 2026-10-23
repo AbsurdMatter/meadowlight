@@ -6,30 +6,30 @@ import { allWildlife, type WildlifeSighting } from './magnifierProbes';
 import { MAGNIFIER_TUNING } from '../data/magnifier';
 
 /**
- * N3 coverage round: wildlife hit resolution for the magnifying glass.
+ * N3 wildlife hit resolution — IN-Canvas half (PR #38 comment #6349476585).
  *
- * Wildlife MOVES, so per-mesh pointer events can't reach it (an
- * instancedMesh's pointer events fire on the geometry under the cursor at
- * event time — but hover on a moving creature needs the position it will
- * have THIS frame). The comment's endorsed approach, applied with the
- * standing rules:
- * - ONE input path: consumes the SAME raw window pointermove the placement
- *   ghost tracks (the session-2 shared-pointer pattern) — no new DOM
- *   handlers, no capture chains, nothing for placement to swallow.
- * - Hit resolution per frame: the pointer ray (unprojected through the
- *   live camera) is compared against every live wildlife position from
- *   the read-only probe registry; nearest within the glass's reach wins.
- *   This is a different HIT RESOLUTION on the same pointer path, exactly
- *   as the flower hover is.
- * - ZERO MUTATION: reads positions, writes ONLY the display entry
- *   (magnifierEntry — UI state, never serialized, never world state).
+ * ARCHITECTURE (the crash that forced it): the previous MagnifierInspector
+ * used R3F hooks but was mounted OUTSIDE the Canvas — "R3F: Hooks can only
+ * be used within the Canvas component!" threw on the user's machine and
+ * killed the card, the probes, and every check downstream. The two halves
+ * now split along the Canvas boundary, meeting at the STORE (no new state):
+ *
+ *   INSIDE (this file, mounted inside <Canvas>): headless resolver —
+ *     useFrame + the live camera, pointer unprojection, probe walk,
+ *     writes the found entry to magnifierEntry. Zero rendered output.
+ *   OUTSIDE: MagnifierCard, pure DOM — reads the store, no R3F hooks, ever.
+ *
+ * One input path unchanged: the same raw window pointermove the placement
+ * ghost tracks. Zero mutation: reads positions, writes ONLY the display
+ * entry (UI state, never serialized, never world state).
  */
-export function MagnifierInspector() {
+export function MagnifierResolver() {
   const { camera, gl } = useThree();
   const pointerNdc = useRef(new THREE.Vector2(0, 0));
   const inside = useRef(false);
   const ray = useRef(new THREE.Ray());
   const toCreature = useRef(new THREE.Vector3());
+  const dir = useRef(new THREE.Vector3());
 
   useEffect(() => {
     const canvas = gl.domElement;
@@ -56,13 +56,14 @@ export function MagnifierInspector() {
       return;
     }
     if (!inside.current) return;
-    // unproject the pointer through the live camera (the same math the
-    // ghost's raycast uses — one resolution model, no second camera)
-    const dir = new THREE.Vector3(pointerNdc.current.x, pointerNdc.current.y, 0.5)
+    // unproject the pointer through the live camera (same math as the
+    // ghost's raycast — one resolution model, no second camera)
+    dir.current
+      .set(pointerNdc.current.x, pointerNdc.current.y, 0.5)
       .unproject(camera)
       .sub(camera.position)
       .normalize();
-    ray.current.set(camera.position, dir);
+    ray.current.set(camera.position, dir.current);
 
     const reach = MAGNIFIER_TUNING.wildlifeReach;
     let best: WildlifeSighting | null = null;
