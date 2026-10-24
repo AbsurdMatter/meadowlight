@@ -239,10 +239,12 @@ async function checkMagnifier() {
     w.timeSetPaused(true); // full freeze: no frame drift, no autosave mid-compare
     w.save(); // a save at the frozen instant = the baseline
     const before = read();
-    // inspect: hover on, hover off, glass off — the full N3 interaction set
+    // inspect: hover on, hover off, glass off — the full N3 interaction set.
+    // Deterministic OFF (the old toggle left an OFF glass for the bee check —
+    // a parity drift the FAILs traced to, not a product bug)
     w.setMagnifierEntryForTest({ kind: 'flower', itemId: before.items[0].id });
     w.setMagnifierEntryForTest(null);
-    w.toggleMagnifier();
+    w.setMagnifierOnForTest(false);
     w.save(); // an explicit save AFTER inspecting, at the same frozen instant
     const after = read();
     w.timeSetPaused(wasPaused); // restore the world exactly as we found it
@@ -267,8 +269,12 @@ async function checkMagnifier() {
   const kinds = [...new Set(sightings.map((w) => w.kind))];
   rec.record('magnifier.wildlife-probes-are-live', kinds.includes('hivebee') && sightings.length > 0,
     'live kinds: ' + kinds.join(', ') + ' (' + sightings.length + ' creatures)');
-  // a wildlife entry shows name + fact through the SAME card the flowers use
+  // a wildlife entry shows name + fact through the SAME card the flowers use.
+  // Glass state is SET (deterministic hook), not toggled — the previous
+  // version toggled blind and a parity drift left the glass OFF here:
+  // "no card rendered" was the check's own state, not the product chain.
   const beeEntry = await page.evaluate(() => {
+    window.__meadowlight.setMagnifierOnForTest(true);
     window.__meadowlight.setMagnifierEntryForTest({ kind: 'visitor', visitorId: 'hivebee' });
     return window.__meadowlight.magnifierReadback();
   });
@@ -300,7 +306,7 @@ async function checkMagnifier() {
     const before = read();
     w.setMagnifierEntryForTest({ kind: 'visitor', visitorId: 'queenbumble' });
     w.setMagnifierEntryForTest(null);
-    w.toggleMagnifier();
+    w.setMagnifierOnForTest(false); // glass off — same as toggle, no parity
     w.save();
     const after = read();
     w.timeSetPaused(wasPaused);
@@ -320,13 +326,14 @@ async function checkMagnifier() {
   await page.evaluate(() => {
     window.__meadowlight.setSeason('spring');
     window.__meadowlight.setSeasonProgressForTest(0.05); // early spring
-    window.__meadowlight.setMagnifierEntryForTest(null);
-    window.__meadowlight.toggleMagnifier(); // back ON for the sighting read
+    // deterministic ON — a toggle here landed OFF after the parity drift
+    window.__meadowlight.setMagnifierOnForTest(true);
   });
   await page.waitForTimeout(4000); // the queen's natural window spawns her
   const queenSeen = await page.evaluate(() => {
     const w = window.__meadowlight;
     const kinds = w.wildlifeSightings().map((s) => s.kind);
+    w.setMagnifierOnForTest(true); // re-assert ON (spawns may have raced)
     w.setMagnifierEntryForTest({ kind: 'visitor', visitorId: 'queenbumble' });
     return { kinds, entry: w.magnifierReadback() };
   });

@@ -62,6 +62,7 @@ declare global {
       /** N3: the magnifying-glass inspect tool (pure inspection, zero mutation) */
       magnifierReadback: () => { on: boolean; entry: unknown };
       toggleMagnifier: () => void;
+      setMagnifierOnForTest: (on: boolean) => void;
       setMagnifierEntryForTest: (e: unknown) => void;
       /** N3 coverage: live wildlife sightings the glass can reach (read-only) */
       wildlifeSightings: () => unknown[];
@@ -237,6 +238,12 @@ export function installTestHook() {
     },
     toggleMagnifier: () => usePlacementStore.getState().toggleMagnifier(),
     wildlifeSightings: () => allWildlife().map((w) => ({ ...w })),
+    setMagnifierOnForTest: (on) => {
+      const s = usePlacementStore.getState();
+      // deterministic glass state (no toggle parity to reason about) —
+      // turning off clears the entry, same as toggleMagnifier
+      usePlacementStore.setState({ magnifierOn: on, magnifierEntry: on ? s.magnifierEntry : null });
+    },
     setMagnifierEntryForTest: (e) =>
       usePlacementStore.getState().setMagnifierEntry(e as never),
     volunteersReadback: () =>

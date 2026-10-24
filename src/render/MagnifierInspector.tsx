@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { usePlacementStore } from './placementStore';
 import { allWildlife } from './magnifierProbes';
 import { MAGNIFIER_TUNING } from '../data/magnifier';
-import { resolveWildlifeHit, nextWildlifeEntry } from '../engine/magnifierHit';
+import { resolveWildlifeHit } from '../engine/magnifierHit';
 import type { MagnifierEntry } from '../data/magnifierKinds';
 
 /**
@@ -42,10 +42,18 @@ export function MagnifierResolver() {
     return () => window.removeEventListener('pointermove', onMove);
   }, [gl]);
 
+  // visitor locks get a short miss-grace: a creature crossing the reach
+  // boundary mid-hover keeps its card for ~0.5s of consecutive misses
+  // before the lock releases (a wobble is not a pointer-leave) — the
+  // flower path is NEVER touched here (flower meshes own their hover
+  // lifecycle via pointer-out; the resolver must not fight them)
+  const missStreak = useRef(0);
+
   useFrame(() => {
     const s = usePlacementStore.getState();
     if (!s.magnifierOn) {
       if (s.magnifierEntry) s.setMagnifierEntry(null);
+      missStreak.current = 0;
       return;
     }
     if (!inside.current) return; // pointer off-canvas: nothing to resolve
@@ -69,10 +77,19 @@ export function MagnifierResolver() {
       MAGNIFIER_TUNING.wildlifeReach,
     );
     const cur = s.magnifierEntry;
-    const currentVisitorId = cur?.kind === 'visitor' ? cur.visitorId : null;
-    const next = nextWildlifeEntry(hit, currentVisitorId) as MagnifierEntry;
-    if (JSON.stringify(next) !== JSON.stringify(cur)) {
-      s.setMagnifierEntry(next);
+    if (hit) {
+      missStreak.current = 0;
+      const next = { kind: 'visitor', visitorId: hit.kind } as MagnifierEntry;
+      if (JSON.stringify(next) !== JSON.stringify(cur)) s.setMagnifierEntry(next);
+      return;
+    }
+    // miss: flower hovers are untouchable (their mesh pointer-out clears
+    // them); a visitor lock survives the grace window, then releases
+    if (cur?.kind === 'flower') return;
+    missStreak.current++;
+    if (missStreak.current > 30) {
+      missStreak.current = 0;
+      if (cur) s.setMagnifierEntry(null);
     }
   });
 
