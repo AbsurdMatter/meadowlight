@@ -320,9 +320,14 @@ export function PlacementSystem() {
         s.magnifierEntry !== null,
       );
       if (refusal.refused) {
+        // #6386272430: the glass's right-click, DEFINED for both states —
+        // click 1 (card showing): dismiss the card, glass STAYS ARMED;
+        // click 2 (armed, no card): DISARM the glass. Neither click ever
+        // reaches removal while armed (the guard is armed-period).
         if (s.magnifierOn && s.magnifierEntry !== null) {
-          // the glass consumes the right-click: dismiss the card
           s.setMagnifierEntry(null);
+        } else if (s.magnifierOn) {
+          usePlacementStore.setState({ magnifierOn: false, magnifierEntry: null });
         }
         usePlacementStore.setState((st) => ({
           toasts: [

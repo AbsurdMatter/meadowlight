@@ -561,10 +561,32 @@ async function checkMagnifier() {
     // it and the check would pass vacuously; the synthetic-vs-real lesson
     // applied to the check itself), then contextmenu on the canvas too
     const canvas = document.querySelector('canvas');
-    if (!canvas) return { beforeCount: 0, afterCount: -1, changed: ['no canvas'], entry: null };
-    canvas.dispatchEvent(new PointerEvent('pointerdown', { button: 2, clientX: sx, clientY: sy, bubbles: true }));
-    canvas.dispatchEvent(new PointerEvent('pointerup', { button: 2, clientX: sx, clientY: sy, bubbles: true }));
-    canvas.dispatchEvent(new MouseEvent('contextmenu', { button: 2, clientX: sx, clientY: sy, bubbles: true, cancelable: true }));
+    if (!canvas) return { beforeCount: 0, afterCount: -1, changed: ['no canvas'], entry: null, states: [] };
+    // #6386272430: the THREE-CLICK sequence — the race lived in click #2
+    // (the single-click check passed while it did). Click 1: card showing
+    // (dismiss, glass stays armed). Click 2: armed, no card (disarm).
+    // Click 3: after re-arming + re-hover, card showing again (dismiss).
+    // Every click must refuse; the flower must survive all three.
+    const rightClick = () => {
+      canvas.dispatchEvent(new PointerEvent('pointerdown', { button: 2, clientX: sx, clientY: sy, bubbles: true }));
+      canvas.dispatchEvent(new PointerEvent('pointerup', { button: 2, clientX: sx, clientY: sy, bubbles: true }));
+      canvas.dispatchEvent(new MouseEvent('contextmenu', { button: 2, clientX: sx, clientY: sy, bubbles: true, cancelable: true }));
+    };
+    const states = [];
+    const snap = () => ({
+      glassOn: window.__meadowlight.magnifierReadback().on,
+      entry: window.__meadowlight.magnifierReadback().entry?.kind ?? null,
+      items: window.__meadowlight.items().length,
+    });
+    rightClick(); // click 1: card showing
+    states.push({ click: 1, ...snap() });
+    rightClick(); // click 2: armed, no card (the race door)
+    states.push({ click: 2, ...snap() });
+    // re-arm + re-hover for click 3 (the user's after-re-hover case)
+    window.__meadowlight.setMagnifierOnForTest(true);
+    window.__meadowlight.setMagnifierEntryForTest({ kind: 'flower', itemId: target.id });
+    rightClick(); // click 3: card showing again
+    states.push({ click: 3, ...snap() });
     return new Promise((resolve) => {
       setTimeout(() => {
         const after = read();
@@ -577,17 +599,28 @@ async function checkMagnifier() {
         window.__meadowlight.setMagnifierEntryForTest(null);
         window.__meadowlight.setMagnifierOnForTest(false);
         window.__meadowlight.timeSetPaused(wasPaused);
-        resolve({ beforeCount, afterCount, changed, entry });
+        resolve({ beforeCount, afterCount, changed, entry, states });
       }, 800);
     });
   });
+  // every click refused (the item count never dropped across any state)
+  // AND the defined glass behavior held: click 1 dismissed the card with
+  // the glass STILL ARMED, click 2 disarmed (no entry), click 3 dismissed
+  // again after re-hover
+  const states = glassRemove.states ?? [];
+  const click1Ok = states.length > 0 && states[0].glassOn === true && states[0].entry === null;
+  const click2Ok = states.length > 1 && states[1].glassOn === false;
+  const click3Ok = states.length > 2 && states[2].glassOn === true && states[2].entry === null;
   const glassRemoveOk =
     glassRemove.afterCount === glassRemove.beforeCount &&
-    glassRemove.changed.length === 0;
+    glassRemove.changed.length === 0 &&
+    click1Ok && click2Ok && click3Ok;
   rec.record('magnifier.rightclick-while-armed-removes-nothing', glassRemoveOk,
     glassRemoveOk
-      ? 'armed glass + right-click on target: ' + glassRemove.beforeCount + ' items before/after, save unchanged, entry: ' + JSON.stringify(glassRemove.entry.entry)
-      : 'REMOVED under armed glass — items ' + glassRemove.beforeCount + '->' + glassRemove.afterCount + ', changed: ' + glassRemove.changed.join(', '));
+      ? 'three right-clicks under armed glass: ' + glassRemove.beforeCount + ' items throughout, save unchanged — click states: ' +
+        states.map((s) => '#' + s.click + (s.glassOn ? ' armed' : ' off') + '/' + (s.entry ?? 'no-entry')).join(', ')
+      : 'REMOVED under armed glass — items ' + glassRemove.beforeCount + '->' + glassRemove.afterCount +
+        ', changed: ' + glassRemove.changed.join(', ') + ', states: ' + JSON.stringify(states));
 
   // wildlife inspection is read-only too: same frozen-clock field diff
   const wildMutation = await page.evaluate(() => {

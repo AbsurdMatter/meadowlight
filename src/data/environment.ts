@@ -48,11 +48,29 @@ export function isRemovalRefused(
       toastBody: 'Zoom out a little first — right-click removes work best with the meadow in view.',
     };
   }
-  if (glassOn && glassEntryActive) {
+  // #6386272430: ARMED GLASS, PERIOD — the entry state distinguishes the
+  // glass's own right-click behavior, NEVER whether removal is refused.
+  // The old 'armed AND active entry' condition raced with the glass's own
+  // dismissal: click 1 dismissed the card (entry cleared), click 2 met
+  // armed-no-entry, the guard passed, and removal executed. Removal while
+  // the glass is armed is now impossible BY CONSTRUCTION.
+  if (glassOn) {
+    if (glassEntryActive) {
+      return {
+        refused: true,
+        // click 1: dismiss the card; the glass STAYS ARMED (defined — the
+        // dismissal never disarms; that would reopen the same race door)
+        toastTitle: 'The glass is holding the meadow',
+        toastBody: 'Right-click put the card away — the glass stays on. Right-click again to put the glass away.',
+      };
+    }
     return {
       refused: true,
-      toastTitle: 'The glass is holding the meadow',
-      toastBody: 'Right-click dismisses the inspection card — click the glass again to put it away before removing anything.',
+      // armed, no card: right-click DISARMS the glass (the defined second
+      // click — never removal; a third right-click would then remove, but
+      // the glass is visibly off and the toast said so)
+      toastTitle: 'The glass went back in your pocket',
+      toastBody: 'Right-click put the glass away — click a flower or the corner button to inspect again.',
     };
   }
   return { refused: false, toastTitle: '', toastBody: '' };
