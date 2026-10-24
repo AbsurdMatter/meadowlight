@@ -472,6 +472,41 @@ the hive waking — and the night sky gives the slow phases something to look at
 Success test: a friend's meadow grows the same from the seed code, and a
 Slovenian visitor reads every line in their own words.
 
+### Session 8 — Sharing & the wider door (post-merge record, PR #38, merge 4827293)
+Delivered: unified magnifier inspection (flowers + wildlife + structures
+through ONE kind-enum entry; ownership-first claim rules in
+data/magnifierKinds — isMeshOwnedEntry/isClaimableEntry/meshMayClaim
+distance-overtake WITHIN kind classes only; the defined glass interaction
+grammar: click 1 dismisses card glass-stays-armed, click 2 disarms, toast
+announces every state), butterfly refinements (colors/bodies/translucency),
+natural seasonally-weighted precipitation (winter = snow, matte via Lambert —
+unlit material read as glow), SEASON_SECONDS 720→540 (25% seasons, with the
+hardcoded-literal audit), placement batching, dock/corner/onboarding anchor
+geometry (hint renders ABOVE the dock), glass cursor (own SVG magnifier,
+honey-accent locked state), removal refusals by construction (isRemovalRefused:
+zoom OR armed glass; glass consumes its right-click), 14-check magnifier gate
+(honest: real pointer paths, real event types — contextmenu not synthetic
+button-2, three-click sequences, self-built fixtures, walk-until-the-resolver-
+agrees targeting, exact-identity acceptance predicates), diff-style perf gate
+(PASS 62.6 fps steady, machine-relative, phase split), v4 issues #39–47 seeded.
+Lessons (canonize): (1) READ-green/RUN-green cuts BOTH ways — gates that
+wrote stores directly, and gate-passes-world-fails (mesh races invisible to
+per-check fresh-state; event-type divergence: a check proves the path it
+drives, only the user's hand proves the path that exists). (2) Sequence-aware
+checks: single-click passed while the two-click race lived in click #2 —
+state machines, not snapshots. (3) Ownership first, distance second: a
+visitor may never overtake a mesh-owned entry. (4) A stale dev server fakes
+regressions — restart-before-verdict is the user's standing protocol. (5) CI
+green while the gate script couldn't execute (queenPos ReferenceError) — gate
+scripts get syntax-checked like code. (6) Tooltips and glass: one inspection
+surface; the hive click is the HARVEST ceremony (production, not inspection)
+and stays. (7) The notebook's fact-seeing migrated to the glass card —
+seenFacts is a second v4 seam. (8) The resolver-inside-Canvas /
+card-outside split (R3F hooks only inside). (9) Wrong-hive attribution class:
+read the CLICKED instance, not entry[0] (session-6 lesson held). (10) Honest
+out in checks: a walk that exhausts FAILS with a placement finding, never
+loosens its predicate.
+
 ## Carry-overs standing
 
 One shared source per semantic (seed hash joins dayPhase/season as named
