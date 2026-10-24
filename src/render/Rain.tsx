@@ -27,7 +27,7 @@ interface Drop {
 
 export function Rain() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  const matRef = useRef<THREE.MeshBasicMaterial>(null);
+  const matRef = useRef<THREE.MeshLambertMaterial>(null);
   const drops = useRef<Drop[]>([]);
   const seededFor = useRef<'' | 'rain' | 'snow'>('');
 
@@ -124,7 +124,12 @@ export function Rain() {
   return (
     <instancedMesh ref={meshRef} args={[undefined, undefined, RAIN_VISUAL.drops]} frustumCulled={false}>
       <boxGeometry args={[1, 1, 1]} />
-      <meshBasicMaterial
+      {/* #6384616654: SNOW reads matte white by REFLECTANCE, not emission —
+          meshBasicMaterial is unlit (reads as glowing at night/dusk), so
+          the shared precip material is now Lambert (lit): snow is bright
+          because it catches the scene's light, like real snow. Same
+          material for rain (also unlit before — same fix class). */}
+      <meshLambertMaterial
         ref={matRef}
         color={RAIN_VISUAL.color}
         transparent

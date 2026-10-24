@@ -65,7 +65,9 @@ export function MagnifierResolver() {
     // hovering a bloom almost always had a creature within reach of the
     // ray, and the resolver's hit branch stole the lock every frame —
     // glass-on-flowers only ever showed wildlife.
-    if (s.magnifierEntry?.kind === 'flower') return;
+    // (structures joined the same ownership rule in #6384616654: their
+    //  mesh pointer-over/out owns the entry; the resolver never overwrites)
+    if (s.magnifierEntry?.kind === 'flower' || s.magnifierEntry?.kind === 'structure') return;
     // unproject the pointer through the live camera, then hand the PURE
     // hit function flat camera state + CURRENT probe positions
     dir.current

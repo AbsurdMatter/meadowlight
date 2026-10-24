@@ -19,7 +19,13 @@ export const MAGNIFIER_KINDS = [
 export type MagnifierKind = (typeof MAGNIFIER_KINDS)[number];
 
 /** the store's inspection entry: flowers by placed id, wildlife by kind */
+/**
+ * The glass's entry taxonomy (#6384616654): the glass inspects EVERYTHING —
+ * flowers by placed id, wildlife by kind, structures by placed id. ONE
+ * shared source for the store, the resolver, the meshes, and the card.
+ */
 export type MagnifierEntry =
   | { kind: 'flower'; itemId: string }
   | { kind: 'visitor'; visitorId: MagnifierKind }
+  | { kind: 'structure'; structureId: string }
   | null;

@@ -43,6 +43,18 @@ export function PlacedStructures() {
     meshes: {},
   });
 
+  // #6384616654: the glass inspects placed structures too — same mesh
+  // pointer events the click path rides (one input path), same entry
+  // store, same card. Pure inspection: writes only the display entry.
+  const onOver = (structureId: string) => {
+    const s = usePlacementStore.getState();
+    if (!s.magnifierOn) return;
+    s.setMagnifierEntry({ kind: 'structure', structureId });
+  };
+  const onOut = () => {
+    const s = usePlacementStore.getState();
+    if (s.magnifierOn && s.magnifierEntry?.kind === 'structure') s.setMagnifierEntry(null);
+  };
   const onClick = (e: ThreeEvent<MouseEvent>, structureId: string) => {
     e.stopPropagation();
     const s = usePlacementStore.getState();
@@ -179,6 +191,8 @@ export function PlacedStructures() {
           receiveShadow
           frustumCulled={false}
           onClick={(e) => onClick(e, def.id)}
+          onPointerOver={() => onOver(def.id)}
+          onPointerOut={onOut}
         >
           <boxGeometry args={[1, 1, 1]} />
           <meshLambertMaterial />

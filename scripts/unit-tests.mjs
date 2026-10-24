@@ -394,14 +394,17 @@ test('dusk window: fireflies appear only in 0.79-0.92', () => {
 });
 
 // ---------- session 6 U1 (#11): auto-advancing season calendar ----------
-test('season clock: 12-minute season, rollover reports the crossed season', () => {
-  assert.strictEqual(SEASON_SECONDS, 720, 'season length per approved plan (10-15 min window)');
+test('season clock: 9-minute season (25% shorter, #6384616654), rollover reports the crossed season', () => {
+  assert.strictEqual(SEASON_SECONDS, 540, 'season length 25% shorter per the close-round pacing call');
   resumeSeasonClock();
   setSeasonProgressForTest(0);
-  let crossed = advanceSeasons(360, 'summer');
+  // half a season, DERIVED from the constant (never the old 360 literal —
+  // the 25% shorten would silently break a hardcoded half)
+  const halfSeason = SEASON_SECONDS / 2;
+  let crossed = advanceSeasons(halfSeason, 'summer');
   assert.strictEqual(crossed.length, 0, 'half a season crosses nothing');
   assert.ok(Math.abs(seasonProgress() - 0.5) < 1e-9, 'progress is half');
-  crossed = advanceSeasons(360, 'summer');
+  crossed = advanceSeasons(halfSeason, 'summer');
   assert.deepStrictEqual(crossed, ['autumn'], 'a full season rolls into autumn');
   assert.ok(Math.abs(seasonProgress() - 0) < 1e-9, 'rollover leaves progress at season start');
 });

@@ -298,6 +298,60 @@ async function checkMagnifier() {
   const fireflyNoteOk = fireflyNote.after === fireflyNote.before;
   rec.record('fireflies.forced-state-writes-no-note', fireflyNoteOk,
     'forced-on state: ' + fireflyNote.before + ' -> ' + fireflyNote.after + ' fireflies notes (must be unchanged)');
+  // #6384616654: STRUCTURES join the glass — a placed hive hovered with
+  // the glass armed shows the card (the same fact the click tooltip shows).
+  // Drives the REAL hover path (pointer projection + mouse move) — the
+  // click-vs-hover blindness the flower regression exposed is closed for
+  // the third kind.
+  const structureHover = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    const st = w.structures().find((s) => s.structureId === 'hive');
+    const cam = w.__three?.camera;
+    if (!st || !cam) return { ok: false, reason: st ? 'no camera' : 'no hive' };
+    const p = st.position;
+    const pv = { x: p[0], y: p[1] + 0.6, z: p[2], w: 1 };
+    const proj = cam.projectionMatrix.elements;
+    const view = cam.matrixWorldInverse.elements;
+    function mul(a, v3) {
+      return {
+        x: a[0] * v3.x + a[4] * v3.y + a[8] * v3.z + a[12],
+        y: a[1] * v3.x + a[5] * v3.y + a[9] * v3.z + a[13],
+        z: a[2] * v3.x + a[6] * v3.y + a[10] * v3.z + a[14],
+        w: a[3] * v3.x + a[7] * v3.y + a[11] * v3.z + a[15],
+      };
+    }
+    const eye = mul(view, pv);
+    const clip = mul(proj, eye);
+    const ndc = { x: clip.x / clip.w, y: clip.y / clip.w };
+    return {
+      ok: true,
+      screen: {
+        x: ((ndc.x + 1) / 2) * window.innerWidth,
+        y: ((-ndc.y + 1) / 2) * window.innerHeight,
+      },
+    };
+  });
+  if (structureHover.ok) {
+    await page.mouse.move(structureHover.screen.x, structureHover.screen.y);
+  }
+  await page.waitForTimeout(1500); // hover + resolver frames
+  const structureCard = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    const el = document.querySelector('[data-magnifier-card="true"]');
+    return {
+      entry: w.magnifierReadback(),
+      text: el ? (el.textContent ?? '') : '',
+    };
+  });
+  const structureHoverOk =
+    structureHover.ok &&
+    structureCard.entry.entry?.kind === 'structure' &&
+    structureCard.text.length > 0;
+  rec.record('magnifier.structure-hover-shows-card', structureHoverOk,
+    !structureHover.ok
+      ? 'structure hover setup failed: ' + (structureHover.reason ?? '')
+      : 'real-hover entry: ' + JSON.stringify(structureCard.entry.entry) +
+        ' — card: ' + structureCard.text.slice(0, 60));
   // the card renders in the viewport and is pointer-transparent
   await page.waitForTimeout(1200); // past any transition before reading (the detector lesson)
   const card = await page.evaluate(() => {

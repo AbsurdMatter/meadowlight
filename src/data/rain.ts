@@ -6,7 +6,8 @@
  * determinism — same world, same weather calendar); boundaries never reset
  * or silence the weather.
  *
- * Observability weights (the 8x rule): a season is 720s at 1x, 90s at 8x.
+ * Observability weights (the 8x rule): a season is SEASON_SECONDS at 1x
+ * (see data/seasons — the ONE source), an eighth of that at 8x.
  * gap/len are fractions of a season; expected window count ~= 1 / (gap/2 +
  * mean len). Spring/autumn ~4 windows (several rains per accelerated year),
  * winter ~5 snow windows, summer 0-2. Weather that can't be observed in a

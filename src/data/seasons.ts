@@ -7,7 +7,14 @@ export const SEASONS: Season[] = ['spring', 'summer', 'autumn', 'winter'];
  * of in-world light per season reads as a gentle "week" of meadow time.
  * Tuning value: lives here, never hardcoded in components.
  */
-export const SEASON_SECONDS = 720;
+/**
+ * Session-8 close round (#6384616654): seasons shortened 25% for pacing
+ * (720s -> 540s, a 9-minute season). ONE source: the season clock, the
+ * rain windows (gap/len are season fractions — they compress with it),
+ * bloom windows (relative), and every pacing reference derive from this
+ * constant; nothing hand-copies the number.
+ */
+export const SEASON_SECONDS = 540;
 /** gentle toast copy when the calendar rolls into a new season (#11) */
 export const SEASON_ARRIVAL: Record<Season, string> = {
   spring: 'The meadow turns to spring — early blooms wake the queens.',

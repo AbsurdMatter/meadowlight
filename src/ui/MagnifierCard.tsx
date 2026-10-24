@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef } from 'react';
 import { PLANTS } from '../data/plants';
 import { usePlacementStore } from '../render/placementStore';
 import { MAGNIFIER_WILDLIFE } from '../data/magnifierWildlife';
+import { STRUCTURES } from '../data/structures';
+import { chooseStructureFact } from '../engine/factSelection';
 import { PLANT_FACTS } from '../data/facts';
 import { MAGNIFIER_TUNING } from '../data/magnifier';
 import { theme, headingStyle } from './theme';
@@ -70,6 +72,18 @@ export function MagnifierCard() {
         .filter(Boolean)
         .join(' \u00b7 ');
       return { title: def.name, text: fact, hint: stateLine };
+    }
+    if (entry.kind === 'structure') {
+      // #6384616654: structures join the glass — the card shows the SAME
+      // fact the click-tooltip (notebook) shows: chooseStructureFact is the
+      // ONE source; the glass adds no content of its own
+      const def = STRUCTURES.find((st) => st.id === entry.structureId);
+      const choice = chooseStructureFact(entry.structureId, s.season, []);
+      return {
+        title: def?.name ?? entry.structureId,
+        text: choice.fact.text,
+        hint: null,
+      };
     }
     const w = MAGNIFIER_WILDLIFE[entry.visitorId];
     if (!w) return { title: 'Visitor', text: 'A wild visitor, passing through the meadow.', hint: null };
