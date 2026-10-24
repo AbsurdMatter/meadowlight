@@ -465,10 +465,16 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
           if (perInstanceColor && !m.instanceColor) m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(tuning.maxCount * 3).fill(1), 3);
         }}
       >
+        {/* #6384329017: butterfly wings ride the OPAQUE queue via
+            alphaTest — NO transparent pass, no per-frame sort (the
+            transparent queue was leftover steady-state cost); the pastel
+            palette at alphaTest ~0.5 reads translucent enough while
+            costing like an opaque wing. Other species keep their tuning. */}
         <meshLambertMaterial
           color={wingColor}
-          transparent
-          opacity={perInstanceColor ? 0.75 : tuning.wingOpacity}
+          transparent={perInstanceColor ? false : true}
+          opacity={perInstanceColor ? 1 : tuning.wingOpacity}
+          alphaTest={perInstanceColor ? 0.5 : 0}
         />
       </instancedMesh>
     </group>

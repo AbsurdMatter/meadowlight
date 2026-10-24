@@ -59,6 +59,14 @@ export interface PlacementState {
   modalOpen: boolean;
   setModalOpen: (open: boolean) => void;
   plant: (item: PlacedItem) => void;
+  /**
+   * Perf (#6384329017): batch placement — one store update + ONE companion
+   * check for a whole burst. plant() per flower does a set + a full recipe
+   * scan EACH (200 placements = 200 sets + 200 scans in one synchronous
+   * burst = the 341ms frame). Real gameplay benefit too: natural placement
+   * sprinkles and multi-drop planting coalesce.
+   */
+  plantMany: (items: PlacedItem[]) => void;
   placeStructure: (s: PlacedStructure) => void;
   removeAt: (id: string) => void;
   removeStructure: (id: string) => void;
@@ -183,6 +191,13 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   plant: (item) => {
     set((s) => ({ items: [...s.items, item] }));
     // #9: a new flower may complete a recipe — discover it warmly
+    get().checkCompanions();
+  },
+  plantMany: (batch) => {
+    if (batch.length === 0) return;
+    // ONE store set + ONE companion scan for the whole burst (plant()
+    // per-item was the 341ms placement frame)
+    set((s) => ({ items: [...s.items, ...batch] }));
     get().checkCompanions();
   },
   placeStructure: (structure) =>
