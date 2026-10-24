@@ -1,4 +1,5 @@
 import type { Season } from './seasons';
+import { hash3 } from '../engine/seededHash';
 
 /**
  * #15 (session 5): butterflies & hoverflies — distinct species mapped to
@@ -45,6 +46,25 @@ export const BUTTERFLY_TUNING: WildPollinatorTuning = {
   maxCount: 6,
   activeSeasons: ['spring', 'summer', 'autumn'],
 };
+
+/**
+ * UI round (#6383907384): per-butterfly wing palette — data flag list, ONE
+ * source; the renderer picks per-butterfly by the seeded hash of the
+ * butterfly's stable identity (world seed + window ordinal + index), never
+ * render-side Math.random: same world = same butterfly colors.
+ */
+export const BUTTERFLY_WING_PALETTE = ['#c94f4f', '#5b8bd9', '#9b6fd4', '#e08a3c'] as const;
+const BUTTERFLY_ACCENT_PALETTE = ['#e8a3a3', '#a8c4f0', '#cdbdf0', '#f2d49b'] as const;
+
+/** deterministic wing + accent pair for one butterfly's stable identity */
+export function butterflyColors(seed: number, ordinal: number, index: number): {
+  wing: string;
+  accent: string;
+} {
+  const h = hash3(Math.floor(seed), ordinal, index, 0xb0f1);
+  const i = Math.floor(h * BUTTERFLY_WING_PALETTE.length) % BUTTERFLY_WING_PALETTE.length;
+  return { wing: BUTTERFLY_WING_PALETTE[i], accent: BUTTERFLY_ACCENT_PALETTE[i] };
+}
 
 export const HOVERFLY_TUNING: WildPollinatorTuning = {
   id: 'hoverfly',
