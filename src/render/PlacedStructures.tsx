@@ -4,7 +4,7 @@ import { scaledElapsed } from '../engine/scaledTime';
 import * as THREE from 'three';
 import { STRUCTURES } from '../data/structures';
 import { usePlacementStore } from './placementStore';
-import { isClaimableEntry } from '../data/magnifierKinds';
+import { meshMayClaim, releaseClaim } from '../data/magnifierKinds';
 import { noVariation } from '../engine/variation';
 import { combReady } from '../engine/honey';
 import { HONEY_TUNING } from '../data/honey';
@@ -46,17 +46,21 @@ export function PlacedStructures() {
   // #6384616654: the glass inspects placed structures too — same mesh
   // pointer events the click path rides (one input path), same entry
   // store, same card. Pure inspection: writes only the display entry.
-  const onOver = (structureId: string) => {
+  const onOver = (e: ThreeEvent<PointerEvent>, structureId: string) => {
     const s = usePlacementStore.getState();
     if (!s.magnifierOn) return;
-    // #6384690070: the claim guard, same as flowers — a mesh pointer-over
-    // never steals another mesh-owned entry (the one-move multi-hit race)
-    if (!isClaimableEntry(s.magnifierEntry)) return;
+    // #6384878002: the SYMMETRIC claim (same rule as flowers): nearer to
+    // the pointer may overtake — the old claimable-only guard let a first
+    // claim stick forever (hover stuck on whichever mesh claimed first)
+    if (!meshMayClaim(s.magnifierEntry, e.distance)) return;
     s.setMagnifierEntry({ kind: 'structure', structureId });
   };
   const onOut = () => {
     const s = usePlacementStore.getState();
-    if (s.magnifierOn && s.magnifierEntry?.kind === 'structure') s.setMagnifierEntry(null);
+    if (s.magnifierOn && s.magnifierEntry?.kind === 'structure') {
+      s.setMagnifierEntry(null);
+      releaseClaim();
+    }
   };
   const onClick = (e: ThreeEvent<MouseEvent>, structureId: string) => {
     e.stopPropagation();
@@ -198,7 +202,7 @@ export function PlacedStructures() {
           receiveShadow
           frustumCulled={false}
           onClick={(e) => onClick(e, def.id)}
-          onPointerOver={() => onOver(def.id)}
+          onPointerOver={(e) => onOver(e, def.id)}
           onPointerOut={onOut}
         >
           <boxGeometry args={[1, 1, 1]} />

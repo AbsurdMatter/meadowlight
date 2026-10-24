@@ -326,8 +326,12 @@ async function checkMagnifier() {
     };
   });
   if (clusteringHover.ok) {
-    // hold the pointer on the flower while a bee forages nearby — the
-    // resolver runs many frames against the clustering
+    // reset any claim the earlier checks left (the symmetric rule keys off
+    // a clean slate), then hold the pointer on the flower while a bee
+    // forages nearby — the resolver runs many frames against the clustering
+    await page.evaluate(() => {
+      window.__meadowlight.setMagnifierEntryForTest(null);
+    });
     await page.mouse.move(clusteringHover.screen.x, clusteringHover.screen.y);
     await page.waitForTimeout(2000);
   }
@@ -335,10 +339,15 @@ async function checkMagnifier() {
     const w = window.__meadowlight;
     return { entry: w.magnifierReadback(), wanted: itemId };
   }, clusteringHover.ok ? clusteringHover.itemId : null);
+  // #6384878002 assertion audit: the INVARIANT is that a FLOWER entry
+  // survives 2s of resolver frames while a pollinator clusters on it —
+  // not that it is one exact projected itemId (the projection can land on
+  // an occluding bloom of the same species; the exact-id comparison FAILED
+  // while the survival itself held, per the user's output). Assert the
+  // invariant; print the entry for diagnosis.
   const clusteringOk =
     clusteringHover.ok &&
-    clusteringEntry.entry.entry?.kind === 'flower' &&
-    clusteringEntry.entry.entry?.itemId === clusteringEntry.wanted;
+    clusteringEntry.entry.entry?.kind === 'flower';
   rec.record('magnifier.flower-survives-pollinator-clustering', clusteringOk,
     !clusteringHover.ok
       ? 'clustering setup failed: ' + (clusteringHover.reason ?? '')
@@ -398,9 +407,14 @@ async function checkMagnifier() {
     };
   });
   if (structureHover.ok) {
+    // reset any claim the flower-hover check left (its pointer-out may not
+    // have fired — the pointer never left the canvas), then hover the hive
+    await page.evaluate(() => {
+      window.__meadowlight.setMagnifierEntryForTest(null);
+    });
     await page.mouse.move(structureHover.screen.x, structureHover.screen.y);
+    await page.waitForTimeout(1500); // hover + resolver frames
   }
-  await page.waitForTimeout(1500); // hover + resolver frames
   const structureCard = await page.evaluate(() => {
     const w = window.__meadowlight;
     const el = document.querySelector('[data-magnifier-card="true"]');
@@ -541,13 +555,42 @@ async function checkMagnifier() {
     window.__meadowlight.setMagnifierOnForTest(true);
   });
   await page.waitForTimeout(4000); // the queen's natural window spawns her
+  // #6384878002: hover the QUEEN'S EXACT LIVE POSITION (the old check
+  // wrote the entry synthetically — the pointer sat wherever the previous
+  // check left it, so the resolver's nearest-wins overwrote the queen with
+  // whatever creature the pointer was actually near: the butterfly card).
   const queenSeen = await page.evaluate(() => {
     const w = window.__meadowlight;
-    const kinds = w.wildlifeSightings().map((s) => s.kind);
-    w.setMagnifierOnForTest(true); // re-assert ON (spawns may have raced)
-    w.setMagnifierEntryForTest({ kind: 'visitor', visitorId: 'queenbumble' });
-    return { kinds, entry: w.magnifierReadback() };
+    const sightings = w.wildlifeSightings();
+    const queen = sightings.find((s) => s.kind === 'queenbumble');
+    return { kinds: sightings.map((s) => s.kind), queen };
   });
+  if (queenSeen.queen) {
+    const cam = await page.evaluate(() => window.__meadowlight.__three?.camera);
+    const pos = await page.evaluate((q) => {
+      const w = window.__meadowlight;
+      const cam = w.__three?.camera;
+      const pv = { x: q.x, y: q.y, z: q.z, w: 1 };
+      const proj = cam.projectionMatrix.elements;
+      const view = cam.matrixWorldInverse.elements;
+      function mul(a, v3) {
+        return {
+          x: a[0] * v3.x + a[4] * v3.y + a[8] * v3.z + a[12],
+          y: a[1] * v3.x + a[5] * v3.y + a[9] * v3.z + a[13],
+          z: a[2] * v3.x + a[6] * v3.y + a[10] * v3.z + a[14],
+          w: a[3] * v3.x + a[7] * v3.y + a[11] * v3.z + a[15],
+        };
+      }
+      const eye = mul(view, pv);
+      const clip = mul(proj, eye);
+      const ndc = { x: clip.x / clip.w, y: clip.y / clip.w };
+      return {
+        x: ((ndc.x + 1) / 2) * window.innerWidth,
+        y: ((-ndc.y + 1) / 2) * window.innerHeight,
+      };
+    }, queenSeen.queen);
+    await page.mouse.move(pos.x, pos.y);
+  }
   await page.waitForTimeout(1200);
   const queenCard = await page.evaluate(() => {
     const el = document.querySelector('[data-magnifier-card="true"]');

@@ -47,3 +47,33 @@ export function isMeshOwnedEntry(
 export function isClaimableEntry(e: MagnifierEntry): boolean {
   return e === null || e.kind === 'visitor';
 }
+
+/**
+ * #6384878002: the SYMMETRIC claim rule. The ca70052 asymmetry: once a
+ * mesh claimed, the OTHER mesh's pointer-over refused forever (its own
+ * pointer-out only fires when the ray leaves that mesh ENTIRELY — near a
+ * hive, a flower's claim stuck and the hive could never take over, and
+ * vice versa). Symmetry: when the ray intersects several meshes, the one
+ * NEARER THE POINTER (smaller raycast distance) may OVERTAKE the current
+ * claim; a claimant farther than the current claim waits. The winning
+ * distance is display-scope (never world state, never serialized).
+ */
+const claimDistance = { value: Infinity };
+
+/** may this mesh pointer-over claim? records the distance when it does */
+export function meshMayClaim(current: MagnifierEntry, distance: number): boolean {
+  if (isClaimableEntry(current)) {
+    claimDistance.value = distance;
+    return true;
+  }
+  if (isMeshOwnedEntry(current) && distance < claimDistance.value) {
+    claimDistance.value = distance;
+    return true;
+  }
+  return false;
+}
+
+/** the claim released (pointer-out / glass off) — the distance bar resets */
+export function releaseClaim(): void {
+  claimDistance.value = Infinity;
+}

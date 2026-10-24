@@ -4,7 +4,7 @@ import { scaledElapsed } from '../engine/scaledTime';
 import * as THREE from 'three';
 import { PLANTS } from '../data/plants';
 import { usePlacementStore } from './placementStore';
-import { isClaimableEntry } from '../data/magnifierKinds';
+import { meshMayClaim, releaseClaim } from '../data/magnifierKinds';
 import { noVariation } from '../engine/variation';
 import { inBloom } from '../engine/pollinator';
 import { isRaining, RAIN_TUNING } from '../engine/weather';
@@ -60,17 +60,13 @@ function FlowerInstances() {
   /** last (season, itemCount) each species' colors were written for */
   const colorKey = useRef<Record<string, string>>({});
 
-  // #6384788257: the flower CLICK-TOOL TIP IS REMOVED — the armed glass is
-  // the ONE inspection surface. What the click fed beyond the tooltip was
-  // the notebook's fact-SEEING flow (markFactSeen on panel open); that
-  // learning now rides the glass card (MagnifierCard marks the fact seen
-  // when it renders), so nothing dies silently — the v4 #40 seam is the
-  // inspection entry itself.
-  const onClick = (e: ThreeEvent<MouseEvent>) => {
-    e.stopPropagation();
-    // clicks still mean planting while a tool is active; with no tool,
-    // a flower click is now a no-op for inspection (glass-only)
-  };
+  // #6384878002: the flower click handler is REMOVED ENTIRELY — flowers
+  // have no click behavior anymore (glass-only inspection), and the no-op
+  // handler's stopPropagation was KILLING THE HIVE CLICK whenever a
+  // flower stood nearer the camera than the hive behind it. No handler, no
+  // propagation block: a click that passes through a flower now reaches
+  // the hive beneath (the harvest ceremony, restored).
+
   // N3: the magnifying glass — hover inspection, zero mutation. Rides the
   // SAME instanced-mesh pointer events the click path uses (one input path:
   // no new DOM handlers, no stopPropagation chains — hover never swallows
@@ -78,13 +74,13 @@ function FlowerInstances() {
   const onOver = (e: ThreeEvent<PointerEvent>, plantId: string) => {
     const s = usePlacementStore.getState();
     if (!s.magnifierOn) return;
-    // #6384690070: claim only a CLAIMABLE entry — the ray can hit a flower
-    // and a structure in one move (R3F fires pointer-over for every
-    // intersected mesh), and the unguarded handlers raced: the last to fire
-    // overwrote the other's claim (the 836d4cc flower regression — a
-    // flower beside a hive always lost to the structure's over). A mesh
-    // over may never steal another mesh-owned entry.
-    if (!isClaimableEntry(s.magnifierEntry)) return;
+    // #6384878002: the SYMMETRIC claim — when the ray intersects several
+    // meshes, the NEARER one may overtake (meshMayClaim compares the
+    // raycast distance). The old claimable-only rule let a flower's claim
+    // stick forever beside a hive (the hive's own pointer-out never fires
+    // while the ray still hits it) — flowers and equipment each blocked
+    // the other. Symmetric: nearest to the pointer wins, either kind.
+    if (!meshMayClaim(s.magnifierEntry, e.distance)) return;
     const idx = e.instanceId;
     const itemId = idx === undefined ? undefined : idMaps.current[plantId]?.[idx];
     if (itemId) s.setMagnifierEntry({ kind: 'flower', itemId });
@@ -92,7 +88,10 @@ function FlowerInstances() {
   const onOut = () => {
     const s = usePlacementStore.getState();
     // pointer-out releases ONLY our own kind — never another owner's entry
-    if (s.magnifierOn && s.magnifierEntry?.kind === 'flower') s.setMagnifierEntry(null);
+    if (s.magnifierOn && s.magnifierEntry?.kind === 'flower') {
+      s.setMagnifierEntry(null);
+      releaseClaim();
+    }
   };
   useFrame(({ camera }) => {
     const r = refs.current;
@@ -199,7 +198,6 @@ function FlowerInstances() {
           castShadow
           receiveShadow
           frustumCulled={false}
-          onClick={(e) => onClick(e)}
           onPointerOver={(e) => onOver(e, def.id)}
           onPointerOut={onOut}
         >
