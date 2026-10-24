@@ -44,7 +44,6 @@ const SWAY_LOD_DISTANCE = 30;
 function FlowerInstances() {
   const items = usePlacementStore((s) => s.items);
   const season = usePlacementStore((s) => s.season);
-  const openNotebook = usePlacementStore((s) => s.openNotebook);
   const refs = useRef<{ meshes: Record<string, THREE.InstancedMesh | null> }>({
     meshes: {},
   });
@@ -61,15 +60,16 @@ function FlowerInstances() {
   /** last (season, itemCount) each species' colors were written for */
   const colorKey = useRef<Record<string, string>>({});
 
-  const onClick = (e: ThreeEvent<MouseEvent>, plantId: string) => {
+  // #6384788257: the flower CLICK-TOOL TIP IS REMOVED — the armed glass is
+  // the ONE inspection surface. What the click fed beyond the tooltip was
+  // the notebook's fact-SEEING flow (markFactSeen on panel open); that
+  // learning now rides the glass card (MagnifierCard marks the fact seen
+  // when it renders), so nothing dies silently — the v4 #40 seam is the
+  // inspection entry itself.
+  const onClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
-    // with a placement tool active, clicking the meadow means planting —
-    // the notebook only opens when the player is just looking around
-    const s = usePlacementStore.getState();
-    if (s.selectedPlantId || s.selectedStructureId) return;
-    const idx = e.instanceId;
-    const itemId = idx === undefined ? undefined : idMaps.current[plantId]?.[idx];
-    if (itemId) openNotebook({ kind: 'plant', id: itemId });
+    // clicks still mean planting while a tool is active; with no tool,
+    // a flower click is now a no-op for inspection (glass-only)
   };
   // N3: the magnifying glass — hover inspection, zero mutation. Rides the
   // SAME instanced-mesh pointer events the click path uses (one input path:
@@ -199,7 +199,7 @@ function FlowerInstances() {
           castShadow
           receiveShadow
           frustumCulled={false}
-          onClick={(e) => onClick(e, def.id)}
+          onClick={(e) => onClick(e)}
           onPointerOver={(e) => onOver(e, def.id)}
           onPointerOut={onOut}
         >

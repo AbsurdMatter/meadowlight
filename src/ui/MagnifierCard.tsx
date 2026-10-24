@@ -50,6 +50,11 @@ export function MagnifierCard() {
     };
   }, [entry]);
 
+  // #6384788257: the glass is the ONE inspection surface — fact-SEEING
+  // (the learning the notebook-click path fed) rides the card now: the
+  // shown fact is marked seen when the card renders it. One source: the
+  // same seenFacts store the notebook hub reads.
+  const markFactSeen = usePlacementStore((s) => s.markFactSeen);
   const content = useMemo(() => {
     if (!entry) return null;
     const s = usePlacementStore.getState();
@@ -71,7 +76,7 @@ export function MagnifierCard() {
       ]
         .filter(Boolean)
         .join(' \u00b7 ');
-      return { title: def.name, text: fact, hint: stateLine };
+      return { title: def.name, text: fact, hint: stateLine, factId: PLANT_FACTS[item.plantId]?.id ?? null };
     }
     if (entry.kind === 'structure') {
       // #6384616654: structures join the glass — the card shows the SAME
@@ -83,10 +88,11 @@ export function MagnifierCard() {
         title: def?.name ?? entry.structureId,
         text: choice.fact.text,
         hint: null,
+        factId: choice.fact.id,
       };
     }
     const w = MAGNIFIER_WILDLIFE[entry.visitorId];
-    if (!w) return { title: 'Visitor', text: 'A wild visitor, passing through the meadow.', hint: null };
+    if (!w) return { title: 'Visitor', text: 'A wild visitor, passing through the meadow.', hint: null, factId: null };
     // live read-only state: the visitor-window log (the notebook's own
     // record — one source; the glass invents no state)
     let hint: string | null = null;
@@ -99,9 +105,15 @@ export function MagnifierCard() {
           ? 'recorded in the notebook — visited in ' + seen.join(', ')
           : 'a first sighting — the notebook will remember it';
     }
-    return { title: w.name, text: w.fact, hint };
+    return { title: w.name, text: w.fact, hint, factId: null };
   }, [entry]);
 
+  // the fact id the card shows, when the source provides one (flowers +
+  // structures; wildlife facts are the visitor-log lines, no seenFacts id)
+  const shownFactId = entry && content ? content.factId ?? null : null;
+  useEffect(() => {
+    if (shownFactId) markFactSeen(shownFactId);
+  }, [shownFactId, markFactSeen]);
   if (!magnifierOn || !entry || !content) return null;
   return (
     <div

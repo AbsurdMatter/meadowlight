@@ -39,7 +39,6 @@ const CAPACITY_PER_STRUCTURE = 60;
 
 export function PlacedStructures() {
   const structures = usePlacementStore((s) => s.structures);
-  const openNotebook = usePlacementStore((s) => s.openNotebook);
   const refs = useRef<{ meshes: Partial<Record<string, THREE.InstancedMesh | null>> }>({
     meshes: {},
   });
@@ -89,7 +88,11 @@ export function PlacedStructures() {
         return;
       }
     }
-    openNotebook({ kind: 'structure', id: structureId });
+    // #6384788257: the structure CLICK-TOOLTIP (notebook panel) is REMOVED
+    // — the armed glass is the one inspection surface, with the same fact
+    // source. The HIVE CLICK STAYS: it is the harvest CEREMONY (jar +
+    // toast, the production loop), not inspection — the glass card cannot
+    // replace it. Non-hive structure clicks are now no-ops for inspection.
   };
 
   useFrame(() => {

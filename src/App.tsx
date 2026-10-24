@@ -161,8 +161,13 @@ export default function App() {
           mutation): crosshair while the glass is armed, pointer once the
           resolver locks an inspectable, default otherwise. The user
           eyeballs pointer-vs-crosshair; the swap is one line below. */}
-      <style>{`[data-magnifier='on'] canvas { cursor: crosshair; }
-body[data-magnifier-hit='1'] canvas { cursor: pointer; }`}</style>
+      {/* #6384788257: the glass tool has its OWN cursor identity — an inline
+          SVG magnifier (no asset fetch, one spot), armed over the canvas;
+          the planting cursor never shows while the glass is armed. On an
+          inspectable LOCK, the same magnifier with a warm accent so the
+          hit reads at a glance. CSS-only. */}
+      <style>{`[data-magnifier='on'] canvas { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Ccircle cx='11' cy='11' r='7' fill='none' stroke='%23241d12' stroke-width='2.5'/%3E%3Ccircle cx='11' cy='11' r='7' fill='rgba(255,244,214,0.35)'/%3E%3Cline x1='16.5' y1='16.5' x2='25' y2='25' stroke='%23241d12' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E") 12 12, crosshair; }
+body[data-magnifier-hit='1'] canvas { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Ccircle cx='11' cy='11' r='7' fill='none' stroke='%23b8860b' stroke-width='2.5'/%3E%3Ccircle cx='11' cy='11' r='7' fill='rgba(255,236,179,0.55)'/%3E%3Cline x1='16.5' y1='16.5' x2='25' y2='25' stroke='%23b8860b' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E") 12 12, crosshair; }`}</style>
       <Canvas
         shadows
         camera={{ position: [16, 12, 20], fov: 50 }}

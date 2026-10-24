@@ -13,6 +13,13 @@ export const FOG = {
   far: 120,
 };
 
+/**
+ * #6384788257: right-click remove is REFUSED below this camera distance
+ * from the meadow center (a close zoom magnifies precision but hides the
+ * surroundings — no-surprises). Visible refusal: a gentle toast names the
+ * fix. Tuning value: one spot, beside the camera bounds it relates to.
+ */
+export const REMOVE_REFUSAL_ZOOM = 12;
 export const CAMERA_BOUNDS = {
   minPolarAngle: 0.3,
   maxPolarAngle: 1.32,
