@@ -769,34 +769,71 @@ async function checkMagnifier() {
           y: ((-clip.y / clip.w + 1) / 2) * window.innerHeight,
         };
       };
+      // #6387436249: the walk's acceptance must match the QUEEN EXACTLY —
+      // the old screen-space approximation ignored that the ray through the
+      // candidate pixel also hits MESH geometry (the hive): a mesh claim
+      // legitimately beats the queen's visitor claim when the pointer is
+      // nearer the hive, so the walk converged on the hive ('Skep Hive'
+      // card) while its creature-only distance test said 'queen wins'.
+      // The walk now drives the REAL resolver loop: hover the candidate
+      // pixel, let the resolver + meshes run frames, and READ THE ACTUAL
+      // ENTRY — acceptance is kind:'visitor' AND visitorId:'queenbumble',
+      // not 'an entry resolved'. If no candidate in the walk window ever
+      // resolves to the queen alone (the hive mesh dominating her foraging
+      // area under forced spring), that is a REAL placement finding —
+      // reported, never papered over by a loose predicate.
+      const candidates = [];
       const base = project(q);
-      // the resolver's own reach, from the tuning the renderer consumes
-      const reach = 1.1;
-      // walk the pixel around the queen until the pinned probes put the
-      // QUEEN nearest the ray through that pixel
       const sightings = w.wildlifeSightings();
       const others = sightings.filter((s) => s !== q);
-      for (let step = 0; step < 8; step++) {
-        const ang = (step / 8) * Math.PI * 2;
-        const cand = { x: base.x + Math.cos(ang) * step * 6, y: base.y + Math.sin(ang) * step * 6 };
-        // approximate ray-vs-creature distance in screen space: the pixel
-        // must be nearer the QUEEN's projection than any other creature's
-        const queenD = Math.hypot(cand.x - base.x, cand.y - base.y);
-        const otherD = Math.min(
-          ...others.map((o) => {
-            const op = project(o);
-            return Math.hypot(cand.x - op.x, cand.y - op.y);
-          }),
-          Infinity,
-        );
-        if (queenD < 12 && otherD > queenD) return { ...cand, ok: true };
-        void reach;
+      // candidate pixels: the queen's own projection first, then a ring
+      // walk around her (queen-nearest per the creature screen-space
+      // pre-filter — necessary but NOT sufficient without the real read)
+      candidates.push(base);
+      for (let step = 1; step <= 6; step++) {
+        for (let dir = 0; dir < 8; dir++) {
+          const ang = (dir / 8) * Math.PI * 2;
+          const cand = { x: base.x + Math.cos(ang) * step * 6, y: base.y + Math.sin(ang) * step * 6 };
+          const queenD = Math.hypot(cand.x - base.x, cand.y - base.y);
+          const otherD = Math.min(
+            ...others.map((o) => {
+              const op = project(o);
+              return Math.hypot(cand.x - op.x, cand.y - op.y);
+            }),
+            Infinity,
+          );
+          // pre-filter: the pixel must be plausibly queen-nearest among
+          // CREATURES (meshes checked by the real read below)
+          if (otherD > queenD) candidates.push(cand);
+        }
       }
-      return { ...base, ok: true };
+      return { ok: true, candidates };
     }, queenSeen.queen);
-    await page.mouse.move(pos.x, pos.y);
-    await page.waitForTimeout(1200);
-    // unfreeze AFTER the read so the world resumes exactly as it was
+    // drive the real resolver: for each candidate pixel, reset the claim,
+    // hover, let frames run, read the ACTUAL entry — accept only the queen
+    let queenPos = null;
+    let lastClaimed = null;
+    for (const cand of pos.candidates ?? []) {
+      await page.evaluate(() => {
+        window.__meadowlight.setMagnifierEntryForTest(null);
+      });
+      await page.mouse.move(cand.x, cand.y);
+      await page.waitForTimeout(250); // resolver + mesh frames
+      const claimed = await page.evaluate(() => {
+        const e = window.__meadowlight.magnifierReadback().entry;
+        return e && e.kind === 'visitor' ? e.visitorId : e?.kind ?? null;
+      });
+      lastClaimed = claimed;
+      if (claimed === 'queenbumble') {
+        queenPos = cand;
+        break;
+      }
+    }
+    if (queenPos) {
+      // hold the queen-resolved position for the card read
+      await page.mouse.move(queenPos.x, queenPos.y);
+      await page.waitForTimeout(1200);
+    }
   } else {
     await page.waitForTimeout(1200);
   }
@@ -810,10 +847,20 @@ async function checkMagnifier() {
     window.__meadowlight.timeSetPaused(false);
   });
   const queenLive = queenSeen.kinds.includes('queenbumble');
-  const queenFactShown = /Queen bumblebee/i.test(queenCard) && queenCard.includes('winter sleep hungry');
+  const queenFactShown =
+    !!queenPos &&
+    /Queen bumblebee/i.test(queenCard) &&
+    queenCard.includes('winter sleep hungry');
   rec.record('magnifier.queen-under-forced-spring-shows-fact', queenFactShown,
-    (queenLive ? 'queen probe live; ' : 'queen probe not live (no crocuses planted); ') +
-    'card: ' + queenCard.slice(0, 70));
+    !queenLive
+      ? 'queen probe not live (no crocuses planted); card: ' + queenCard.slice(0, 70)
+      : !queenPos
+        // the REAL placement finding, reported not papered over: no pixel
+        // in the walk window resolved to the queen alone — the last claimed
+        // entry tells whether the hive mesh dominated her foraging area
+        ? 'PLACEMENT FINDING: no pointer position resolved to the queen — walk exhausted, last claimed: ' +
+          String(lastClaimed) + ', card: ' + queenCard.slice(0, 60)
+        : 'queen-resolved position held; card: ' + queenCard.slice(0, 70));
   // restore the glass state the check found
   await page.evaluate(() => {
     window.__meadowlight.setMagnifierEntryForTest(null);
