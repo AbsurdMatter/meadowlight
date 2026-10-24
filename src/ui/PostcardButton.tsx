@@ -38,13 +38,21 @@ export function PostcardButton() {
         data-postcard-button
         title="Save a postcard of your meadow"
         style={{
-        padding: '8px 12px',
+        // UI round 3 (#6383867199): shares the corner row's 36px baseline
+        // (align-self stretch from the row; no hand-positioned offsets)
+        height: 36,
+        boxSizing: 'border-box',
+        padding: '0 10px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         borderRadius: theme.border.radius,
         border: `${theme.border.chunk}px solid ${saved ? theme.color.sage : theme.color.honey}`,
         background: saved ? theme.color.sageLight : theme.color.parchment,
         color: theme.color.text,
         fontFamily: theme.font.family,
         fontSize: theme.font.smallSize,
+        lineHeight: 1,
         cursor: 'pointer',
         boxShadow: theme.border.shadow,
       }}

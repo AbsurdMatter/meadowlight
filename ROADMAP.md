@@ -478,3 +478,64 @@ One shared source per semantic (seed hash joins dayPhase/season as named
 state with exactly one definition); raw-query placement for anything that
 checks cells; trigger-first; save v7 additive; tuning in src/data/;
 taste-first with proposal screenshots for anything visual.
+
+## ROADMAP # v4 — the meadow others meet
+
+Theme: the meadow becomes the public portfolio artifact. The v3 door
+(share-ready deploy) opens onto v4's question — what does a FIRST-TIME
+visitor experience, and what does a returning one keep? Four units,
+dependency-ordered; O1–O3 have no interdependencies beyond order and
+can interleave. The v3 tail (CNAME, og:image, README screenshot) rides
+the deploy, not this section.
+
+### O1 — Onboarding / first-run experience (#39)
+
+Seeded starter patch (a few flowers + a hive already placed, so the
+meadow is alive on frame one), timed notebook nudges, the season dial
+introduced in-fiction. Tutorial lives inside the fiction: the notebook
+"notices" things, never a modal wall of text.
+
+Constraints inherited: the onboarding hint renders ABOVE the palette
+dock, never overlapping it or the corner controls (#6384003544 — the
+anchor is the dock's top edge); one input path (nudges write the same
+state the player's own actions write).
+
+### O2 — Journal as first-sighting collection (#40)
+
+The unified inspection entry (v3's landing: flowers and wildlife flow
+through the ONE shared kind-enum entry into the ONE card) feeds a
+permanent sighting log — inspecting gains purpose, seasons gain a goal
+("seen in every season"). One source: the fact store + the kind enum;
+the journal adds no new facts and no new state shapes, only a record of
+what the glass has shown.
+
+### O3 — Audio presence (#41)
+
+Ambient bed, bee hum, rain cued from the N1 weather clock — audio reads
+the same natural-condition sources the visuals do (one clock, one
+truth). Self-hosted assets (the font rule applies to sound). Off by
+default; the existing corner audio toggle stays the single switch.
+
+### O4 — Touch / mobile (#42)
+
+Pointer→touch translation, tap-to-inspect for the glass (hover has no
+touch equivalent — tap is the inspect affordance), narrow-frame QA.
+The bottom dock is already the mobile pattern (#6384003544 geometry:
+one unwrapped corner row, reserved lanes that never overlap at any
+viewport width). Finishes parked #33.
+
+### O5 — Keyboard shortcuts (#43, user-specified)
+
+WASD camera / Q-E rotate / R reset (inline confirm modal, never instant
+— Esc dismisses) / I inspector / J journal / ESC cancel-anything.
+Conventions: one input path (keys drive the SAME stores the pointer
+drives — I toggles the glass's magnifierOn, J the hub's open state;
+aria-pressed syncs both ways), keys ignored while typing, held-repeat
+for movement vs single-fire toggles, preventDefault on consumed keys,
+discoverability via O1 or a "?" hint. The ESC semantics table lives in
+one place; the gate asserts I/J/ESC. Pure input translation onto
+existing stores — no new clocks, no new state.
+
+Success test: a stranger opens the deployed link, is greeted by a
+living meadow, learns it in three gentle nudges, and — on a phone,
+one-handed — can plant, inspect, and keep a sightings journal.

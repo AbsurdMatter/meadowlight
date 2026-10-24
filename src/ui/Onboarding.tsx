@@ -39,9 +39,12 @@ export function Onboarding() {
     <div
       data-onboarding
       style={{
+        // #6384003544: renders ABOVE the palette dock — anchored to the
+        // dock's top edge (the dock is bottom:16 + its height), never
+        // overlapping the dock or the corner controls
         position: 'absolute',
-        bottom: 16,
-        left: 12,
+        bottom: 120,
+        left: 16,
         maxWidth: 320,
         padding: theme.spacing.panelPadding,
         borderRadius: theme.border.radiusPanel,

@@ -17,7 +17,22 @@ const VITE_ENTRY = 'node_modules/vite/bin/vite.js';
 const commands = [
   { name: 'tsc --noEmit', entry: TSC_ENTRY, args: ['--noEmit'] },
   { name: 'vite build', entry: VITE_ENTRY, args: ['build'] },
+  // #6387729576: the gate scripts join the smoke — CI green can never again
+  // claim a gate that cannot even parse. HONEST LIMIT, stated: --check is
+  // SYNTAX only; execution-time errors (the queenPos block-scope class)
+  // still only surface on a real run — the reference-level guard is the
+  // user's machine run, per the standing READ-green/RUN-green convention.
 ];
+// #6387729576: the gate scripts join the smoke — parse-checked per file
+for (const f of ['scripts/session8-gate.mjs', 'scripts/gate-lib.mjs']) {
+  const res = spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
+  if (res.status !== 0) {
+    console.error(`\n[SMOKE] gate script parse FAILED (${f}):\n` + (res.stderr || ''));
+    process.exitCode = 1;
+  } else {
+    console.log(`[SMOKE] gate script parse OK: ${f}`);
+  }
+}
 
 let failed = false;
 for (const { name, entry, args } of commands) {

@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
@@ -17,7 +17,9 @@ import {
 } from '../data/seasonalVisitors';
 import { PLANT_BY_ID } from '../data/plants';
 import { usePlacementStore } from './placementStore';
+import { registerWildlifeProbe, type WildlifeKind } from './magnifierProbes';
 import { inBloom } from '../engine/pollinator';
+import { butterflyColors } from '../data/wildpollinators';
 import { noVariation } from '../engine/variation';
 import { dayPhase } from '../engine/dayCycle';
 import { scaledDelta, scaledElapsed } from '../engine/scaledTime';
@@ -47,6 +49,16 @@ import { recordVisitorWindow } from './visitorLog';
 interface VisitorState {
   pos: THREE.Vector3;
   vel: THREE.Vector3;
+  /** stable per-creature identity: season-window ordinal + index — the
+   *  seeded-hash input for per-butterfly colors (same world = same colors) */
+  ordinal: number;
+  index: number;
+  /** resolved per-creature colors, computed ONCE at spawn from the seeded
+   *  hash of the identity (perf #6384252148: recomputing + re-uploading
+   *  every frame was GPU churn; the values are identity-stable, so they
+   *  are computed at birth and never change) */
+  wing: string;
+  accent: string;
   /** id of the placed flower this visitor heads to — re-resolved per frame */
   targetFlowerId: string | null;
   /** gentle wander point when no bloom is reachable */
@@ -77,6 +89,9 @@ const tmpMat = new THREE.Matrix4();
 const lookMat = new THREE.Matrix4();
 const scaleMat = new THREE.Matrix4();
 const up = new THREE.Vector3(0, 1, 0);
+// per-frame scratch: reused every frame, zero steady-state allocations
+const scratchTarget = new THREE.Vector3();
+const scratchDir = new THREE.Vector3();
 const flowerById = new Map<string, { x: number; y: number; z: number; plantId: string }>();
 let crashLogged = false;
 
@@ -95,14 +110,24 @@ function syncFlowers() {
 }
 
 function makeVisitors(
-  tuning: { speed: number },
+  tuning: { id: string; speed: number },
   count: number,
+  ordinal: number,
+  worldSeed: number,
 ): VisitorState[] {
   const out: VisitorState[] = [];
   for (let i = 0; i < count; i++) {
     const a = Math.random() * Math.PI * 2;
     const r = 4 + Math.random() * 10;
+    // colors resolve at spawn: butterflies by the seeded hash of the
+    // stable identity, others neutral (their tuning colors render)
+    const c =
+      tuning.id === 'butterfly' ? butterflyColors(worldSeed, ordinal, i) : null;
     out.push({
+      ordinal,
+      index: i,
+      wing: c?.wing ?? tuning.id,
+      accent: c?.accent ?? tuning.id,
       pos: new THREE.Vector3(Math.cos(a) * r, 1.8 + Math.random() * 1.4, Math.sin(a) * r),
       vel: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5)
         .normalize()
@@ -140,8 +165,29 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
   const wingRef = useRef<THREE.InstancedMesh>(null);
   const accentRef = useRef<THREE.InstancedMesh>(null);
   const visitors = useRef<VisitorState[]>([]);
+  const windowOrdinal = useRef(0);
+  // N3 coverage: read-only live positions — kind per species (butterfly,
+  // hoverfly, queenbumble, lavendermoth all render through this component)
+  useEffect(
+    () =>
+      registerWildlifeProbe(tuning.id as WildlifeKind, () =>
+        visitors.current.map((v) => ({ kind: tuning.id as WildlifeKind, x: v.pos.x, y: v.pos.y, z: v.pos.z })),
+      ),
+    [tuning.id],
+  );
   const lastCount = useRef(-1);
+  const colorsDirty = useRef(false);
+  const tmpColor = useMemo(() => new THREE.Color(), []);
 
+  // #6383907384: butterflies use per-instance colors — the material is
+  // white so instanceColor IS the color; other species keep tuning colors
+  const perInstanceColor = tuning.id === 'butterfly';
+  // #6384003544: the butterfly BODY stays dark brown (the tuning color —
+  // white was wrong); only wings + accent carry per-instance color, and the
+  // wing material is TRANSLUCENT so light passes through (less vivid)
+  const bodyColor = tuning.bodyColor;
+  const accentColor = perInstanceColor ? '#ffffff' : tuning.wingColor;
+  const wingColor = perInstanceColor ? '#ffffff' : tuning.wingAccentColor;
   const bodyGeo = useMemo(() => new THREE.BoxGeometry(...tuning.bodySize), [tuning]);
   const wingGeo = useMemo(
     () =>
@@ -214,11 +260,23 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
     if (tuning.id === 'hoverfly' && season === HOVERFLY_AUTUMN_TUNING.season) {
       target = Math.floor(target * HOVERFLY_AUTUMN_TUNING.fraction);
     }
+    colorsDirty.current = target !== lastCount.current;
     if (target !== lastCount.current) {
       lastCount.current = target;
       const list = visitors.current;
       while (list.length > target) list.pop();
-      while (list.length < target) list.push(...makeVisitors(tuning, target - list.length));
+      // #6383907384: the window ordinal — bumped EVERY population change so
+      // a creature's identity is stable within its life, not across respawns
+      windowOrdinal.current += target - list.length > 0 ? 1 : 0;
+      while (list.length < target)
+        list.push(
+          ...makeVisitors(
+            tuning,
+            target - list.length,
+            windowOrdinal.current,
+            s.worldSeed,
+          ),
+        );
       // the visit WINDOW record rides the same natural-condition gate —
       // one notebook entry per visitor per season window, never per frame
       if (target > 0 && (tuning.id === 'queenbumble' || tuning.id === 'lavendermoth')) {
@@ -282,7 +340,10 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
         }
       }
 
-      const target = new THREE.Vector3();
+      // perf (#6384252148): a module-scope scratch vector, NOT a per-frame
+      // allocation — a new Vector3 per visitor per frame was the GC spike
+      // source behind p95 >> avg
+      const target = scratchTarget;
       if (v.targetFlowerId !== null && flowerInfo) {
         const def = PLANT_BY_ID[flowerInfo.plantId];
         target.set(
@@ -300,9 +361,11 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
       }
 
       if (v.restingUntil <= t) {
-        const toTarget = target.clone().sub(v.pos);
+        const toTarget = scratchDir.copy(target).sub(v.pos);
         const dist = toTarget.length();
         if (dist < 0.5) {
+          // N2: arrival at a flower IS the visit — one write path, deduped
+          if (v.targetFlowerId !== null) usePlacementStore.getState().recordVisit(v.targetFlowerId);
           v.restingUntil =
             t +
             tuning.restSeconds[0] +
@@ -335,6 +398,17 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
       scaleMat.makeScale(flap, 1, 1);
       tmpMat.multiply(scaleMat);
       wings.setMatrixAt(bi, tmpMat);
+      // #6383907384 colors, perf-fixed (#6384252148): the values are
+      // identity-stable and resolved at SPAWN (v.wing/v.accent); they are
+      // written to the GPU buffers only when the population changes
+      // (colorsDirty), never per frame — per-frame instanceColor
+      // re-uploads were pure GPU churn.
+      if (colorsDirty && perInstanceColor && wings.instanceColor && accent.instanceColor) {
+        tmpColor.set(v.wing);
+        wings.instanceColor.setXYZ(bi, tmpColor.r, tmpColor.g, tmpColor.b);
+        tmpColor.set(v.accent);
+        accent.instanceColor.setXYZ(bi, tmpColor.r, tmpColor.g, tmpColor.b);
+      }
     }
     body.count = visitors.current.length;
     accent.count = visitors.current.length;
@@ -342,6 +416,11 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
     body.instanceMatrix.needsUpdate = true;
     accent.instanceMatrix.needsUpdate = true;
     wings.instanceMatrix.needsUpdate = true;
+    if (colorsDirty.current) {
+      if (body.instanceColor) body.instanceColor.needsUpdate = true;
+      if (accent.instanceColor) accent.instanceColor.needsUpdate = true;
+      if (wings.instanceColor) wings.instanceColor.needsUpdate = true;
+    }
   };
 
   useFrame(() => {
@@ -357,14 +436,46 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
 
   return (
     <group>
-      <instancedMesh ref={bodyRef} args={[bodyGeo, undefined, tuning.maxCount]} frustumCulled={false}>
-        <meshLambertMaterial color={tuning.bodyColor} />
+      {/* N3 note: no per-mesh pointer events here by design — moving
+          creatures are hit by the IN-Canvas MagnifierResolver's per-frame
+          ray (current position at pointer time), the ONE wildlife input
+          path; two writers to the same entry raced each other. */}
+      <instancedMesh
+        ref={bodyRef}
+        args={[bodyGeo, undefined, tuning.maxCount]}
+        frustumCulled={false}
+      >
+        <meshLambertMaterial color={bodyColor} />
       </instancedMesh>
-      <instancedMesh ref={accentRef} args={[accentGeo, undefined, tuning.maxCount]} frustumCulled={false}>
-        <meshLambertMaterial color={tuning.wingColor} />
+      <instancedMesh
+        ref={accentRef}
+        args={[accentGeo, undefined, tuning.maxCount]}
+        frustumCulled={false}
+        onUpdate={(m) => {
+          if (perInstanceColor && !m.instanceColor) m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(tuning.maxCount * 3).fill(1), 3);
+        }}
+      >
+        <meshLambertMaterial color={accentColor} />
       </instancedMesh>
-      <instancedMesh ref={wingRef} args={[wingGeo, undefined, tuning.maxCount]} frustumCulled={false}>
-        <meshLambertMaterial color={tuning.wingAccentColor} transparent opacity={tuning.wingOpacity} />
+      <instancedMesh
+        ref={wingRef}
+        args={[wingGeo, undefined, tuning.maxCount]}
+        frustumCulled={false}
+        onUpdate={(m) => {
+          if (perInstanceColor && !m.instanceColor) m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(tuning.maxCount * 3).fill(1), 3);
+        }}
+      >
+        {/* #6384329017: butterfly wings ride the OPAQUE queue via
+            alphaTest — NO transparent pass, no per-frame sort (the
+            transparent queue was leftover steady-state cost); the pastel
+            palette at alphaTest ~0.5 reads translucent enough while
+            costing like an opaque wing. Other species keep their tuning. */}
+        <meshLambertMaterial
+          color={wingColor}
+          transparent={perInstanceColor ? false : true}
+          opacity={perInstanceColor ? 1 : tuning.wingOpacity}
+          alphaTest={perInstanceColor ? 0.5 : 0}
+        />
       </instancedMesh>
     </group>
   );

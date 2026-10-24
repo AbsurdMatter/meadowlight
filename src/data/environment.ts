@@ -13,6 +13,63 @@ export const FOG = {
   far: 120,
 };
 
+/**
+ * #6384788257 / #6384994711: the removal-refusal family, ONE guard. Remove
+ * is refused when: (a) below REMOVE_REFUSAL_ZOOM (a close zoom hides the
+ * surroundings), or (b) the glass is ARMED with an ACTIVE entry (right-click
+ * in glass context belongs to the glass — dismiss the card / disarm — never
+ * to removal; the no-surprises rule). The removal handler consults this ONE
+ * predicate; no scattered checks. Visible refusal: a gentle toast names the
+ * reason (same soft-voice pattern for both states).
+ */
+export const REMOVE_REFUSAL_ZOOM = 12;
+
+export interface RemovalRefusal {
+  refused: boolean;
+  toastTitle: string;
+  toastBody: string;
+}
+
+/**
+ * isRemovalRefused — the ONE predicate the removal handler consults.
+ * cameraDistance is the camera's distance from the meadow center; glassOn
+ * and glassEntry are the glass state. Returns the refusal + toast copy so
+ * the caller shows a VISIBLE reason, never a silent no-op.
+ */
+export function isRemovalRefused(
+  cameraDistance: number,
+  glassOn: boolean,
+  glassEntryActive: boolean,
+): RemovalRefusal {
+  if (cameraDistance < REMOVE_REFUSAL_ZOOM) {
+    return {
+      refused: true,
+      toastTitle: 'Too close to remove safely',
+      toastBody: 'Zoom out a little first — right-click removes work best with the meadow in view.',
+    };
+  }
+  // #6386272430: ARMED GLASS, PERIOD — the entry state distinguishes the
+  // glass's own right-click behavior, NEVER whether removal is refused.
+  // The old 'armed AND active entry' condition raced with the glass's own
+  // dismissal: click 1 dismissed the card (entry cleared), click 2 met
+  // armed-no-entry, the guard passed, and removal executed. Removal while
+  // the glass is armed is now impossible BY CONSTRUCTION.
+  if (glassOn) {
+    // (glassEntryActive distinguishes the CLICK behavior the removal
+    // handler applies — dismiss vs disarm — but no longer the refusal
+    // itself, which is armed-period; #47)
+    void glassEntryActive;
+    // #47 (v4, landed now — trivial): the glass-armed refusal is SILENT —
+    // the glass context already announces itself (the armed cursor, the
+    // card appearing/disappearing), so a toast on every right-click is
+    // redundant noise. The defined two-click behavior stands (click 1:
+    // dismiss card, glass stays armed; click 2: disarm) — only the toast
+    // goes. The zoom refusal KEEPS its toast: zoom state is invisible,
+    // the refusal would read as a dead right-click without it.
+    return { refused: true, toastTitle: '', toastBody: '' };
+  }
+  return { refused: false, toastTitle: '', toastBody: '' };
+}
 export const CAMERA_BOUNDS = {
   minPolarAngle: 0.3,
   maxPolarAngle: 1.32,

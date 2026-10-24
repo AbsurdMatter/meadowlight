@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { registerWildlifeProbe } from './magnifierProbes';
 import { scaledDelta, scaledElapsed } from '../engine/scaledTime';
 import {
   HABITAT_TUNING,
@@ -249,6 +250,14 @@ function Dragonflies() {
         phase: (i * 2.399) % (Math.PI * 2),
       })),
     [count, t.heightMin, t.heightMax],
+  );
+  // N3 coverage: read-only live positions for the magnifier (pond dragonflies)
+  useEffect(
+    () =>
+      registerWildlifeProbe('dragonfly', () =>
+        state.map((d) => ({ kind: 'dragonfly' as const, x: d.pos.x, y: d.pos.y, z: d.pos.z })),
+      ),
+    [state],
   );
   const mat = useMemo(() => new THREE.Matrix4(), []);
   const rot = useMemo(() => new THREE.Matrix4(), []);

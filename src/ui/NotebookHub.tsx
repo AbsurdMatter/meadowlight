@@ -105,7 +105,15 @@ function HubInner() {
         onClick={() => setOpen((o) => !o)}
         title="Field notebook"
         style={{
-          padding: '4px 12px',
+          // #6384003544: shares the corner row's 36px baseline with the
+          // other controls (one unwrapped row)
+          height: 36,
+          boxSizing: 'border-box',
+          padding: '0 10px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          lineHeight: 1,
           borderRadius: theme.border.radius,
           border: `${theme.border.chunk}px solid ${theme.color.honey}`,
           background: theme.color.parchmentDeep,

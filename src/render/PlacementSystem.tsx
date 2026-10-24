@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
+import { isRemovalRefused } from '../data/environment';
 import * as THREE from 'three';
 import { MEADOW_SIZE } from '../engine/terrain';
 import { groundAt } from '../engine/ground';
@@ -307,6 +308,44 @@ export function PlacementSystem() {
         return;
       }
       if (button !== 2) return;
+      // #6384994711: the ONE removal-refusal guard (both states — zoomed
+      // close, or armed glass with an active entry). In GLASS CONTEXT the
+      // right-click is CONSUMED BY THE GLASS: it dismisses the inspection
+      // card (and disarms if nothing is showing), never forwarded to
+      // removal. Visible toast names the reason either way — the soft-voice
+      // pattern; never a silent no-op.
+      const refusal = isRemovalRefused(
+        camera.position.length(),
+        s.magnifierOn,
+        s.magnifierEntry !== null,
+      );
+      if (refusal.refused) {
+        // #6386272430: the glass's right-click, DEFINED for both states —
+        // click 1 (card showing): dismiss the card, glass STAYS ARMED;
+        // click 2 (armed, no card): DISARM the glass. Neither click ever
+        // reaches removal while armed (the guard is armed-period).
+        if (s.magnifierOn && s.magnifierEntry !== null) {
+          s.setMagnifierEntry(null);
+        } else if (s.magnifierOn) {
+          usePlacementStore.setState({ magnifierOn: false, magnifierEntry: null });
+        }
+        // #47: the toast fires only when the guard provides copy — the
+        // glass-armed refusal is SILENT (the glass context announces
+        // itself); the zoom refusal keeps its toast (invisible state)
+        if (refusal.toastTitle) {
+          usePlacementStore.setState((st) => ({
+            toasts: [
+              ...st.toasts,
+              {
+                id: Date.now(),
+                title: refusal.toastTitle,
+                body: refusal.toastBody,
+              },
+            ],
+          }));
+        }
+        return;
+      }
       const spot = resolveFromNdc(pressNdcX, pressNdcY);
       if (!spot) return;
       const x = spot[0];

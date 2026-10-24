@@ -1,18 +1,47 @@
 /**
- * #14 (session 5): gentle rain. Cozy weather, never a fail state: rain only
- * changes what you SEE (bees home, flowers glisten, audio hushes) — appeal
- * never drops, nothing is ever punished. Pure module: the P harness can
- * toggle it, the renderers read one source.
+ * #14 (session 5) + session 8 N1 round 2: gentle precipitation, natural.
+ * Cozy weather, never a fail state: rain/snow only change what you SEE
+ * (bees home, flowers glisten, audio hushes) — appeal never drops, nothing
+ * is ever punished.
+ *
+ * ONE source: the schedule (engine/rainSchedule) derives every window from
+ * the shared seeded hash — binary on/off, season-weighted, winter = snow.
+ * This module is the resolver consumers already read: isRaining() keeps its
+ * meaning (rain OR snow = precipitation for bees-home/glisten/audio-hush),
+ * plus isSnowing() for the winter visual. The old P-panel force buttons are
+ * GONE (binding directive: precipitation is natural and unclickable — no
+ * input path; the panel shows readback only). Gates drive the season and
+ * let the weather derive.
  */
+import { precipitationNow, isPrecipitating, tickPrecipSchedule, setPrecipitatingForTest } from './rainSchedule';
 
-const weather = { raining: false };
+/** true while any precipitation falls (rain or snow) — bees home, glisten, hush */
 export function isRaining(): boolean {
-  return weather.raining;
+  return isPrecipitating();
 }
-/** P harness / tests: toggle rain on/off directly */
-export function setRaining(v: boolean): void {
-  weather.raining = v;
+
+export { setPrecipitatingForTest };
+
+/** true while SNOW falls (the winter visual; rain renders otherwise) */
+export function isSnowing(): boolean {
+  return precipitationNow()?.kind === 'snow';
 }
+
+/**
+ * The live visual verdict for the precipitation renderer: null = dry.
+ * Consumers scale intensity by the fast settle (rain fading in reads as
+ * weather turning, not a step).
+ */
+export function precipitationVisual(): { kind: 'rain' | 'snow'; intensity: number } | null {
+  return precipitationNow();
+}
+
+/**
+ * Session-8 re-export of the schedule tick (Sky calls this at its single
+ * time site); kept here so engine consumers import weather, not the
+ * schedule module directly.
+ */
+export { tickPrecipSchedule };
 
 export const RAIN_TUNING = {
   /** rain instance caps (one instanced mesh, columns of drops) */

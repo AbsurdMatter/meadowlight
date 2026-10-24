@@ -27,6 +27,8 @@ import { CornerControls } from './ui/CornerControls';
 import { Onboarding } from './ui/Onboarding';
 import { Toasts } from './ui/Toasts';
 import { Notebook } from './ui/Notebook';
+import { MagnifierCard } from './ui/MagnifierCard';
+import { MagnifierResolver } from './render/MagnifierInspector';
 import { HivePopup } from './ui/HivePopup';
 import { MilestoneWatcher } from './ui/MilestoneWatcher';
 import { PerfOverlay } from './ui/PerfOverlay';
@@ -147,15 +149,32 @@ export default function App() {
   useEffect(() => {
     if (loaded) maybeSeedDemoWorld();
   }, [loaded]);
+  const magnifierOn = usePlacementStore((s) => s.magnifierOn);
   const placing = selectedPlantId ?? selectedStructureId;
   return (
-    <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
+    <div
+      data-magnifier={magnifierOn ? 'on' : 'off'}
+      style={{ width: '100vw', height: '100vh', position: 'relative' }}
+    >
+      {/* N3 taste (PR #38 comment #6383586724): the pointer reflects the
+          glass tool — CSS-only, keyed off data attributes (no JS cursor
+          mutation): crosshair while the glass is armed, pointer once the
+          resolver locks an inspectable, default otherwise. The user
+          eyeballs pointer-vs-crosshair; the swap is one line below. */}
+      {/* #6384788257: the glass tool has its OWN cursor identity — an inline
+          SVG magnifier (no asset fetch, one spot), armed over the canvas;
+          the planting cursor never shows while the glass is armed. On an
+          inspectable LOCK, the same magnifier with a warm accent so the
+          hit reads at a glance. CSS-only. */}
+      <style>{`[data-magnifier='on'] canvas { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Ccircle cx='11' cy='11' r='7' fill='none' stroke='%23241d12' stroke-width='2.5'/%3E%3Ccircle cx='11' cy='11' r='7' fill='rgba(255,244,214,0.35)'/%3E%3Cline x1='16.5' y1='16.5' x2='25' y2='25' stroke='%23241d12' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E") 12 12, crosshair; }
+body[data-magnifier-hit='1'] canvas { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Ccircle cx='11' cy='11' r='7' fill='none' stroke='%23b8860b' stroke-width='2.5'/%3E%3Ccircle cx='11' cy='11' r='7' fill='rgba(255,236,179,0.55)'/%3E%3Cline x1='16.5' y1='16.5' x2='25' y2='25' stroke='%23b8860b' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E") 12 12, crosshair; }`}</style>
       <Canvas
         shadows
         camera={{ position: [16, 12, 20], fov: 50 }}
         gl={{ antialias: true }}
       >
         <Scene />
+        {loaded && <MagnifierResolver />}
       </Canvas>
       {loaded && <Palette />}
       {loaded && <SeasonDial />}
@@ -169,6 +188,7 @@ export default function App() {
       {loaded && <Onboarding />}
       {loaded && <Toasts />}
       {loaded && <Notebook />}
+      {loaded && <MagnifierCard />}
       {loaded && <HivePopup />}
       <MilestoneWatcher />
       {PerfOverlay && <PerfOverlay />}
