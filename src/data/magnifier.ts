@@ -14,8 +14,8 @@
 export const MAGNIFIER_TUNING = {
   /** N3 PROPOSAL flag: the glass entry in the palette (user eyeball decides) */
   enabled: true,
-  /** where the detail card sits (bottom-center above the notebook card) */
-  cardBottom: 210,
+  /** UI round 2 (#6383805035): where the detail card DOCKS — bottom-right,
+   *  above the corner control row (glass/journal/postcard). CSS-only. */
   /** how long after pointer-left the card lingers (ms) — zero flicker */
   lingerMs: 450,
   /**

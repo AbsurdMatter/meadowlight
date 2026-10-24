@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { PLANTS } from '../data/plants';
 import { STRUCTURES, type StructureId } from '../data/structures';
 import { usePlacementStore } from '../render/placementStore';
-import { renderVoxelThumb } from '../engine/thumbnails';
+import { renderVoxelThumb, renderVoxelCloseUp } from '../engine/thumbnails';
+import { plantingsBySeason, bloomSeasonsLabel, seasonBadge } from '../data/bloomWindows';
 import { theme, headingStyle } from './theme';
 
 const chipStyle = (active: boolean, enabled: boolean): React.CSSProperties => ({
@@ -63,7 +64,24 @@ interface PaletteEntry {
   swatch: string;
 }
 
+const tabStyle = (active: boolean): React.CSSProperties => ({
+  padding: '4px 14px',
+  borderRadius: theme.border.radius,
+  border: `${theme.border.chunk}px solid ${active ? theme.color.sage : theme.color.honeyDark}`,
+  background: active ? theme.color.sageLight : theme.color.parchment,
+  color: theme.color.text,
+  fontFamily: theme.font.family,
+  fontSize: theme.font.smallSize,
+  letterSpacing: 0.4,
+  textTransform: 'uppercase',
+  cursor: 'pointer',
+});
+
+/** UI round 2 (#6383805035): the tab bodies — PLANTING groups flowers by
+ *  bloom season (derived from the engine's bloom data); EQUIPMENT is the
+ *  bee-care structures + the nature structures that live with them. */
 export function Palette() {
+  const [tab, setTab] = useState<'planting' | 'equipment'>('planting');
   const selectedPlantId = usePlacementStore((s) => s.selectedPlantId);
   const selectedStructureId = usePlacementStore((s) => s.selectedStructureId);
   const select = usePlacementStore((s) => s.select);
@@ -88,7 +106,8 @@ export function Palette() {
   useEffect(() => {
     const t: Record<string, string | null> = {};
     for (const p of PLANTS) {
-      t['plant:' + p.id] = renderVoxelThumb(p.parts, p.height);
+      // UI round 2: chips show CLOSE-UP bloom art (identifiable at a glance)
+      t['plant:' + p.id] = renderVoxelCloseUp(p.parts) ?? renderVoxelThumb(p.parts, p.height);
     }
     for (const st of STRUCTURES) {
       const h = Math.max(...st.parts.map((p) => p.offset[1] + p.size[1] / 2));
@@ -96,17 +115,28 @@ export function Palette() {
     }
     setThumbs(t);
   }, []);
-  const flora: PaletteEntry[] = useMemo(
-    () => [
-      ...PLANTS.map((p) => ({
-        key: 'plant:' + p.id,
-        name: p.name,
-        kind: 'plant' as const,
-        id: p.id,
-        thumb: thumbs['plant:' + p.id] ?? null,
-        swatch: p.parts[p.parts.length - 1].color,
+  // season-grouped planting tab: derived from the engine's bloom windows
+  // (one source — plantingsBySeason reads PLANTS[].bloom directly)
+  const seasonGroups = useMemo(
+    () =>
+      plantingsBySeason().map((g) => ({
+        season: g.season,
+        entries: g.plants.map((p) => ({
+          key: 'plant:' + p.id,
+          name: p.name,
+          kind: 'plant' as const,
+          id: p.id,
+          thumb: thumbs['plant:' + p.id] ?? null,
+          swatch: p.parts[p.parts.length - 1].color,
+        })),
       })),
-      ...STRUCTURES.filter((s) => s.id === 'hedge' || s.id === 'wildcorner' || s.id === 'bush').map((s) => ({
+    [thumbs],
+  );
+  // the nature structures that belong WITH planting (hedge/wildcorner/bush):
+  // one block at the end of the planting tab, not interleaved
+  const natureEntries: PaletteEntry[] = useMemo(
+    () =>
+      STRUCTURES.filter((s) => s.id === 'hedge' || s.id === 'wildcorner' || s.id === 'bush').map((s) => ({
         key: 'structure:' + s.id,
         name: s.name,
         kind: 'structure' as const,
@@ -114,7 +144,6 @@ export function Palette() {
         thumb: thumbs['structure:' + s.id] ?? null,
         swatch: s.parts[s.parts.length - 1].color,
       })),
-    ],
     [thumbs],
   );
   const beeCare: PaletteEntry[] = useMemo(
@@ -136,6 +165,16 @@ export function Palette() {
   const renderEntry = (e: PaletteEntry) => {
     const active = isActive(e);
     const enabled = isEnabled(e);
+    // tooltip: name + BLOOM SEASONS derived from the engine's bloom data
+    // (one source: bloomSeasonsLabel reads PLANTS[].bloom) — structures
+    // keep their plain tooltip
+    const plantDef = e.kind === 'plant' ? PLANTS.find((p) => p.id === e.id) : undefined;
+    const badge = plantDef ? seasonBadge(plantDef) : null;
+    const tooltip = !enabled
+      ? 'keep tending the meadow to unlock this'
+      : plantDef
+        ? `${e.name} — ${bloomSeasonsLabel(plantDef)}`
+        : e.name;
     return (
       <button
         key={e.key}
@@ -146,7 +185,7 @@ export function Palette() {
           else selectStructure(active ? null : (e.id as StructureId));
         }}
         style={chipStyle(active, enabled)}
-        title={enabled ? e.name : 'keep tending the meadow to unlock this'}
+        title={tooltip}
       >
         {e.thumb ? (
           <img src={e.thumb} alt={e.name} style={thumbStyle} data-palette-thumb={e.key} />
@@ -161,31 +200,40 @@ export function Palette() {
             }}
           />
         )}
-        <span style={{ fontSize: theme.font.smallSize, color: theme.color.textSoft, whiteSpace: 'nowrap' }}>{e.name}</span>
+        <span style={{ fontSize: theme.font.smallSize, color: theme.color.textSoft, whiteSpace: 'nowrap' }}>
+          {e.name}
+          {badge && (
+            <span
+              data-season-badge={e.key}
+              style={{ marginLeft: 3, fontSize: 9, opacity: 0.8, color: theme.color.textFaint }}
+            >
+              {badge}
+            </span>
+          )}
+        </span>
       </button>
     );
   };
   return (
     <div
-      data-palette-dock="left"
+      data-palette-dock="bottom"
       style={{
-        // UI verdict (#6383659472): a compact LEFT-DOCKED column, not a
-        // full-width bottom bar — the meadow stays visible while browsing.
-        // Docked at the free left edge (top-right = dial/time, bottom-right
-        // = corner controls, bottom-left = onboarding); chips wrap inside a
-        // narrow column, sections stack with headers, and the dock scrolls
-        // only when the viewport is short.
+        // UI round 2 (#6383805035): BOTTOM dock with two tabs — the left
+        // dock overlapped the top-left scene info and read unclear. The
+        // dock is a compact bottom bar: tabs on the left edge, the active
+        // tab's content in a wrapped row, the placement-mode toggle at
+        // the far right, separated by a divider. The meadow above stays
+        // fully visible; the bar scrolls horizontally only if the tab
+        // outgrows the viewport.
         position: 'absolute',
-        top: 12,
-        left: 12,
-        maxHeight: 'calc(100vh - 24px)',
-        overflowY: 'auto',
+        bottom: 16,
+        left: '50%',
+        transform: 'translateX(-50%)',
         display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-        padding: '10px 12px',
-        width: 264,
-        boxSizing: 'border-box',
+        alignItems: 'stretch',
+        gap: 10,
+        padding: '8px 12px',
+        maxWidth: 'calc(100vw - 32px)',
         borderRadius: theme.border.radiusPanel,
         background: theme.color.panel,
         border: `${theme.border.chunk}px solid ${theme.color.honey}`,
@@ -193,31 +241,86 @@ export function Palette() {
         fontFamily: theme.font.family,
       }}
     >
-      <div style={sectionStyle('rgba(220, 236, 194, 0.35)')} data-palette-section="flora">
-          <span style={sectionLabelStyle} data-section="flora">
-            🌿 Flora &amp; nature
-          </span>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{flora.map(renderEntry)}</div>
+      {/* the tab flip: PLANTING vs EQUIPMENT */}
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4 }}>
+        <button
+          data-palette-tab="planting"
+          onClick={() => setTab('planting')}
+          style={tabStyle(tab === 'planting')}
+          aria-pressed={tab === 'planting'}
+          title="Flowers & nature — grouped by bloom season"
+        >
+          🌿 Planting
+        </button>
+        <button
+          data-palette-tab="equipment"
+          onClick={() => setTab('equipment')}
+          style={tabStyle(tab === 'equipment')}
+          aria-pressed={tab === 'equipment'}
+          title="Bee housing & care"
+        >
+          🐝 Equipment
+        </button>
       </div>
-      <div style={sectionStyle('rgba(255, 233, 184, 0.35)')} data-palette-section="beecare">
-          <span style={sectionLabelStyle} data-section="beecare">
-            🐝 Bee care
-          </span>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{beeCare.map(renderEntry)}</div>
+      {/* the tab body */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          overflowX: 'auto',
+          paddingTop: 2,
+          paddingBottom: 2,
+        }}
+      >
+        {tab === 'planting' ? (
+          <>
+            {seasonGroups.map((g) => (
+              <div
+                key={g.season}
+                style={sectionStyle('rgba(220, 236, 194, 0.35)')}
+                data-palette-section={'season:' + g.season}
+              >
+                <span style={sectionLabelStyle} data-section={g.season}>
+                  {g.season}
+                </span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {g.entries.map((e) => renderEntry(e))}
+                </div>
+              </div>
+            ))}
+            <div
+              style={sectionStyle('rgba(220, 236, 194, 0.22)')}
+              data-palette-section="nature"
+            >
+              <span style={sectionLabelStyle} data-section="nature">
+                nature
+              </span>
+              <div style={{ display: 'flex', gap: 6 }}>{natureEntries.map(renderEntry)}</div>
+            </div>
+          </>
+        ) : (
+          <div style={sectionStyle('rgba(255, 233, 184, 0.35)')} data-palette-section="beecare">
+            <span style={sectionLabelStyle} data-section="beecare">
+              🐝 Bee care
+            </span>
+            <div style={{ display: 'flex', gap: 6 }}>{beeCare.map(renderEntry)}</div>
+          </div>
+        )}
       </div>
-      {/* the placement-mode row sits visually SEPARATED from both sections:
-          a hairline divider + its own row (it is a mode, not an item) */}
+      {/* the placement-mode toggle: separated at the far right (a mode,
+          not an item) */}
       <div
         data-palette-section="mode"
         style={{
-          borderTop: `1px solid ${theme.color.honeyDark}44`,
-          paddingTop: 8,
-          marginTop: 2,
-          fontSize: theme.font.smallSize,
-          color: theme.color.textSoft,
+          borderLeft: `1px solid ${theme.color.honeyDark}44`,
+          paddingLeft: 10,
           display: 'flex',
           alignItems: 'center',
           gap: 6,
+          fontSize: theme.font.smallSize,
+          color: theme.color.textSoft,
+          whiteSpace: 'nowrap',
         }}
       >
         <span>Natural placement</span>

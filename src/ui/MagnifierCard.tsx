@@ -93,10 +93,13 @@ export function MagnifierCard() {
     <div
       data-magnifier-card="true"
       style={{
+        // UI round 2 (#6383805035): DOCKED bottom-right, above the corner
+        // control row (glass/journal/postcard live there) — never center-
+        // screen, never over the hovered creature. CSS only: pointer-
+        // events:none holds; no resolver/card logic changed.
         position: 'fixed',
-        bottom: MAGNIFIER_TUNING.cardBottom,
-        left: '50%',
-        transform: 'translateX(-50%)',
+        bottom: 116,
+        right: 12,
         padding: theme.spacing.panelPadding,
         borderRadius: theme.border.radiusPanel,
         background: theme.color.panel,
