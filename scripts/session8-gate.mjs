@@ -521,6 +521,74 @@ async function checkMagnifier() {
     beeCard.text.includes('flowers per foraging trip');
   rec.record('magnifier.wildlife-entry-shows-its-fact', beeFactShown,
     beeCard ? 'card: ' + beeCard.text.slice(0, 80) : 'no card rendered');
+  // #6384994711: the removal-refusal gate sibling — with the glass ARMED
+  // and an ACTIVE entry, a right-click ON a target must NOT remove it:
+  // the target stays present, the save is unchanged, the right-click is
+  // consumed by the glass (card dismissed).
+  const glassRemove = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    const read = () => JSON.parse(localStorage.getItem('meadowlight.world.v2') || '{}');
+    // arm the glass + hold an entry (a flower), frozen clock for the diff
+    const wasPaused = w.timeIsPaused();
+    w.timeSetPaused(true);
+    w.setMagnifierOnForTest(true);
+    const target = w.items()[0];
+    w.setMagnifierEntryForTest({ kind: 'flower', itemId: target.id });
+    const before = read();
+    const beforeCount = w.items().length;
+    // simulate the right-click path exactly: contextmenu at the target's
+    // screen position (a real DOM event — the removal handler's own path)
+    const cam = w.__three?.camera;
+    const p = target.position;
+    const pv = { x: p[0], y: p[1] + 0.5, z: p[2], w: 1 };
+    const proj = cam.projectionMatrix.elements;
+    const view = cam.matrixWorldInverse.elements;
+    function mul(a, v3) {
+      return {
+        x: a[0] * v3.x + a[4] * v3.y + a[8] * v3.z + a[12],
+        y: a[1] * v3.x + a[5] * v3.y + a[9] * v3.z + a[13],
+        z: a[2] * v3.x + a[6] * v3.y + a[10] * v3.z + a[14],
+        w: a[3] * v3.x + a[7] * v3.y + a[11] * v3.z + a[15],
+      };
+    }
+    const eye = mul(view, pv);
+    const clip = mul(proj, eye);
+    const ndc = { x: clip.x / clip.w, y: clip.y / clip.w };
+    const sx = ((ndc.x + 1) / 2) * window.innerWidth;
+    const sy = ((-ndc.y + 1) / 2) * window.innerHeight;
+    // press+release the right button ON THE CANVAS (the removal handler
+    // listens on gl.domElement — dispatching on window would never reach
+    // it and the check would pass vacuously; the synthetic-vs-real lesson
+    // applied to the check itself), then contextmenu on the canvas too
+    const canvas = document.querySelector('canvas');
+    if (!canvas) return { beforeCount: 0, afterCount: -1, changed: ['no canvas'], entry: null };
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { button: 2, clientX: sx, clientY: sy, bubbles: true }));
+    canvas.dispatchEvent(new PointerEvent('pointerup', { button: 2, clientX: sx, clientY: sy, bubbles: true }));
+    canvas.dispatchEvent(new MouseEvent('contextmenu', { button: 2, clientX: sx, clientY: sy, bubbles: true, cancelable: true }));
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        const after = read();
+        const afterCount = window.__meadowlight.items().length;
+        const changed = [];
+        for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) {
+          if (JSON.stringify(before[k]) !== JSON.stringify(after[k])) changed.push(k);
+        }
+        const entry = window.__meadowlight.magnifierReadback();
+        window.__meadowlight.setMagnifierEntryForTest(null);
+        window.__meadowlight.setMagnifierOnForTest(false);
+        window.__meadowlight.timeSetPaused(wasPaused);
+        resolve({ beforeCount, afterCount, changed, entry });
+      }, 800);
+    });
+  });
+  const glassRemoveOk =
+    glassRemove.afterCount === glassRemove.beforeCount &&
+    glassRemove.changed.length === 0;
+  rec.record('magnifier.rightclick-while-armed-removes-nothing', glassRemoveOk,
+    glassRemoveOk
+      ? 'armed glass + right-click on target: ' + glassRemove.beforeCount + ' items before/after, save unchanged, entry: ' + JSON.stringify(glassRemove.entry.entry)
+      : 'REMOVED under armed glass — items ' + glassRemove.beforeCount + '->' + glassRemove.afterCount + ', changed: ' + glassRemove.changed.join(', '));
+
   // wildlife inspection is read-only too: same frozen-clock field diff
   const wildMutation = await page.evaluate(() => {
     const w = window.__meadowlight;

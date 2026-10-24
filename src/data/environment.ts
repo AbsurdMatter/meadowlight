@@ -14,12 +14,49 @@ export const FOG = {
 };
 
 /**
- * #6384788257: right-click remove is REFUSED below this camera distance
- * from the meadow center (a close zoom magnifies precision but hides the
- * surroundings — no-surprises). Visible refusal: a gentle toast names the
- * fix. Tuning value: one spot, beside the camera bounds it relates to.
+ * #6384788257 / #6384994711: the removal-refusal family, ONE guard. Remove
+ * is refused when: (a) below REMOVE_REFUSAL_ZOOM (a close zoom hides the
+ * surroundings), or (b) the glass is ARMED with an ACTIVE entry (right-click
+ * in glass context belongs to the glass — dismiss the card / disarm — never
+ * to removal; the no-surprises rule). The removal handler consults this ONE
+ * predicate; no scattered checks. Visible refusal: a gentle toast names the
+ * reason (same soft-voice pattern for both states).
  */
 export const REMOVE_REFUSAL_ZOOM = 12;
+
+export interface RemovalRefusal {
+  refused: boolean;
+  toastTitle: string;
+  toastBody: string;
+}
+
+/**
+ * isRemovalRefused — the ONE predicate the removal handler consults.
+ * cameraDistance is the camera's distance from the meadow center; glassOn
+ * and glassEntry are the glass state. Returns the refusal + toast copy so
+ * the caller shows a VISIBLE reason, never a silent no-op.
+ */
+export function isRemovalRefused(
+  cameraDistance: number,
+  glassOn: boolean,
+  glassEntryActive: boolean,
+): RemovalRefusal {
+  if (cameraDistance < REMOVE_REFUSAL_ZOOM) {
+    return {
+      refused: true,
+      toastTitle: 'Too close to remove safely',
+      toastBody: 'Zoom out a little first — right-click removes work best with the meadow in view.',
+    };
+  }
+  if (glassOn && glassEntryActive) {
+    return {
+      refused: true,
+      toastTitle: 'The glass is holding the meadow',
+      toastBody: 'Right-click dismisses the inspection card — click the glass again to put it away before removing anything.',
+    };
+  }
+  return { refused: false, toastTitle: '', toastBody: '' };
+}
 export const CAMERA_BOUNDS = {
   minPolarAngle: 0.3,
   maxPolarAngle: 1.32,
