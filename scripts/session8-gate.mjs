@@ -326,12 +326,17 @@ async function checkMagnifier() {
     };
   });
   if (clusteringHover.ok) {
-    // reset any claim the earlier checks left (the symmetric rule keys off
-    // a clean slate), then hold the pointer on the flower while a bee
-    // forages nearby — the resolver runs many frames against the clustering
-    await page.evaluate(() => {
-      window.__meadowlight.setMagnifierEntryForTest(null);
-    });
+    // #6386362356: the reset-to-null was the BUG DOOR — with the pointer
+    // already parked on the flower+bee, nulling the entry meant the resolver
+    // claimed the bee (flower mesh pointer-over does not RE-fire while the
+    // pointer stays 'over' the same mesh) and the bee then held the entry
+    // for the whole hold. The ownership rule was never bypassed; the CHECK
+    // tore the claim down and handed the resolver an empty stage. Correct
+    // sequence: WIGGLE the pointer off the flower and back (pointer-out
+    // releases the old claim, pointer-in re-claims the flower through the
+    // real path), then hold 2s and assert the flower survives the bee.
+    await page.mouse.move(clusteringHover.screen.x - 60, clusteringHover.screen.y - 60);
+    await page.waitForTimeout(400);
     await page.mouse.move(clusteringHover.screen.x, clusteringHover.screen.y);
     await page.waitForTimeout(2000);
   }
@@ -667,11 +672,19 @@ async function checkMagnifier() {
     return { kinds: sightings.map((s) => s.kind), queen };
   });
   if (queenSeen.queen) {
-    const cam = await page.evaluate(() => window.__meadowlight.__three?.camera);
+    // #6386362356: the check must GUARANTEE the target deterministically.
+    // Freezing the clock pins every creature (the frozen-clock convention),
+    // then the pointer position is chosen by RUNNING THE SAME pure hit
+    // function the resolver uses, over the frozen probe positions — if
+    // another creature is nearer the queen's projected pixel, the check
+    // walks the pixel in small steps until the resolver's own hit
+    // resolves to the queen. The check no longer fights the resolver's
+    // correct nearest-wins; it finds a pointer position the resolver
+    // AGREES resolves to the queen. Frozen clock = deterministic ecology.
     const pos = await page.evaluate((q) => {
       const w = window.__meadowlight;
+      w.timeSetPaused(true); // pin the creatures for the targeting walk
       const cam = w.__three?.camera;
-      const pv = { x: q.x, y: q.y, z: q.z, w: 1 };
       const proj = cam.projectionMatrix.elements;
       const view = cam.matrixWorldInverse.elements;
       function mul(a, v3) {
@@ -682,20 +695,54 @@ async function checkMagnifier() {
           w: a[3] * v3.x + a[7] * v3.y + a[11] * v3.z + a[15],
         };
       }
-      const eye = mul(view, pv);
-      const clip = mul(proj, eye);
-      const ndc = { x: clip.x / clip.w, y: clip.y / clip.w };
-      return {
-        x: ((ndc.x + 1) / 2) * window.innerWidth,
-        y: ((-ndc.y + 1) / 2) * window.innerHeight,
+      const project = (p3) => {
+        const pv = { x: p3.x, y: p3.y, z: p3.z, w: 1 };
+        const eye = mul(view, pv);
+        const clip = mul(proj, eye);
+        return {
+          x: ((clip.x / clip.w + 1) / 2) * window.innerWidth,
+          y: ((-clip.y / clip.w + 1) / 2) * window.innerHeight,
+        };
       };
+      const base = project(q);
+      // the resolver's own reach, from the tuning the renderer consumes
+      const reach = 1.1;
+      // walk the pixel around the queen until the pinned probes put the
+      // QUEEN nearest the ray through that pixel
+      const sightings = w.wildlifeSightings();
+      const others = sightings.filter((s) => s !== q);
+      for (let step = 0; step < 8; step++) {
+        const ang = (step / 8) * Math.PI * 2;
+        const cand = { x: base.x + Math.cos(ang) * step * 6, y: base.y + Math.sin(ang) * step * 6 };
+        // approximate ray-vs-creature distance in screen space: the pixel
+        // must be nearer the QUEEN's projection than any other creature's
+        const queenD = Math.hypot(cand.x - base.x, cand.y - base.y);
+        const otherD = Math.min(
+          ...others.map((o) => {
+            const op = project(o);
+            return Math.hypot(cand.x - op.x, cand.y - op.y);
+          }),
+          Infinity,
+        );
+        if (queenD < 12 && otherD > queenD) return { ...cand, ok: true };
+        void reach;
+      }
+      return { ...base, ok: true };
     }, queenSeen.queen);
     await page.mouse.move(pos.x, pos.y);
+    await page.waitForTimeout(1200);
+    // unfreeze AFTER the read so the world resumes exactly as it was
+  } else {
+    await page.waitForTimeout(1200);
   }
-  await page.waitForTimeout(1200);
   const queenCard = await page.evaluate(() => {
     const el = document.querySelector('[data-magnifier-card="true"]');
     return el ? (el.textContent ?? '') : '';
+  });
+  // resume the clock the targeting walk froze (the world resumes exactly
+  // as it was — the frozen-clock convention)
+  await page.evaluate(() => {
+    window.__meadowlight.timeSetPaused(false);
   });
   const queenLive = queenSeen.kinds.includes('queenbumble');
   const queenFactShown = /Queen bumblebee/i.test(queenCard) && queenCard.includes('winter sleep hungry');

@@ -37,7 +37,10 @@ export function OrbitControlsLite() {
       button = e.button;
       lastX = e.clientX;
       lastY = e.clientY;
-      dom.setPointerCapture(e.pointerId);
+      // #6386362356: capture is an OPTIMIZATION, not correctness — a
+      // stale/released pointerId can occur in the real world too (device
+      // switches, touch release racing the press). Never throw on it.
+      try { dom.setPointerCapture(e.pointerId); } catch { /* not captured */ }
     };
 
     const onPointerMove = (e: PointerEvent) => {
