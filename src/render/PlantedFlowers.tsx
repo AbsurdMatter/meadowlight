@@ -97,6 +97,11 @@ function FlowerInstances() {
       const colorsDirty = colorKey.current[def.id] !== thisColorKey;
       colorKey.current[def.id] = thisColorKey;
       void glistened;
+      // #6384003544: the hover hit area covers the WHOLE flower (bloom +
+      // stem): the raycast returns a PER-PART instanceId, so the id map
+      // must carry the item id for EVERY part instance — the old map held
+      // one id per ITEM, so bloom-part hits indexed past the list and the
+      // hover resolved to the wrong flower or none (stem-only hover)
       const ids: string[] = [];
       let i = 0;
       for (const item of items) {
@@ -108,8 +113,10 @@ function FlowerInstances() {
         const near = dx * dx + dz * dz <= SWAY_LOD_DISTANCE * SWAY_LOD_DISTANCE;
         const swayZ = near ? Math.sin(t * 0.9 + item.phase) * def.sway : 0;
         const swayX = near ? Math.cos(t * 0.7 + item.phase * 1.3) * def.sway * 0.5 : 0;
-        ids.push(item.id);
         for (let pi = 0; pi < def.parts.length; pi++) {
+          // every part instance maps back to its item (hit anywhere on
+          // the flower — petal, stem, leaf — resolves to that flower)
+          ids.push(item.id);
           const part = def.parts[pi];
           const petal = part.petal === true;
           const partSway = part.offset[1] / Math.max(def.height, 0.001);

@@ -53,8 +53,8 @@ export const BUTTERFLY_TUNING: WildPollinatorTuning = {
  * butterfly's stable identity (world seed + window ordinal + index), never
  * render-side Math.random: same world = same butterfly colors.
  */
-export const BUTTERFLY_WING_PALETTE = ['#c94f4f', '#5b8bd9', '#9b6fd4', '#e08a3c'] as const;
-const BUTTERFLY_ACCENT_PALETTE = ['#e8a3a3', '#a8c4f0', '#cdbdf0', '#f2d49b'] as const;
+export const BUTTERFLY_WING_PALETTE = ['#d98a8a', '#a3bdd9', '#c0a8d9', '#d9b98a'] as const;
+const BUTTERFLY_ACCENT_PALETTE = ['#f0cccc', '#d0e0f0', '#e4d8f0', '#f2e4cc'] as const;
 
 /** deterministic wing + accent pair for one butterfly's stable identity */
 export function butterflyColors(seed: number, ordinal: number, index: number): {

@@ -234,12 +234,13 @@ export function Palette() {
         // viewport the controls' lane is never covered. Reserving the same
         // gutter on the left keeps the dock optically centered in the
         // remaining space instead of hugging the left.
+        // #6384003544: PINNED LEFT — the left edge is invariant across tab
+        // switches (the old margin:auto re-centered per content width); only
+        // the content width varies. The right edge still yields to the
+        // corner controls' lane.
         left: 16,
         right: 460,
-        // size to content (never a huge empty bar), centered in the
-        // reserved band; at narrow viewports it shrinks + scrolls
         width: 'fit-content',
-        margin: '0 auto',
         maxWidth: 'calc(100vw - 492px)',
         display: 'flex',
         alignItems: 'stretch',

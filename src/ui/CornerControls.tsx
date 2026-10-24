@@ -101,7 +101,12 @@ export function CornerControls() {
           every control the same height on the same baseline, equal gaps,
           glass in sequence between audio and postcard. No hand-positioned
           offsets; the armed sage styling stays on the glass. */}
-      <div style={{ position: 'relative', display: 'flex', gap: 8, alignItems: 'stretch' }}>
+      {/* #6384003544: ONE unwrapped row (flexWrap nowrap) — the journal
+          button JOINED the row (it used to sit alone in the outer column,
+          which read as a wrapped second line). All five controls share the
+          36px baseline; the dock yields the space, the controls never
+          yield alignment. */}
+      <div style={{ position: 'relative', display: 'flex', flexWrap: 'nowrap', gap: 8, alignItems: 'stretch' }}>
         <ControlsPopover open={helpOpen} onClose={() => setHelpOpen(false)} />
         <AudioToggle />
         <button
@@ -113,6 +118,7 @@ export function CornerControls() {
         >
           <span role="img" aria-label="magnifying glass">{'🔍'}</span>
         </button>
+        <NotebookHub />
         <PostcardButton />
         <button
           onClick={() => setHelpOpen((o) => !o)}
@@ -123,7 +129,6 @@ export function CornerControls() {
           ?
         </button>
       </div>
-      <NotebookHub />
     </div>
   );
 }

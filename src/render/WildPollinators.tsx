@@ -165,7 +165,10 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
   // #6383907384: butterflies use per-instance colors — the material is
   // white so instanceColor IS the color; other species keep tuning colors
   const perInstanceColor = tuning.id === 'butterfly';
-  const bodyColor = perInstanceColor ? '#ffffff' : tuning.bodyColor;
+  // #6384003544: the butterfly BODY stays dark brown (the tuning color —
+  // white was wrong); only wings + accent carry per-instance color, and the
+  // wing material is TRANSLUCENT so light passes through (less vivid)
+  const bodyColor = tuning.bodyColor;
   const accentColor = perInstanceColor ? '#ffffff' : tuning.wingColor;
   const wingColor = perInstanceColor ? '#ffffff' : tuning.wingAccentColor;
   const bodyGeo = useMemo(() => new THREE.BoxGeometry(...tuning.bodySize), [tuning]);
@@ -380,7 +383,6 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
         wings.instanceColor.setXYZ(bi, tmpColor.r, tmpColor.g, tmpColor.b);
         tmpColor.set(c.accent);
         accent.instanceColor.setXYZ(bi, tmpColor.r, tmpColor.g, tmpColor.b);
-        body.instanceColor.setXYZ(bi, 1, 1, 1); // body keeps tuning color
       }
     }
     body.count = visitors.current.length;
@@ -415,10 +417,6 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
         ref={bodyRef}
         args={[bodyGeo, undefined, tuning.maxCount]}
         frustumCulled={false}
-        onUpdate={(m) => {
-          // instanceColor must exist before the frame loop writes it
-          if (perInstanceColor && !m.instanceColor) m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(tuning.maxCount * 3).fill(1), 3);
-        }}
       >
         <meshLambertMaterial color={bodyColor} />
       </instancedMesh>
@@ -440,7 +438,11 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
           if (perInstanceColor && !m.instanceColor) m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(tuning.maxCount * 3).fill(1), 3);
         }}
       >
-        <meshLambertMaterial color={wingColor} transparent opacity={tuning.wingOpacity} />
+        <meshLambertMaterial
+          color={wingColor}
+          transparent
+          opacity={perInstanceColor ? 0.75 : tuning.wingOpacity}
+        />
       </instancedMesh>
     </group>
   );

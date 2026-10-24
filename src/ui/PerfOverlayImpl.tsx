@@ -277,10 +277,18 @@ function PerfOverlayPanel() {
 
   return (
     <div
+      data-perf-panel="p"
       style={{
+        // #6384003544: narrow DOCKED side panel, its OWN lane — top-right,
+        // below the season dial, with width 300 + the lane's own right
+        // offset; overlaps nothing (palette bottom band, corner controls
+        // bottom-right, journal panel center, magnifier card bottom-right
+        // dock at bottom:116 — all below/right of this lane).
         position: 'absolute',
-        top: 48,
-        left: 12,
+        top: 108,
+        right: 12,
+        width: 300,
+        boxSizing: 'border-box',
         padding: '10px 14px',
         borderRadius: 12,
         background: 'rgba(30, 30, 30, 0.82)',
