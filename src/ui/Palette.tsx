@@ -227,13 +227,24 @@ export function Palette() {
         // outgrows the viewport.
         position: 'absolute',
         bottom: 16,
-        left: '50%',
-        transform: 'translateX(-50%)',
+        // UI round 3 (#6383867199): the dock sits in the space BETWEEN the
+        // onboarding panel (bottom-left) and the corner controls
+        // (bottom-right, ~420px of lane incl. the journal row below the
+        // buttons) — a reserved RIGHT GUTTER, width-independent: at any
+        // viewport the controls' lane is never covered. Reserving the same
+        // gutter on the left keeps the dock optically centered in the
+        // remaining space instead of hugging the left.
+        left: 16,
+        right: 460,
+        // size to content (never a huge empty bar), centered in the
+        // reserved band; at narrow viewports it shrinks + scrolls
+        width: 'fit-content',
+        margin: '0 auto',
+        maxWidth: 'calc(100vw - 492px)',
         display: 'flex',
         alignItems: 'stretch',
         gap: 10,
         padding: '8px 12px',
-        maxWidth: 'calc(100vw - 32px)',
         borderRadius: theme.border.radiusPanel,
         background: theme.color.panel,
         border: `${theme.border.chunk}px solid ${theme.color.honey}`,

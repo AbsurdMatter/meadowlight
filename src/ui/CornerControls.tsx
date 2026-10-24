@@ -55,6 +55,29 @@ function ControlsPopover({ open, onClose }: { open: boolean; onClose: () => void
   );
 }
 
+/** UI round 3 (#6383867199): ONE row, ONE control style — every corner
+ *  button shares this style (equal height enforced by the row's
+ *  align-items: stretch; glass, postcard, audio, help all in sequence).
+ *  The armed (sage) styling is applied by the caller when armed.
+ */
+const controlButtonStyle = (armed: boolean): React.CSSProperties => ({
+  height: 36,
+  padding: '0 10px',
+  boxSizing: 'border-box',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderRadius: theme.border.radius,
+  border: `${theme.border.chunk}px solid ${armed ? theme.color.sage : theme.color.honey}`,
+  background: armed ? theme.color.sageLight : theme.color.parchment,
+  color: theme.color.text,
+  fontFamily: theme.font.family,
+  fontSize: 14,
+  lineHeight: 1,
+  cursor: 'pointer',
+  boxShadow: theme.border.shadow,
+});
+
 export function CornerControls() {
   const [helpOpen, setHelpOpen] = useState(false);
   // UI verdict (#6383659472): the magnifying glass lives HERE, beside the
@@ -74,7 +97,11 @@ export function CornerControls() {
         gap: 8,
       }}
     >
-      <div style={{ position: 'relative', display: 'flex', gap: 8, alignItems: 'center' }}>
+      {/* UI round 3 (#6383867199): ONE flex row, align-items stretch —
+          every control the same height on the same baseline, equal gaps,
+          glass in sequence between audio and postcard. No hand-positioned
+          offsets; the armed sage styling stays on the glass. */}
+      <div style={{ position: 'relative', display: 'flex', gap: 8, alignItems: 'stretch' }}>
         <ControlsPopover open={helpOpen} onClose={() => setHelpOpen(false)} />
         <AudioToggle />
         <button
@@ -82,21 +109,7 @@ export function CornerControls() {
           data-corner-tool="magnifier"
           title="Magnifying glass — hover a flower or a visitor for a close read"
           aria-pressed={magnifierOn}
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: theme.border.radius,
-            border: `${theme.border.chunk}px solid ${magnifierOn ? theme.color.sage : theme.color.honey}`,
-            background: magnifierOn ? theme.color.sageLight : theme.color.parchment,
-            color: theme.color.text,
-            fontFamily: theme.font.family,
-            fontSize: 16,
-            cursor: 'pointer',
-            boxShadow: theme.border.shadow,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+          style={controlButtonStyle(magnifierOn)}
         >
           <span role="img" aria-label="magnifying glass">{'🔍'}</span>
         </button>
@@ -105,18 +118,7 @@ export function CornerControls() {
           onClick={() => setHelpOpen((o) => !o)}
           data-controls-help
           title="How to play"
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: theme.border.radius,
-            border: `${theme.border.chunk}px solid ${theme.color.honey}`,
-            background: theme.color.parchment,
-            color: theme.color.text,
-            fontFamily: theme.font.family,
-            fontSize: 16,
-            cursor: 'pointer',
-            boxShadow: theme.border.shadow,
-          }}
+          style={controlButtonStyle(false)}
         >
           ?
         </button>

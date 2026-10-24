@@ -36,7 +36,14 @@ export function AudioToggle() {
       data-audio-toggle
       title={on ? 'Mute the meadow' : 'Listen to the meadow'}
       style={{
-        padding: '8px 12px',
+        // UI round 3 (#6383867199): shares the corner row's 36px baseline
+        height: 36,
+        boxSizing: 'border-box',
+        padding: '0 10px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        lineHeight: 1,
         borderRadius: theme.border.radius,
         border: `${theme.border.chunk}px solid ${on ? theme.color.sage : theme.color.honey}`,
         background: on ? theme.color.sageLight : theme.color.parchment,
