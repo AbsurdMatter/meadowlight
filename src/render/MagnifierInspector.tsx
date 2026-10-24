@@ -2,33 +2,26 @@ import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { usePlacementStore } from './placementStore';
-import { allWildlife, type WildlifeSighting } from './magnifierProbes';
+import { allWildlife } from './magnifierProbes';
 import { MAGNIFIER_TUNING } from '../data/magnifier';
+import { resolveWildlifeHit, nextWildlifeEntry } from '../engine/magnifierHit';
+import type { MagnifierEntry } from '../data/magnifierKinds';
 
 /**
- * N3 wildlife hit resolution — IN-Canvas half (PR #38 comment #6349476585).
- *
- * ARCHITECTURE (the crash that forced it): the previous MagnifierInspector
- * used R3F hooks but was mounted OUTSIDE the Canvas — "R3F: Hooks can only
- * be used within the Canvas component!" threw on the user's machine and
- * killed the card, the probes, and every check downstream. The two halves
- * now split along the Canvas boundary, meeting at the STORE (no new state):
- *
- *   INSIDE (this file, mounted inside <Canvas>): headless resolver —
- *     useFrame + the live camera, pointer unprojection, probe walk,
- *     writes the found entry to magnifierEntry. Zero rendered output.
- *   OUTSIDE: MagnifierCard, pure DOM — reads the store, no R3F hooks, ever.
- *
- * One input path unchanged: the same raw window pointermove the placement
- * ghost tracks. Zero mutation: reads positions, writes ONLY the display
- * entry (UI state, never serialized, never world state).
+ * N3 wildlife hit resolution — IN-Canvas half, a THIN SHELL over the pure
+ * hit function (src/engine/magnifierHit.ts): the resolver only collects
+ * live camera + pointer + probe positions each frame and applies the pure
+ * decision. The chain break this fixes (PR #38 comment #6383586724):
+ * the old resolver wrote null on every frame where no creature was in
+ * reach, wiping the visitor entry the hover (or the gate) had just set —
+ * flowers survived (their path never wrote), wildlife died one frame
+ * later. Now a MISS KEEPS the current visitor entry; the entry clears
+ * when the pointer leaves or the glass turns off.
  */
 export function MagnifierResolver() {
   const { camera, gl } = useThree();
   const pointerNdc = useRef(new THREE.Vector2(0, 0));
   const inside = useRef(false);
-  const ray = useRef(new THREE.Ray());
-  const toCreature = useRef(new THREE.Vector3());
   const dir = useRef(new THREE.Vector3());
 
   useEffect(() => {
@@ -52,39 +45,33 @@ export function MagnifierResolver() {
   useFrame(() => {
     const s = usePlacementStore.getState();
     if (!s.magnifierOn) {
-      if (s.magnifierEntry?.kind === 'visitor') s.setMagnifierEntry(null);
+      if (s.magnifierEntry) s.setMagnifierEntry(null);
       return;
     }
-    if (!inside.current) return;
-    // unproject the pointer through the live camera (same math as the
-    // ghost's raycast — one resolution model, no second camera)
+    if (!inside.current) return; // pointer off-canvas: nothing to resolve
+    // unproject the pointer through the live camera, then hand the PURE
+    // hit function flat camera state + CURRENT probe positions
     dir.current
       .set(pointerNdc.current.x, pointerNdc.current.y, 0.5)
       .unproject(camera)
       .sub(camera.position)
       .normalize();
-    ray.current.set(camera.position, dir.current);
-
-    const reach = MAGNIFIER_TUNING.wildlifeReach;
-    let best: WildlifeSighting | null = null;
-    let bestDist = Infinity;
-    for (const w of allWildlife()) {
-      toCreature.current.set(w.x, w.y, w.z).sub(ray.current.origin);
-      const along = toCreature.current.dot(ray.current.direction);
-      if (along <= 0) continue; // behind the camera
-      const perp = Math.sqrt(Math.max(0, toCreature.current.lengthSq() - along * along));
-      if (perp > reach) continue;
-      // prefer the creature closest to the RAY (most likely the hovered one)
-      const score = perp + along * 0.05;
-      if (score < bestDist) {
-        bestDist = score;
-        best = w;
-      }
-    }
-    const next = best ? ({ kind: 'visitor', visitorId: best.kind } as const) : null;
+    const hit = resolveWildlifeHit(
+      {
+        camX: camera.position.x,
+        camY: camera.position.y,
+        camZ: camera.position.z,
+        dirX: dir.current.x,
+        dirY: dir.current.y,
+        dirZ: dir.current.z,
+      },
+      allWildlife(),
+      MAGNIFIER_TUNING.wildlifeReach,
+    );
     const cur = s.magnifierEntry;
-    const curId = cur?.kind === 'visitor' ? cur.visitorId : null;
-    if ((next?.visitorId ?? null) !== curId) {
+    const currentVisitorId = cur?.kind === 'visitor' ? cur.visitorId : null;
+    const next = nextWildlifeEntry(hit, currentVisitorId) as MagnifierEntry;
+    if (JSON.stringify(next) !== JSON.stringify(cur)) {
       s.setMagnifierEntry(next);
     }
   });

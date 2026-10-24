@@ -19,6 +19,15 @@ import { theme, headingStyle } from './theme';
  */
 export function MagnifierCard() {
   const entry = usePlacementStore((s) => s.magnifierEntry);
+  // N3 taste: the cursor reflects the lock — CSS reads this attribute; the
+  // card owns it because IT knows an inspectable is showing (flower or
+  // wildlife alike). Display state only, no JS cursor mutation.
+  useEffect(() => {
+    document.body.dataset.magnifierHit = entry ? '1' : '';
+    return () => {
+      document.body.dataset.magnifierHit = '';
+    };
+  }, [entry]);
   const magnifierOn = usePlacementStore((s) => s.magnifierOn);
   const setEntry = usePlacementStore((s) => s.setMagnifierEntry);
   const lingerRef = useRef<number | null>(null);

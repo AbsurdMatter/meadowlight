@@ -19,6 +19,7 @@ import { SEASON_ARRIVAL } from '../data/seasons';
 import { newlyFormed, companionSet } from '../engine/companions';
 import { combReady, fillAfterHarvest } from '../engine/honey';
 import { HONEY_FACTS } from '../data/honey';
+import type { MagnifierEntry } from '../data/magnifierKinds';
 import { SEEDING_FACTS } from '../data/seeding';
 import { rollVolunteers } from '../engine/seeding';
 import { isPlantableCell } from '../engine/ground';
@@ -121,7 +122,8 @@ export interface PlacementState {
   magnifierOn: boolean;
   toggleMagnifier: () => void;
   /** what the glass is currently zooming (null = card hidden) */
-  magnifierEntry: { kind: 'flower'; itemId: string } | { kind: 'visitor'; visitorId: string } | null;
+  /** the glass's inspection entry — ONE shared taxonomy (data/magnifierKinds) */
+  magnifierEntry: MagnifierEntry;
   setMagnifierEntry: (e: PlacementState['magnifierEntry']) => void;
   openHivePopup: (hiveId: string) => void;
   closeHivePopup: () => void;

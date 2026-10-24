@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts', 'visits.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts', 'visits.ts', 'magnifierHit.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -102,6 +102,9 @@ const { isPlantableCell, groundAt: groundAtReadback } = require(OUT + '/engine/g
 const { hillsCover: hillsCoverReadback } = require(OUT + '/engine/hillsLayout.js');
 const { seasonWindows, precipReadback, tickPrecipScheduleForTest, nextWindowAfter } = require(OUT + '/engine/rainSchedule.js');
 const { wasVisitedThisSeason, withVisit, visitedParents } = require(OUT + '/engine/visits.js');
+const { resolveWildlifeHit, nextWildlifeEntry } = require(OUT + '/engine/magnifierHit.js');
+const { MAGNIFIER_WILDLIFE } = require(OUT + '/data/magnifierWildlife.js');
+const { MAGNIFIER_KINDS } = require(OUT + '/data/magnifierKinds.js');
 
 const mkItem = (plantId, x = 0, z = 0) => ({ id: plantId + ':' + x + ':' + z, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
 const mkStruct = (structureId, x = 0, z = 0) => ({ id: structureId + ':' + x + ':' + z, structureId, position: [x, 0, z], rotationY: 0 });
@@ -1259,6 +1262,79 @@ test('N1 8x observability: every season of every world precipitates multiple tim
     }
   }
 });
+// --- N3 magnifier wildlife hit resolution (PR #38 comment #6383586724) ---
+test('wildlife hit: the pointer ray hits a creature within reach', () => {
+  // synthetic pair: camera at origin looking down -Z, creature 10 ahead
+  const cam = { camX: 0, camY: 0, camZ: 0, dirX: 0, dirY: 0, dirZ: -1 };
+  const sightings = [{ kind: 'hivebee', x: 0, y: 0.3, z: -10 }];
+  const hit = resolveWildlifeHit(cam, sightings, 1.1);
+  assert.ok(hit, 'creature near the ray must hit');
+  assert.strictEqual(hit.kind, 'hivebee');
+});
+
+test('wildlife hit: a creature beyond reach misses', () => {
+  const cam = { camX: 0, camY: 0, camZ: 0, dirX: 0, dirY: 0, dirZ: -1 };
+  const far = [{ kind: 'dragonfly', x: 4, y: 0, z: -10 }]; // 4u off-axis
+  assert.strictEqual(resolveWildlifeHit(cam, far, 1.1), null);
+});
+
+test('wildlife hit: behind the camera never hits', () => {
+  const cam = { camX: 0, camY: 0, camZ: 0, dirX: 0, dirY: 0, dirZ: -1 };
+  const behind = [{ kind: 'fireflies', x: 0, y: 0, z: 5 }];
+  assert.strictEqual(resolveWildlifeHit(cam, behind, 1.1), null);
+});
+
+test('wildlife hit: the creature NEAREST THE RAY wins, not the nearest to camera', () => {
+  const cam = { camX: 0, camY: 0, camZ: 0, dirX: 0, dirY: 0, dirZ: -1 };
+  const two = [
+    { kind: 'butterfly', x: 0.9, y: 0, z: -4 },  // near camera but off-axis
+    { kind: 'queenbumble', x: 0.05, y: 0, z: -30 }, // far but dead-on
+  ];
+  const hit = resolveWildlifeHit(cam, two, 1.1);
+  assert.ok(hit);
+  assert.strictEqual(hit.kind, 'queenbumble', 'dead-on creature wins the lock');
+});
+
+test('wildlife hit: MOVES — the hit uses the CURRENT position, not a stale capture', () => {
+  const cam = { camX: 0, camY: 0, camZ: 0, dirX: 0, dirY: 0, dirZ: -1 };
+  // frame 1: creature at A misses; it moves under the pointer; frame 2 hits
+  const frame1 = [{ kind: 'lavendermoth', x: 5, y: 0, z: -10 }];
+  assert.strictEqual(resolveWildlifeHit(cam, frame1, 1.1), null);
+  const frame2 = [{ kind: 'lavendermoth', x: 0.1, y: 0, z: -10 }];
+  const hit = resolveWildlifeHit(cam, frame2, 1.1);
+  assert.ok(hit, 'after the creature moves under the pointer, the SAME function hits');
+  assert.strictEqual(hit.kind, 'lavendermoth');
+});
+
+test('entry decision: a MISS KEEPS the current visitor entry (no null-wipe)', () => {
+  // the chain break the user saw: an in-between frame must not clear the hover
+  assert.deepStrictEqual(
+    nextWildlifeEntry(null, 'hoverfly'),
+    { kind: 'visitor', visitorId: 'hoverfly' },
+  );
+  // a hit replaces it with the new lock
+  assert.deepStrictEqual(
+    nextWildlifeEntry({ kind: 'hivebee' }, 'hoverfly'),
+    { kind: 'visitor', visitorId: 'hivebee' },
+  );
+  // with nothing held, a miss stays null
+  assert.strictEqual(nextWildlifeEntry(null, null), null);
+});
+
+test('kind taxonomy: the resolver kinds and the card table share ONE enum', () => {
+  // every kind the resolver can emit has a card entry (no card filter drop)
+  for (const k of MAGNIFIER_KINDS) {
+    const entry = MAGNIFIER_WILDLIFE[k];
+    assert.ok(entry, 'card table must cover kind: ' + k);
+    assert.ok(entry.name && entry.fact, 'card entry must have name+fact: ' + k);
+  }
+  // and the hit function only emits kinds from that same enum
+  const cam = { camX: 0, camY: 0, camZ: 0, dirX: 0, dirY: 0, dirZ: -1 };
+  const hit = resolveWildlifeHit(cam, [{ kind: 'solitarybee', x: 0, y: 0, z: -5 }], 1.1);
+  assert.ok(MAGNIFIER_KINDS.includes(hit.kind));
+});
+
+
 `;
   mkdirSync(join(work, 'tests'), { recursive: true });
   writeFileSync(join(work, 'tests/engine.test.cjs'), testSrc);

@@ -369,18 +369,11 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
 
   return (
     <group>
-      <instancedMesh ref={bodyRef} args={[bodyGeo, undefined, tuning.maxCount]} frustumCulled={false}
-        onPointerOver={() => {
-          // N3: the glass zooms a hovered visitor — pure inspection riding
-          // the mesh's own pointer events (one input path, zero mutation)
-          const s = usePlacementStore.getState();
-          if (s.magnifierOn) s.setMagnifierEntry({ kind: 'visitor', visitorId: tuning.id });
-        }}
-        onPointerOut={() => {
-          const s = usePlacementStore.getState();
-          if (s.magnifierOn && s.magnifierEntry?.kind === 'visitor') s.setMagnifierEntry(null);
-        }}
-      >
+      {/* N3 note: no per-mesh pointer events here by design — moving
+          creatures are hit by the IN-Canvas MagnifierResolver's per-frame
+          ray (current position at pointer time), the ONE wildlife input
+          path; two writers to the same entry raced each other. */}
+      <instancedMesh ref={bodyRef} args={[bodyGeo, undefined, tuning.maxCount]} frustumCulled={false}>
         <meshLambertMaterial color={tuning.bodyColor} />
       </instancedMesh>
       <instancedMesh ref={accentRef} args={[accentGeo, undefined, tuning.maxCount]} frustumCulled={false}>

@@ -149,9 +149,20 @@ export default function App() {
   useEffect(() => {
     if (loaded) maybeSeedDemoWorld();
   }, [loaded]);
+  const magnifierOn = usePlacementStore((s) => s.magnifierOn);
   const placing = selectedPlantId ?? selectedStructureId;
   return (
-    <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
+    <div
+      data-magnifier={magnifierOn ? 'on' : 'off'}
+      style={{ width: '100vw', height: '100vh', position: 'relative' }}
+    >
+      {/* N3 taste (PR #38 comment #6383586724): the pointer reflects the
+          glass tool — CSS-only, keyed off data attributes (no JS cursor
+          mutation): crosshair while the glass is armed, pointer once the
+          resolver locks an inspectable, default otherwise. The user
+          eyeballs pointer-vs-crosshair; the swap is one line below. */}
+      <style>{`[data-magnifier='on'] canvas { cursor: crosshair; }
+body[data-magnifier-hit='1'] canvas { cursor: pointer; }`}</style>
       <Canvas
         shadows
         camera={{ position: [16, 12, 20], fov: 50 }}
