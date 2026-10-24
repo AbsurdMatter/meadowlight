@@ -70,8 +70,6 @@ export function Palette() {
   const selectStructure = usePlacementStore((s) => s.selectStructure);
   const placementVariation = usePlacementStore((s) => s.placementVariation);
   const toggleVariation = usePlacementStore((s) => s.toggleVariation);
-  const magnifierOn = usePlacementStore((s) => s.magnifierOn);
-  const toggleMagnifier = usePlacementStore((s) => s.toggleMagnifier);
   const milestones = usePlacementStore((s) => s.milestones);
   const bathUnlocked = milestones.includes('fiveSpecies') || milestones.includes('beeBath');
   const hedgeUnlocked = milestones.includes('firstHive') || milestones.includes('hedgesUnlocked');
@@ -169,16 +167,25 @@ export function Palette() {
   };
   return (
     <div
+      data-palette-dock="left"
       style={{
+        // UI verdict (#6383659472): a compact LEFT-DOCKED column, not a
+        // full-width bottom bar — the meadow stays visible while browsing.
+        // Docked at the free left edge (top-right = dial/time, bottom-right
+        // = corner controls, bottom-left = onboarding); chips wrap inside a
+        // narrow column, sections stack with headers, and the dock scrolls
+        // only when the viewport is short.
         position: 'absolute',
-        bottom: 16,
-        left: '50%',
-        transform: 'translateX(-50%)',
+        top: 12,
+        left: 12,
+        maxHeight: 'calc(100vh - 24px)',
+        overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
         gap: 8,
         padding: '10px 12px',
+        width: 264,
+        boxSizing: 'border-box',
         borderRadius: theme.border.radiusPanel,
         background: theme.color.panel,
         border: `${theme.border.chunk}px solid ${theme.color.honey}`,
@@ -186,8 +193,26 @@ export function Palette() {
         fontFamily: theme.font.family,
       }}
     >
+      <div style={sectionStyle('rgba(220, 236, 194, 0.35)')} data-palette-section="flora">
+          <span style={sectionLabelStyle} data-section="flora">
+            🌿 Flora &amp; nature
+          </span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{flora.map(renderEntry)}</div>
+      </div>
+      <div style={sectionStyle('rgba(255, 233, 184, 0.35)')} data-palette-section="beecare">
+          <span style={sectionLabelStyle} data-section="beecare">
+            🐝 Bee care
+          </span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{beeCare.map(renderEntry)}</div>
+      </div>
+      {/* the placement-mode row sits visually SEPARATED from both sections:
+          a hairline divider + its own row (it is a mode, not an item) */}
       <div
+        data-palette-section="mode"
         style={{
+          borderTop: `1px solid ${theme.color.honeyDark}44`,
+          paddingTop: 8,
+          marginTop: 2,
           fontSize: theme.font.smallSize,
           color: theme.color.textSoft,
           display: 'flex',
@@ -195,38 +220,11 @@ export function Palette() {
           gap: 6,
         }}
       >
-        <span>Natural placement: {placementVariation ? 'on' : 'off'}</span>
+        <span>Natural placement</span>
         <button onClick={toggleVariation} style={buttonStyle(placementVariation)}>
           {placementVariation ? 'ON' : 'OFF'}
         </button>
         <span style={{ opacity: 0.65 }}>(F)</span>
-      </div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
-        {/* N3: the magnifying glass — data-flagged inspect tool (pure
-            inspection; see src/data/magnifier.ts) */}
-        <button
-          data-palette-entry="tool:magnifier"
-          onClick={toggleMagnifier}
-          style={chipStyle(magnifierOn, true)}
-          title="Magnifying glass — hover a flower or visitor for a close read"
-        >
-          <span style={{ fontSize: 16 }} role="img" aria-label="magnifying glass">{'🔍'}</span>
-          <span style={{ fontSize: 11 }}>glass</span>
-        </button>
-      </div>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-        <div style={sectionStyle('rgba(220, 236, 194, 0.35)')} data-palette-section="flora">
-          <span style={sectionLabelStyle} data-section="flora">
-            🌿 Flora &amp; nature
-          </span>
-          <div style={{ display: 'flex', gap: 6 }}>{flora.map(renderEntry)}</div>
-        </div>
-        <div style={sectionStyle('rgba(255, 233, 184, 0.35)')} data-palette-section="beecare">
-          <span style={sectionLabelStyle} data-section="beecare">
-            🐝 Bee care
-          </span>
-          <div style={{ display: 'flex', gap: 6 }}>{beeCare.map(renderEntry)}</div>
-        </div>
       </div>
     </div>
   );

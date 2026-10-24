@@ -3,6 +3,7 @@ import { AudioToggle } from './AudioToggle';
 import { PostcardButton } from './PostcardButton';
 import { NotebookHub } from './NotebookHub';
 import { theme } from './theme';
+import { usePlacementStore } from '../render/placementStore';
 
 /**
  * One shared bottom-right container: Sound, Postcard, the notebook hub, and
@@ -56,6 +57,11 @@ function ControlsPopover({ open, onClose }: { open: boolean; onClose: () => void
 
 export function CornerControls() {
   const [helpOpen, setHelpOpen] = useState(false);
+  // UI verdict (#6383659472): the magnifying glass lives HERE, beside the
+  // journal and postcard — it is an inspect TOOL, not a placement item,
+  // and grouping it with placeable things was the confusion
+  const magnifierOn = usePlacementStore((s) => s.magnifierOn);
+  const toggleMagnifier = usePlacementStore((s) => s.toggleMagnifier);
   return (
     <div
       style={{
@@ -71,6 +77,29 @@ export function CornerControls() {
       <div style={{ position: 'relative', display: 'flex', gap: 8, alignItems: 'center' }}>
         <ControlsPopover open={helpOpen} onClose={() => setHelpOpen(false)} />
         <AudioToggle />
+        <button
+          onClick={toggleMagnifier}
+          data-corner-tool="magnifier"
+          title="Magnifying glass — hover a flower or a visitor for a close read"
+          aria-pressed={magnifierOn}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: theme.border.radius,
+            border: `${theme.border.chunk}px solid ${magnifierOn ? theme.color.sage : theme.color.honey}`,
+            background: magnifierOn ? theme.color.sageLight : theme.color.parchment,
+            color: theme.color.text,
+            fontFamily: theme.font.family,
+            fontSize: 16,
+            cursor: 'pointer',
+            boxShadow: theme.border.shadow,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <span role="img" aria-label="magnifying glass">{'🔍'}</span>
+        </button>
         <PostcardButton />
         <button
           onClick={() => setHelpOpen((o) => !o)}
