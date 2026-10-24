@@ -207,36 +207,97 @@ async function checkMagnifier() {
   }, firstId);
   rec.record('magnifier.flower-entry-appears', hovered.entry?.kind === 'flower',
     JSON.stringify(hovered.entry));
-  // #6383907384: flowers inspect via the HOVER PATH with the glass armed —
-  // the SAME entry kind-enum and card as wildlife (the v4 journal seam).
-  // Drive the hover path the mesh's pointer-over uses, glass ARMED, and
-  // assert the card carries the flower's fact + the N2 visit readout.
+  // #6383907384 + DoD-walk fix (#6384544116): flowers inspect via the REAL
+  // HOVER PATH — a live pointer event over the flower's screen position, so
+  // the mesh's raycast (not a store write) sets the entry. This is the
+  // READ-green lesson applied to the gate itself: the old check wrote the
+  // entry directly and MISSED the regression (the resolver stealing the
+  // flower lock — it only showed with real pointer events).
   const flowerHover = await page.evaluate((id) => {
-    window.__meadowlight.setMagnifierOnForTest(true);
-    window.__meadowlight.setMagnifierEntryForTest({ kind: 'flower', itemId: id });
-    return window.__meadowlight.magnifierReadback();
+    const w = window.__meadowlight;
+    w.setMagnifierOnForTest(true);
+    // project the flower's world position to screen coordinates through
+    // the live camera, then dispatch a REAL pointermove there
+    const item = w.items().find((it) => it.id === id);
+    const cam = w.__three?.camera;
+    if (!item || !cam) return { ok: false, reason: 'no item or camera' };
+    // THREE is not on window — compute the projection inline (the same
+    // NDC math the resolver uses, no library needed)
+    const p = item.position;
+    const pv = { x: p[0], y: p[1] + 0.5, z: p[2], w: 1 };
+    const proj = cam.projectionMatrix.elements;
+    const view = cam.matrixWorldInverse.elements;
+    // view-proj multiply (column-major)
+    function mul(a, b, v3) {
+      return {
+        x: a[0] * v3.x + a[4] * v3.y + a[8] * v3.z + a[12],
+        y: a[1] * v3.x + a[5] * v3.y + a[9] * v3.z + a[13],
+        z: a[2] * v3.x + a[6] * v3.y + a[10] * v3.z + a[14],
+        w: a[3] * v3.x + a[7] * v3.y + a[11] * v3.z + a[15],
+      };
+    }
+    const eye = mul(view, view, pv);
+    const clip = mul(proj, proj, eye);
+    const ndc = { x: clip.x / clip.w, y: clip.y / clip.w };
+    const x = ((ndc.x + 1) / 2) * window.innerWidth;
+    const y = ((-ndc.y + 1) / 2) * window.innerHeight;
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: x, clientY: y, bubbles: true }),
+    );
+    // the R3F raycast resolves on the next pointer update — the mesh's
+    // onOver fires through the canvas's own pointer pipeline
+    return { ok: true, screen: { x, y } };
   }, firstId);
-  await page.waitForTimeout(1200);
+  // move the real mouse over the flower (Puppeteer drives R3F's raycast)
+  if (flowerHover.ok) {
+    await page.mouse.move(flowerHover.screen.x, flowerHover.screen.y);
+  }
+  await page.waitForTimeout(1500); // hover + resolver frames elapse
   const flowerHoverCard = await page.evaluate(() => {
+    const w = window.__meadowlight;
     const el = document.querySelector('[data-magnifier-card="true"]');
-    if (!el) return null;
-    const r = el.getBoundingClientRect();
+    const r = el ? el.getBoundingClientRect() : null;
     return {
-      visible: r.width > 0 && r.height > 0,
-      text: el.textContent ?? '',
-      pointerEvents: getComputedStyle(el).pointerEvents,
+      entry: w.magnifierReadback(),
+      visible: !!r && r.width > 0 && r.height > 0,
+      text: el ? (el.textContent ?? '') : '',
+      pointerEvents: el ? getComputedStyle(el).pointerEvents : 'n/a',
     };
   });
+  // THE REGRESSION ASSERTION: after hover + resolver frames, the entry is
+  // STILL a flower (the resolver must not steal it — pollinators cluster
+  // on flowers) and the card shows the flower fact + visit readout
   const flowerHoverOk =
-    !!flowerHoverCard &&
+    flowerHover.ok &&
+    flowerHoverCard.entry.entry?.kind === 'flower' &&
     flowerHoverCard.visible &&
-    flowerHover.entry?.kind === 'flower' &&
     flowerHoverCard.text.length > 0 &&
     /waiting for its first pollinator visit|visited by a pollinator this season/.test(flowerHoverCard.text);
   rec.record('magnifier.flower-hover-shows-card', flowerHoverOk,
-    flowerHoverCard
-      ? 'glass-armed hover card: ' + flowerHoverCard.text.slice(0, 70)
-      : 'no card rendered on flower hover with glass armed');
+    !flowerHover.ok
+      ? 'hover-path setup failed: ' + (flowerHover.reason ?? '')
+      : flowerHoverCard.visible
+        ? 'real-hover entry: ' + JSON.stringify(flowerHoverCard.entry.entry) + ' — card: ' + flowerHoverCard.text.slice(0, 60)
+        : 'no card rendered on real flower hover with glass armed');
+  // DoD-walk fix gate (#6384544116): the fireflies note records only inside
+  // the NATURAL visibility window — a forced (test) state must NOT write a
+  // visit, and no wild corners means no fireflies to record at all.
+  const fireflyNote = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    const before = w.visitorWindowsReadback().filter((k) => k.startsWith('fireflies:')).length;
+    // force fireflies ON (a test state — must never write a visit)
+    w.setFireflyForce(true);
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        w.setFireflyForce(null);
+        const after = w.visitorWindowsReadback().filter((k) => k.startsWith('fireflies:')).length;
+        resolve({ before, after });
+      }, 1200);
+    });
+  });
+  const fireflyNoteOk = fireflyNote.after === fireflyNote.before;
+  rec.record('fireflies.forced-state-writes-no-note', fireflyNoteOk,
+    'forced-on state: ' + fireflyNote.before + ' -> ' + fireflyNote.after + ' fireflies notes (must be unchanged)');
   // the card renders in the viewport and is pointer-transparent
   await page.waitForTimeout(1200); // past any transition before reading (the detector lesson)
   const card = await page.evaluate(() => {

@@ -57,6 +57,15 @@ export function MagnifierResolver() {
       return;
     }
     if (!inside.current) return; // pointer off-canvas: nothing to resolve
+    // DoD-walk regression fix (#6384544116): a FLOWER entry means the
+    // pointer is over flower geometry (the mesh's pointer-over set it,
+    // pointer-out clears it) — the flower path OWNS its entry's whole
+    // lifecycle, so the resolver must not overwrite it with a wildlife
+    // lock. This was the regression: pollinators cluster ON flowers, so
+    // hovering a bloom almost always had a creature within reach of the
+    // ray, and the resolver's hit branch stole the lock every frame —
+    // glass-on-flowers only ever showed wildlife.
+    if (s.magnifierEntry?.kind === 'flower') return;
     // unproject the pointer through the live camera, then hand the PURE
     // hit function flat camera state + CURRENT probe positions
     dir.current
@@ -83,9 +92,7 @@ export function MagnifierResolver() {
       if (JSON.stringify(next) !== JSON.stringify(cur)) s.setMagnifierEntry(next);
       return;
     }
-    // miss: flower hovers are untouchable (their mesh pointer-out clears
-    // them); a visitor lock survives the grace window, then releases
-    if (cur?.kind === 'flower') return;
+    // miss: a visitor lock survives the grace window, then releases
     missStreak.current++;
     if (missStreak.current > 30) {
       missStreak.current = 0;
