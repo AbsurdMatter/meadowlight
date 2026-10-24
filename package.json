@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test:smoke": "node scripts/unit-tests.mjs && node scripts/build-health.mjs",
+    "test:smoke": "node scripts/unit-tests.mjs && node scripts/build-health.mjs && node --check scripts/session8-gate.mjs && node --check scripts/gate-lib.mjs",
     "test:perf": "echo \"[perf] start the dev server (npm run dev), open the game, press F3 or P, then click the stress button - results log to the browser console\"",
     "test:unit": "node scripts/unit-tests.mjs"
   },

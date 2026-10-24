@@ -736,6 +736,12 @@ async function checkMagnifier() {
     const queen = sightings.find((s) => s.kind === 'queenbumble');
     return { kinds: sightings.map((s) => s.kind), queen };
   });
+  // #6387729576: hoisted out of the branch — the resolver-driven walk sets
+  // these inside `if (queenSeen.queen)`, but the final assertion reads them
+  // AFTER the block: block-scoped `let` was the ReferenceError that crashed
+  // the user's run before no-console-errors could execute at all.
+  let queenPos = null;
+  let lastClaimed = null;
   if (queenSeen.queen) {
     // #6386362356: the check must GUARANTEE the target deterministically.
     // Freezing the clock pins every creature (the frozen-clock convention),
@@ -811,8 +817,6 @@ async function checkMagnifier() {
     }, queenSeen.queen);
     // drive the real resolver: for each candidate pixel, reset the claim,
     // hover, let frames run, read the ACTUAL entry — accept only the queen
-    let queenPos = null;
-    let lastClaimed = null;
     for (const cand of pos.candidates ?? []) {
       await page.evaluate(() => {
         window.__meadowlight.setMagnifierEntryForTest(null);
