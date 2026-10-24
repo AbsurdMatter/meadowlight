@@ -207,6 +207,36 @@ async function checkMagnifier() {
   }, firstId);
   rec.record('magnifier.flower-entry-appears', hovered.entry?.kind === 'flower',
     JSON.stringify(hovered.entry));
+  // #6383907384: flowers inspect via the HOVER PATH with the glass armed —
+  // the SAME entry kind-enum and card as wildlife (the v4 journal seam).
+  // Drive the hover path the mesh's pointer-over uses, glass ARMED, and
+  // assert the card carries the flower's fact + the N2 visit readout.
+  const flowerHover = await page.evaluate((id) => {
+    window.__meadowlight.setMagnifierOnForTest(true);
+    window.__meadowlight.setMagnifierEntryForTest({ kind: 'flower', itemId: id });
+    return window.__meadowlight.magnifierReadback();
+  }, firstId);
+  await page.waitForTimeout(1200);
+  const flowerHoverCard = await page.evaluate(() => {
+    const el = document.querySelector('[data-magnifier-card="true"]');
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return {
+      visible: r.width > 0 && r.height > 0,
+      text: el.textContent ?? '',
+      pointerEvents: getComputedStyle(el).pointerEvents,
+    };
+  });
+  const flowerHoverOk =
+    !!flowerHoverCard &&
+    flowerHoverCard.visible &&
+    flowerHover.entry?.kind === 'flower' &&
+    flowerHoverCard.text.length > 0 &&
+    /waiting for its first pollinator visit|visited by a pollinator this season/.test(flowerHoverCard.text);
+  rec.record('magnifier.flower-hover-shows-card', flowerHoverOk,
+    flowerHoverCard
+      ? 'glass-armed hover card: ' + flowerHoverCard.text.slice(0, 70)
+      : 'no card rendered on flower hover with glass armed');
   // the card renders in the viewport and is pointer-transparent
   await page.waitForTimeout(1200); // past any transition before reading (the detector lesson)
   const card = await page.evaluate(() => {

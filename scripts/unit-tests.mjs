@@ -1262,6 +1262,26 @@ test('N1 8x observability: every season of every world precipitates multiple tim
     }
   }
 });
+const { butterflyColors, BUTTERFLY_WING_PALETTE } = require(OUT + '/data/wildpollinators.js');
+
+// --- butterfly color determinism (PR #38 comment #6383907384) ---
+test('butterfly colors: same identity = same color, always from the palette', () => {
+  const a = butterflyColors(12345, 3, 2);
+  const b = butterflyColors(12345, 3, 2);
+  assert.deepStrictEqual(a, b, 'deterministic: same world/ordinal/index = same butterfly');
+  assert.ok(BUTTERFLY_WING_PALETTE.includes(a.wing), 'wing color comes from the data palette');
+  assert.ok(BUTTERFLY_WING_PALETTE.length === 4, 'palette has the four approved colors');
+});
+
+test('butterfly colors: different identities spread across the palette', () => {
+  const seen = new Set();
+  for (let ord = 0; ord < 12; ord++) {
+    for (let i = 0; i < 4; i++) seen.add(butterflyColors(98765, ord, i).wing);
+  }
+  assert.ok(seen.size >= 2, 'the palette actually varies across creatures');
+  for (const c of seen) assert.ok(BUTTERFLY_WING_PALETTE.includes(c));
+});
+
 // --- N3 magnifier wildlife hit resolution (PR #38 comment #6383586724) ---
 test('wildlife hit: the pointer ray hits a creature within reach', () => {
   // synthetic pair: camera at origin looking down -Z, creature 10 ahead
