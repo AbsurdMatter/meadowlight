@@ -329,16 +329,21 @@ export function PlacementSystem() {
         } else if (s.magnifierOn) {
           usePlacementStore.setState({ magnifierOn: false, magnifierEntry: null });
         }
-        usePlacementStore.setState((st) => ({
-          toasts: [
-            ...st.toasts,
-            {
-              id: Date.now(),
-              title: refusal.toastTitle,
-              body: refusal.toastBody,
-            },
-          ],
-        }));
+        // #47: the toast fires only when the guard provides copy — the
+        // glass-armed refusal is SILENT (the glass context announces
+        // itself); the zoom refusal keeps its toast (invisible state)
+        if (refusal.toastTitle) {
+          usePlacementStore.setState((st) => ({
+            toasts: [
+              ...st.toasts,
+              {
+                id: Date.now(),
+                title: refusal.toastTitle,
+                body: refusal.toastBody,
+              },
+            ],
+          }));
+        }
         return;
       }
       const spot = resolveFromNdc(pressNdcX, pressNdcY);

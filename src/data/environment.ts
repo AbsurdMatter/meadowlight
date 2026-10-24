@@ -55,23 +55,18 @@ export function isRemovalRefused(
   // armed-no-entry, the guard passed, and removal executed. Removal while
   // the glass is armed is now impossible BY CONSTRUCTION.
   if (glassOn) {
-    if (glassEntryActive) {
-      return {
-        refused: true,
-        // click 1: dismiss the card; the glass STAYS ARMED (defined — the
-        // dismissal never disarms; that would reopen the same race door)
-        toastTitle: 'The glass is holding the meadow',
-        toastBody: 'Right-click put the card away — the glass stays on. Right-click again to put the glass away.',
-      };
-    }
-    return {
-      refused: true,
-      // armed, no card: right-click DISARMS the glass (the defined second
-      // click — never removal; a third right-click would then remove, but
-      // the glass is visibly off and the toast said so)
-      toastTitle: 'The glass went back in your pocket',
-      toastBody: 'Right-click put the glass away — click a flower or the corner button to inspect again.',
-    };
+    // (glassEntryActive distinguishes the CLICK behavior the removal
+    // handler applies — dismiss vs disarm — but no longer the refusal
+    // itself, which is armed-period; #47)
+    void glassEntryActive;
+    // #47 (v4, landed now — trivial): the glass-armed refusal is SILENT —
+    // the glass context already announces itself (the armed cursor, the
+    // card appearing/disappearing), so a toast on every right-click is
+    // redundant noise. The defined two-click behavior stands (click 1:
+    // dismiss card, glass stays armed; click 2: disarm) — only the toast
+    // goes. The zoom refusal KEEPS its toast: zoom state is invisible,
+    // the refusal would read as a dead right-click without it.
+    return { refused: true, toastTitle: '', toastBody: '' };
   }
   return { refused: false, toastTitle: '', toastBody: '' };
 }
