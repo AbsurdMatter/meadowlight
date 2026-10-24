@@ -6,6 +6,7 @@ import { allWildlife } from './magnifierProbes';
 import { MAGNIFIER_TUNING } from '../data/magnifier';
 import { resolveWildlifeHit } from '../engine/magnifierHit';
 import type { MagnifierEntry } from '../data/magnifierKinds';
+import { isMeshOwnedEntry } from '../data/magnifierKinds';
 
 /**
  * N3 wildlife hit resolution — IN-Canvas half, a THIN SHELL over the pure
@@ -57,17 +58,13 @@ export function MagnifierResolver() {
       return;
     }
     if (!inside.current) return; // pointer off-canvas: nothing to resolve
-    // DoD-walk regression fix (#6384544116): a FLOWER entry means the
-    // pointer is over flower geometry (the mesh's pointer-over set it,
-    // pointer-out clears it) — the flower path OWNS its entry's whole
-    // lifecycle, so the resolver must not overwrite it with a wildlife
-    // lock. This was the regression: pollinators cluster ON flowers, so
-    // hovering a bloom almost always had a creature within reach of the
-    // ray, and the resolver's hit branch stole the lock every frame —
-    // glass-on-flowers only ever showed wildlife.
-    // (structures joined the same ownership rule in #6384616654: their
-    //  mesh pointer-over/out owns the entry; the resolver never overwrites)
-    if (s.magnifierEntry?.kind === 'flower' || s.magnifierEntry?.kind === 'structure') return;
+    // THE ONE OWNERSHIP RULE (#6384690070, third instance of the hit/miss
+    // asymmetry class): a flower or structure entry is owned by its mesh's
+    // pointer-over/pointer-out pair — the resolver never overwrites a
+    // mesh-owned entry, in ANY branch. The resolver's visitor lock claims
+    // only null/visitor entries (isClaimableEntry). Stated once in
+    // data/magnifierKinds, consulted by every writer — no special cases.
+    if (isMeshOwnedEntry(s.magnifierEntry)) return;
     // unproject the pointer through the live camera, then hand the PURE
     // hit function flat camera state + CURRENT probe positions
     dir.current
@@ -88,6 +85,7 @@ export function MagnifierResolver() {
       MAGNIFIER_TUNING.wildlifeReach,
     );
     const cur = s.magnifierEntry;
+    if (isMeshOwnedEntry(cur)) return; // the ONE rule, every branch
     if (hit) {
       missStreak.current = 0;
       const next = { kind: 'visitor', visitorId: hit.kind } as MagnifierEntry;

@@ -279,6 +279,72 @@ async function checkMagnifier() {
       : flowerHoverCard.visible
         ? 'real-hover entry: ' + JSON.stringify(flowerHoverCard.entry.entry) + ' — card: ' + flowerHoverCard.text.slice(0, 60)
         : 'no card rendered on real flower hover with glass armed');
+  // #6384690070, THE CLUSTERING CASE: hover a flower WITH a pollinator on
+  // it — the ecological scenario where a creature sits within wildlifeReach
+  // of the ray over the bloom. The flower entry MUST survive resolver
+  // frames (third instance of the hit/miss asymmetry class slipped plain
+  // hover checks twice; this case is now explicit).
+  const clusteringHover = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    // a flower + a live bee near it: find a sighting and the nearest flower
+    const sightings = w.wildlifeSightings();
+    const bee = sightings.find((s) => s.kind === 'hivebee') ?? sightings[0];
+    if (!bee) return { ok: false, reason: 'no live wildlife' };
+    const items = w.items();
+    let best = null;
+    let bestD = Infinity;
+    for (const it of items) {
+      const d = Math.hypot(it.position[0] - bee.x, it.position[2] - bee.z);
+      if (d < bestD) { bestD = d; best = it; }
+    }
+    if (!best) return { ok: false, reason: 'no flowers' };
+    const cam = w.__three?.camera;
+    if (!cam) return { ok: false, reason: 'no camera' };
+    const p = best.position;
+    const pv = { x: p[0], y: p[1] + 0.5, z: p[2], w: 1 };
+    const proj = cam.projectionMatrix.elements;
+    const view = cam.matrixWorldInverse.elements;
+    function mul(a, v3) {
+      return {
+        x: a[0] * v3.x + a[4] * v3.y + a[8] * v3.z + a[12],
+        y: a[1] * v3.x + a[5] * v3.y + a[9] * v3.z + a[13],
+        z: a[2] * v3.x + a[6] * v3.y + a[10] * v3.z + a[14],
+        w: a[3] * v3.x + a[7] * v3.y + a[11] * v3.z + a[15],
+      };
+    }
+    const eye = mul(view, pv);
+    const clip = mul(proj, eye);
+    const ndc = { x: clip.x / clip.w, y: clip.y / clip.w };
+    return {
+      ok: true,
+      beeDist: bestD,
+      itemId: best.id,
+      screen: {
+        x: ((ndc.x + 1) / 2) * window.innerWidth,
+        y: ((-ndc.y + 1) / 2) * window.innerHeight,
+      },
+    };
+  });
+  if (clusteringHover.ok) {
+    // hold the pointer on the flower while a bee forages nearby — the
+    // resolver runs many frames against the clustering
+    await page.mouse.move(clusteringHover.screen.x, clusteringHover.screen.y);
+    await page.waitForTimeout(2000);
+  }
+  const clusteringEntry = await page.evaluate((itemId) => {
+    const w = window.__meadowlight;
+    return { entry: w.magnifierReadback(), wanted: itemId };
+  }, clusteringHover.ok ? clusteringHover.itemId : null);
+  const clusteringOk =
+    clusteringHover.ok &&
+    clusteringEntry.entry.entry?.kind === 'flower' &&
+    clusteringEntry.entry.entry?.itemId === clusteringEntry.wanted;
+  rec.record('magnifier.flower-survives-pollinator-clustering', clusteringOk,
+    !clusteringHover.ok
+      ? 'clustering setup failed: ' + (clusteringHover.reason ?? '')
+      : 'bee ' + clusteringHover.beeDist.toFixed(2) + 'u from flower — entry after 2s hold: ' +
+        JSON.stringify(clusteringEntry.entry.entry));
+
   // DoD-walk fix gate (#6384544116): the fireflies note records only inside
   // the NATURAL visibility window — a forced (test) state must NOT write a
   // visit, and no wild corners means no fireflies to record at all.

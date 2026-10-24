@@ -29,3 +29,21 @@ export type MagnifierEntry =
   | { kind: 'visitor'; visitorId: MagnifierKind }
   | { kind: 'structure'; structureId: string }
   | null;
+
+/**
+ * #6384690070: the ONE ownership rule, stated once and shared. A flower or
+ * structure entry is owned by its mesh's pointer-over/pointer-out pair —
+ * neither the resolver NOR another mesh's pointer-over may steal it. Only
+ * null or visitor entries are claimable (the resolver owns visitor locks).
+ * Every writer (resolver, flower mesh, structure mesh) consults this.
+ */
+export function isMeshOwnedEntry(
+  e: MagnifierEntry,
+): e is { kind: 'flower'; itemId: string } | { kind: 'structure'; structureId: string } {
+  return e !== null && (e.kind === 'flower' || e.kind === 'structure');
+}
+
+/** an entry a claimant may overwrite: nothing held, or a visitor lock */
+export function isClaimableEntry(e: MagnifierEntry): boolean {
+  return e === null || e.kind === 'visitor';
+}

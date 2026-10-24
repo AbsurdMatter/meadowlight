@@ -4,6 +4,7 @@ import { scaledElapsed } from '../engine/scaledTime';
 import * as THREE from 'three';
 import { PLANTS } from '../data/plants';
 import { usePlacementStore } from './placementStore';
+import { isClaimableEntry } from '../data/magnifierKinds';
 import { noVariation } from '../engine/variation';
 import { inBloom } from '../engine/pollinator';
 import { isRaining, RAIN_TUNING } from '../engine/weather';
@@ -77,13 +78,21 @@ function FlowerInstances() {
   const onOver = (e: ThreeEvent<PointerEvent>, plantId: string) => {
     const s = usePlacementStore.getState();
     if (!s.magnifierOn) return;
+    // #6384690070: claim only a CLAIMABLE entry — the ray can hit a flower
+    // and a structure in one move (R3F fires pointer-over for every
+    // intersected mesh), and the unguarded handlers raced: the last to fire
+    // overwrote the other's claim (the 836d4cc flower regression — a
+    // flower beside a hive always lost to the structure's over). A mesh
+    // over may never steal another mesh-owned entry.
+    if (!isClaimableEntry(s.magnifierEntry)) return;
     const idx = e.instanceId;
     const itemId = idx === undefined ? undefined : idMaps.current[plantId]?.[idx];
     if (itemId) s.setMagnifierEntry({ kind: 'flower', itemId });
   };
   const onOut = () => {
     const s = usePlacementStore.getState();
-    if (s.magnifierOn && s.magnifierEntry) s.setMagnifierEntry(null);
+    // pointer-out releases ONLY our own kind — never another owner's entry
+    if (s.magnifierOn && s.magnifierEntry?.kind === 'flower') s.setMagnifierEntry(null);
   };
   useFrame(({ camera }) => {
     const r = refs.current;

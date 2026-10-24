@@ -4,6 +4,7 @@ import { scaledElapsed } from '../engine/scaledTime';
 import * as THREE from 'three';
 import { STRUCTURES } from '../data/structures';
 import { usePlacementStore } from './placementStore';
+import { isClaimableEntry } from '../data/magnifierKinds';
 import { noVariation } from '../engine/variation';
 import { combReady } from '../engine/honey';
 import { HONEY_TUNING } from '../data/honey';
@@ -49,6 +50,9 @@ export function PlacedStructures() {
   const onOver = (structureId: string) => {
     const s = usePlacementStore.getState();
     if (!s.magnifierOn) return;
+    // #6384690070: the claim guard, same as flowers — a mesh pointer-over
+    // never steals another mesh-owned entry (the one-move multi-hit race)
+    if (!isClaimableEntry(s.magnifierEntry)) return;
     s.setMagnifierEntry({ kind: 'structure', structureId });
   };
   const onOut = () => {
