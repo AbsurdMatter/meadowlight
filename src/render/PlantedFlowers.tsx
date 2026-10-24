@@ -47,8 +47,16 @@ function FlowerInstances() {
   const refs = useRef<{ meshes: Record<string, THREE.InstancedMesh | null> }>({
     meshes: {},
   });
-  /** instanceId -> item id per species, rebuilt each frame alongside matrices */
+  /**
+   * instanceId -> item id per species, per PART instance (the raycast returns
+   * a per-part instanceId). Rebuilt ONLY when the item array reference
+   * changes (plant/remove swap the array) — the per-frame matrix loop does
+   * not touch it. Perf fix (#6384252148): rebuilding ~items x parts entries
+   * every frame was pure allocation churn; steady-state frames are now
+   * allocation-free on this path.
+   */
   const idMaps = useRef<Record<string, string[]>>({});
+  const lastItems = useRef<unknown>(null);
   /** last (season, itemCount) each species' colors were written for */
   const colorKey = useRef<Record<string, string>>({});
 
@@ -97,12 +105,10 @@ function FlowerInstances() {
       const colorsDirty = colorKey.current[def.id] !== thisColorKey;
       colorKey.current[def.id] = thisColorKey;
       void glistened;
-      // #6384003544: the hover hit area covers the WHOLE flower (bloom +
-      // stem): the raycast returns a PER-PART instanceId, so the id map
-      // must carry the item id for EVERY part instance — the old map held
-      // one id per ITEM, so bloom-part hits indexed past the list and the
-      // hover resolved to the wrong flower or none (stem-only hover)
-      const ids: string[] = [];
+      // id maps change only with the item SET (reference swap on
+      // plant/remove), never with sway/bloom per-frame state
+      const itemsChanged = items !== lastItems.current;
+      const ids = itemsChanged ? [] : (idMaps.current[def.id] ?? []);
       let i = 0;
       for (const item of items) {
         if (item.plantId !== def.id) continue;
@@ -115,8 +121,8 @@ function FlowerInstances() {
         const swayX = near ? Math.cos(t * 0.7 + item.phase * 1.3) * def.sway * 0.5 : 0;
         for (let pi = 0; pi < def.parts.length; pi++) {
           // every part instance maps back to its item (hit anywhere on
-          // the flower — petal, stem, leaf — resolves to that flower)
-          ids.push(item.id);
+          // the flower resolves to it) — pushed only on rebuild
+          if (itemsChanged) ids.push(item.id);
           const part = def.parts[pi];
           const petal = part.petal === true;
           const partSway = part.offset[1] / Math.max(def.height, 0.001);
@@ -166,10 +172,11 @@ function FlowerInstances() {
         }
       }
       mesh.count = i;
-      idMaps.current[def.id] = ids;
+      if (itemsChanged) idMaps.current[def.id] = ids;
       mesh.instanceMatrix.needsUpdate = true;
       if (colorsDirty && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
+    lastItems.current = items;
   });
   return (
     <group>

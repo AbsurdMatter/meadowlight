@@ -9,6 +9,7 @@ import { precipReadback } from '../engine/rainSchedule';
 import { dayPhase, setDayPhase, resumeDayCycle, dayCycleOverridden } from '../engine/dayCycle';
 import { fireflyDebug, setFireflyForce, fireflyForced } from '../render/Fireflies';
 import { setCellMapVisible, cellMapVisible } from '../render/CellMapOverlay';
+import { hash2 } from '../engine/seededHash';
 import { CELL_KINDS } from '../render/CellMapOverlay';
 import { MILESTONES } from '../data/milestones';
 import {
@@ -221,12 +222,15 @@ function PerfOverlayPanel() {
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;
       const def = PLANTS[i % PLANTS.length];
+      // #6384252148: FIXED seeded layout — deterministic spiral + hash2
+      // for rotation/phase, so every stress run places the SAME world and
+      // the stored baseline compares like-for-like
       store.plant({
-        id: crypto.randomUUID(),
+        id: 'stress-' + i,
         plantId: def.id,
         position: [x, groundAt(x, z).height, z],
-        rotationY: Math.random() * Math.PI * 2,
-        phase: Math.random() * Math.PI * 2,
+        rotationY: hash2(i, 7, 0x57ee) * Math.PI * 2,
+        phase: hash2(i, 11, 0xabcd) * Math.PI * 2,
       });
     }
     frameTimes.current = [];
@@ -244,22 +248,58 @@ function PerfOverlayPanel() {
       const p95 = sorted[Math.floor(sorted.length * 0.95)];
       const min = sorted[0];
       const max = sorted[sorted.length - 1];
+      // #6384252148 DIFF GATE: machine-relative budgets alone just failed —
+      // a 20ms budget passes on a fast machine while the same machine
+      // REGRESSED 40%. This machine's own stored baseline (localStorage,
+      // beside the save) is the truth: only a >15% regression over it
+      // flags. First run on a machine stores the baseline (that run only
+      // checks the absolute budget); every later run is a diff.
+      const BASELINE_KEY = 'meadowlight.perf.baseline.v1';
+      const REGRESSION_FLAG = 1.15; // >15% slower than this machine's baseline
+      const baselineRaw = localStorage.getItem(BASELINE_KEY);
+      const prev = baselineRaw ? (JSON.parse(baselineRaw) as { avgFrameMs: number; p95FrameMs: number }) : null;
+      const avgFrameMs = Number(avg.toFixed(2));
+      const diffVsBaseline = prev ? avgFrameMs / prev.avgFrameMs : null;
+      const regression = diffVsBaseline !== null && diffVsBaseline > REGRESSION_FLAG;
+      const withinBudget = avg < FRAME_BUDGET_MS;
+      const pass = withinBudget && !regression;
       const result = {
         items: usePlacementStore.getState().items.length,
         samples: times.length,
-        avgFrameMs: Number(avg.toFixed(2)),
+        avgFrameMs,
         p95FrameMs: Number(p95.toFixed(2)),
         minFrameMs: Number(min.toFixed(2)),
         maxFrameMs: Number(max.toFixed(2)),
         fps: Number((1000 / avg).toFixed(1)),
         budget: `${FRAME_BUDGET_MS} ms (~60 fps)`,
-        pass: avg < FRAME_BUDGET_MS,
+        baseline: prev
+          ? `${prev.avgFrameMs} ms (this machine) — diff x${(diffVsBaseline ?? 0).toFixed(2)}`
+          : 'none yet — this run becomes it',
+        pass,
+        regressionFlagged: regression,
       };
       console.log('[perf] stress test result:', result);
+      if (regression) {
+        console.log(
+          `[perf] REGRESSION: avg ${avgFrameMs} ms vs this machine's baseline ${prev?.avgFrameMs} ms (x${(diffVsBaseline ?? 0).toFixed(2)}, flag > 1.15)`,
+        );
+      }
+      // store/update the baseline: a passing (or first) run sets the bar;
+      // a flagged regression does NOT overwrite the baseline (the good
+      // number stays as the reference to fix back toward)
+      if (pass || !prev) {
+        localStorage.setItem(
+          BASELINE_KEY,
+          JSON.stringify({ avgFrameMs, p95FrameMs: result.p95FrameMs, at: Date.now() }),
+        );
+        console.log('[perf] baseline stored for this machine');
+      }
       console.log(
         result.pass
           ? `[perf] PASS: ${result.fps} fps (avg ${result.avgFrameMs} ms/frame)`
-          : `[perf] FAIL: ${result.fps} fps (avg ${result.avgFrameMs} ms/frame) exceeds ${FRAME_BUDGET_MS} ms budget`,
+          : regression
+            ? `[perf] FAIL: REGRESSION over this machine's baseline (x${(diffVsBaseline ?? 0).toFixed(2)} > 1.15)`
+            : `[perf] FAIL: ${result.fps} fps (avg ${result.avgFrameMs} ms/frame) exceeds ${FRAME_BUDGET_MS} ms budget`,
       );
       usePlacementStore.setState({ items: before });
       console.log('[perf] meadow restored to pre-stress state');

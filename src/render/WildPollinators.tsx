@@ -53,6 +53,12 @@ interface VisitorState {
    *  seeded-hash input for per-butterfly colors (same world = same colors) */
   ordinal: number;
   index: number;
+  /** resolved per-creature colors, computed ONCE at spawn from the seeded
+   *  hash of the identity (perf #6384252148: recomputing + re-uploading
+   *  every frame was GPU churn; the values are identity-stable, so they
+   *  are computed at birth and never change) */
+  wing: string;
+  accent: string;
   /** id of the placed flower this visitor heads to — re-resolved per frame */
   targetFlowerId: string | null;
   /** gentle wander point when no bloom is reachable */
@@ -83,6 +89,9 @@ const tmpMat = new THREE.Matrix4();
 const lookMat = new THREE.Matrix4();
 const scaleMat = new THREE.Matrix4();
 const up = new THREE.Vector3(0, 1, 0);
+// per-frame scratch: reused every frame, zero steady-state allocations
+const scratchTarget = new THREE.Vector3();
+const scratchDir = new THREE.Vector3();
 const flowerById = new Map<string, { x: number; y: number; z: number; plantId: string }>();
 let crashLogged = false;
 
@@ -101,17 +110,24 @@ function syncFlowers() {
 }
 
 function makeVisitors(
-  tuning: { speed: number },
+  tuning: { id: string; speed: number },
   count: number,
   ordinal: number,
+  worldSeed: number,
 ): VisitorState[] {
   const out: VisitorState[] = [];
   for (let i = 0; i < count; i++) {
     const a = Math.random() * Math.PI * 2;
     const r = 4 + Math.random() * 10;
+    // colors resolve at spawn: butterflies by the seeded hash of the
+    // stable identity, others neutral (their tuning colors render)
+    const c =
+      tuning.id === 'butterfly' ? butterflyColors(worldSeed, ordinal, i) : null;
     out.push({
       ordinal,
       index: i,
+      wing: c?.wing ?? tuning.id,
+      accent: c?.accent ?? tuning.id,
       pos: new THREE.Vector3(Math.cos(a) * r, 1.8 + Math.random() * 1.4, Math.sin(a) * r),
       vel: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5)
         .normalize()
@@ -160,6 +176,7 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
     [tuning.id],
   );
   const lastCount = useRef(-1);
+  const colorsDirty = useRef(false);
   const tmpColor = useMemo(() => new THREE.Color(), []);
 
   // #6383907384: butterflies use per-instance colors — the material is
@@ -243,6 +260,7 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
     if (tuning.id === 'hoverfly' && season === HOVERFLY_AUTUMN_TUNING.season) {
       target = Math.floor(target * HOVERFLY_AUTUMN_TUNING.fraction);
     }
+    colorsDirty.current = target !== lastCount.current;
     if (target !== lastCount.current) {
       lastCount.current = target;
       const list = visitors.current;
@@ -250,7 +268,15 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
       // #6383907384: the window ordinal — bumped EVERY population change so
       // a creature's identity is stable within its life, not across respawns
       windowOrdinal.current += target - list.length > 0 ? 1 : 0;
-      while (list.length < target) list.push(...makeVisitors(tuning, target - list.length, windowOrdinal.current));
+      while (list.length < target)
+        list.push(
+          ...makeVisitors(
+            tuning,
+            target - list.length,
+            windowOrdinal.current,
+            s.worldSeed,
+          ),
+        );
       // the visit WINDOW record rides the same natural-condition gate —
       // one notebook entry per visitor per season window, never per frame
       if (target > 0 && (tuning.id === 'queenbumble' || tuning.id === 'lavendermoth')) {
@@ -314,7 +340,10 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
         }
       }
 
-      const target = new THREE.Vector3();
+      // perf (#6384252148): a module-scope scratch vector, NOT a per-frame
+      // allocation — a new Vector3 per visitor per frame was the GC spike
+      // source behind p95 >> avg
+      const target = scratchTarget;
       if (v.targetFlowerId !== null && flowerInfo) {
         const def = PLANT_BY_ID[flowerInfo.plantId];
         target.set(
@@ -332,7 +361,7 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
       }
 
       if (v.restingUntil <= t) {
-        const toTarget = target.clone().sub(v.pos);
+        const toTarget = scratchDir.copy(target).sub(v.pos);
         const dist = toTarget.length();
         if (dist < 0.5) {
           // N2: arrival at a flower IS the visit — one write path, deduped
@@ -369,19 +398,15 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
       scaleMat.makeScale(flap, 1, 1);
       tmpMat.multiply(scaleMat);
       wings.setMatrixAt(bi, tmpMat);
-      // #6383907384: per-butterfly colors from the seeded hash of the
-      // creature's stable identity (world seed + window ordinal + index) —
-      // same world = same colors; bees/hoverflies keep their tuning colors.
-      // instanceColor multiplies the material color, so white = unchanged.
-      if (tuning.id === 'butterfly' && body.instanceColor && accent.instanceColor && wings.instanceColor) {
-        const c = butterflyColors(
-          usePlacementStore.getState().worldSeed,
-          v.ordinal,
-          v.index,
-        );
-        tmpColor.set(c.wing);
+      // #6383907384 colors, perf-fixed (#6384252148): the values are
+      // identity-stable and resolved at SPAWN (v.wing/v.accent); they are
+      // written to the GPU buffers only when the population changes
+      // (colorsDirty), never per frame — per-frame instanceColor
+      // re-uploads were pure GPU churn.
+      if (colorsDirty && perInstanceColor && wings.instanceColor && accent.instanceColor) {
+        tmpColor.set(v.wing);
         wings.instanceColor.setXYZ(bi, tmpColor.r, tmpColor.g, tmpColor.b);
-        tmpColor.set(c.accent);
+        tmpColor.set(v.accent);
         accent.instanceColor.setXYZ(bi, tmpColor.r, tmpColor.g, tmpColor.b);
       }
     }
@@ -391,9 +416,11 @@ function WildSpecies({ tuning }: { tuning: RenderTuning }) {
     body.instanceMatrix.needsUpdate = true;
     accent.instanceMatrix.needsUpdate = true;
     wings.instanceMatrix.needsUpdate = true;
-    if (body.instanceColor) body.instanceColor.needsUpdate = true;
-    if (accent.instanceColor) accent.instanceColor.needsUpdate = true;
-    if (wings.instanceColor) wings.instanceColor.needsUpdate = true;
+    if (colorsDirty.current) {
+      if (body.instanceColor) body.instanceColor.needsUpdate = true;
+      if (accent.instanceColor) accent.instanceColor.needsUpdate = true;
+      if (wings.instanceColor) wings.instanceColor.needsUpdate = true;
+    }
   };
 
   useFrame(() => {

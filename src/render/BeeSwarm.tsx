@@ -36,6 +36,8 @@ interface BeeState {
 }
 
 const MAX_BEES = BEE_TUNING.maxBeesTotal;
+// per-frame scratch: reused every frame, zero steady-state allocations
+const scratchDir = new THREE.Vector3();
 
 /** live swarm telemetry, exposed for the test hook / P panel bee debug */
 export const beeDebug = {
@@ -318,7 +320,7 @@ export function BeeSwarm() {
       }
 
       if (bee.restingUntil <= t) {
-        const toTarget = target.clone().sub(bee.pos);
+        const toTarget = scratchDir.copy(target).sub(bee.pos); // perf #6384252148: scratch, not per-frame alloc
         const dist = toTarget.length();
         if (dist < BEE_TUNING.arriveRadius) {
           // N2: arrival at a flower IS the visit — record it through the
