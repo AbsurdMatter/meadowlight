@@ -5,6 +5,7 @@ import {
   clearSavedWorld,
 } from '../engine/persistence';
 import type { PlacedItem, PlacedStructure } from '../engine/persistence';
+import { withVisit } from '../engine/visits';
 import { variationFor, type PlacementVariation } from '../engine/variation';
 import type { Season } from '../data/seasons';
 import { setDayPhase, dayPhase } from '../engine/dayCycle';
@@ -18,6 +19,7 @@ import { SEASON_ARRIVAL } from '../data/seasons';
 import { newlyFormed, companionSet } from '../engine/companions';
 import { combReady, fillAfterHarvest } from '../engine/honey';
 import { HONEY_FACTS } from '../data/honey';
+import type { MagnifierEntry } from '../data/magnifierKinds';
 import { SEEDING_FACTS } from '../data/seeding';
 import { rollVolunteers } from '../engine/seeding';
 import { isPlantableCell } from '../engine/ground';
@@ -57,6 +59,14 @@ export interface PlacementState {
   modalOpen: boolean;
   setModalOpen: (open: boolean) => void;
   plant: (item: PlacedItem) => void;
+  /**
+   * Perf (#6384329017): batch placement — one store update + ONE companion
+   * check for a whole burst. plant() per flower does a set + a full recipe
+   * scan EACH (200 placements = 200 sets + 200 scans in one synchronous
+   * burst = the 341ms frame). Real gameplay benefit too: natural placement
+   * sprinkles and multi-drop planting coalesce.
+   */
+  plantMany: (items: PlacedItem[]) => void;
   placeStructure: (s: PlacedStructure) => void;
   removeAt: (id: string) => void;
   removeStructure: (id: string) => void;
@@ -105,6 +115,24 @@ export interface PlacementState {
   harvestDips: Record<string, number>;
   /** #36 hive popup: the hive the popup is anchored to (null = closed) */
   hivePopup: string | null;
+  /**
+   * N2: record a pollinator visit on a flower (the foragers' arrival
+   * branches call this through recordFlowerVisit in engine/visits — the
+   * ONE write path, additive v8 field). Idempotent per season.
+   */
+  recordVisit: (itemId: string) => void;
+  /**
+   * N3: the magnifying-glass inspector tool (data-flagged palette entry).
+   * PURE INSPECTION — hovering shows a zoomed detail card; zero mutation,
+   * zero new input paths (the hover rides R3F's existing mesh pointer
+   * events; the card never captures canvas events).
+   */
+  magnifierOn: boolean;
+  toggleMagnifier: () => void;
+  /** what the glass is currently zooming (null = card hidden) */
+  /** the glass's inspection entry — ONE shared taxonomy (data/magnifierKinds) */
+  magnifierEntry: MagnifierEntry;
+  setMagnifierEntry: (e: PlacementState['magnifierEntry']) => void;
   openHivePopup: (hiveId: string) => void;
   closeHivePopup: () => void;
   earnMilestone: (id: MilestoneId, label: string, detail: string) => void;
@@ -163,6 +191,13 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   plant: (item) => {
     set((s) => ({ items: [...s.items, item] }));
     // #9: a new flower may complete a recipe — discover it warmly
+    get().checkCompanions();
+  },
+  plantMany: (batch) => {
+    if (batch.length === 0) return;
+    // ONE store set + ONE companion scan for the whole burst (plant()
+    // per-item was the 341ms placement frame)
+    set((s) => ({ items: [...s.items, ...batch] }));
     get().checkCompanions();
   },
   placeStructure: (structure) =>
@@ -261,6 +296,25 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   hivePopup: null,
   openHivePopup: (hiveId) => set({ hivePopup: hiveId }),
   closeHivePopup: () => set({ hivePopup: null }),
+  recordVisit: (itemId) => {
+    const s = get();
+    // idempotent fast path: the vast majority of arrivals are repeat
+    // visits within the same season — no state write, no rerender
+    const idx = s.items.findIndex((it) => it.id === itemId);
+    if (idx < 0) return;
+    const it = s.items[idx];
+    if (it.visitedSeasons?.includes(s.season)) return;
+    const items = s.items.slice();
+    items[idx] = { ...it, visitedSeasons: withVisit(it, s.season) };
+    set({ items });
+  },
+  magnifierOn: false,
+  toggleMagnifier: () => {
+    const s = get();
+    set({ magnifierOn: !s.magnifierOn, magnifierEntry: null });
+  },
+  magnifierEntry: null,
+  setMagnifierEntry: (e) => set({ magnifierEntry: e }),
   harvestHoney: (hiveId) => {
     const s = get();
     const fill = s.hiveCombs[hiveId] ?? 0;

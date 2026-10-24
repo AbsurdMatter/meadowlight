@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { dayPhase, isDusk } from '../engine/dayCycle';
 import { scaledDelta, scaledElapsed } from '../engine/scaledTime';
 import { usePlacementStore } from './placementStore';
+import { registerWildlifeProbe } from './magnifierProbes';
 import { groundAt } from '../engine/ground';
 import { FIREFLY_SUMMER_TUNING } from '../data/seasonalVisitors';
 import { recordVisitorWindow } from './visitorLog';
@@ -60,6 +61,14 @@ interface Firefly {
 export function Fireflies() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const flies = useRef<Firefly[]>([]);
+  // N3 coverage: read-only live positions for the magnifier
+  useEffect(
+    () =>
+      registerWildlifeProbe('fireflies', () =>
+        flies.current.map((f) => ({ kind: 'fireflies' as const, x: f.pos.x, y: f.pos.y, z: f.pos.z })),
+      ),
+    [],
+  );
   const lastKey = useRef('');
 
   // park on mount (same class as the rain ghost-voxel fix): an unparked
@@ -86,9 +95,20 @@ export function Fireflies() {
     // SAME system (never a second swarm): the population boost composes
     // with the dusk window, it does not replace it.
     const summerBloom = FIREFLY_SUMMER_TUNING.seasons.includes(s.season);
-    if (summerBloom && dusk) recordVisitorWindow('fireflies', s.season);
     // rebuild only when the corner set changes
     const corners = s.structures.filter((st) => st.structureId === 'wildcorner');
+    // DoD-walk fix (#6384544116): the notebook record must consult the SAME
+    // visibility window the renderer draws — ONE source, the natural dusk
+    // window in engine/dayCycle (isDusk). The old condition recorded when
+    // (a) the P harness FORCED fireflies on (a test state, not a visit) and
+    // (b) with ZERO wild corners (no fireflies rendered at all) — the note
+    // fired for fireflies nobody could see. Now: NATURAL dusk only (a
+    // forced state never writes a visit), fireflies actually PRESENT
+    // (at least one corner), in a bloom season.
+    const naturalDusk = fireflyForced() === null && isDusk(dayPhase());
+    if (summerBloom && naturalDusk && corners.length > 0) {
+      recordVisitorWindow('fireflies', s.season);
+    }
     const key = corners.map((c) => c.id).join(',') + (summerBloom ? ':summer' : '');
     if (key !== lastKey.current) {
       lastKey.current = key;

@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts', 'visits.ts', 'magnifierHit.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -76,7 +76,7 @@ const { PLANTS, PLANT_BY_ID } = require(OUT + '/data/plants.js');
 const { groundAt, waterSurfaceHeight, pondFloorHeight } = require(OUT + '/engine/ground.js');
 const { LAKE, TERRAIN_SHAPE, shapedHeight, POND_FLAT_HEIGHT } = require(OUT + '/data/environment.js');
 const { MEADOW_SIZE, terrainHeight } = require(OUT + '/engine/terrain.js');
-const { isRaining, setRaining } = require(OUT + '/engine/weather.js');
+const { isRaining, setPrecipitatingForTest } = require(OUT + '/engine/weather.js');
 const { skyPaletteAt, GOLDEN_HOUR, sunElevation, isDaylight, isDusk, DUSK_START, DUSK_END, DAY_CYCLE_SECONDS, dayPhase, setDayPhase, advanceDay, resumeDayCycle, dayCycleOverridden } = require(OUT + '/engine/dayCycle.js');
 const { SEASONS, SEASON_SECONDS } = require(OUT + '/data/seasons.js');
 const { seasonProgress, advanceSeasons, forceSeason, resumeSeasonClock, seasonClockOverridden, setSeasonProgressForTest, nextSeason } = require(OUT + '/engine/seasonClock.js');
@@ -100,6 +100,11 @@ const { SEEDING_TUNING, SEEDING_FACTS } = require(OUT + '/data/seeding.js');
 const { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, FIREFLY_SUMMER_TUNING, HOVERFLY_AUTUMN_TUNING, isEarlySpring } = require(OUT + '/data/seasonalVisitors.js');
 const { isPlantableCell, groundAt: groundAtReadback } = require(OUT + '/engine/ground.js');
 const { hillsCover: hillsCoverReadback } = require(OUT + '/engine/hillsLayout.js');
+const { seasonWindows, precipReadback, tickPrecipScheduleForTest, nextWindowAfter } = require(OUT + '/engine/rainSchedule.js');
+const { wasVisitedThisSeason, withVisit, visitedParents } = require(OUT + '/engine/visits.js');
+const { resolveWildlifeHit, nextWildlifeEntry } = require(OUT + '/engine/magnifierHit.js');
+const { MAGNIFIER_WILDLIFE } = require(OUT + '/data/magnifierWildlife.js');
+const { MAGNIFIER_KINDS } = require(OUT + '/data/magnifierKinds.js');
 
 const mkItem = (plantId, x = 0, z = 0) => ({ id: plantId + ':' + x + ':' + z, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
 const mkStruct = (structureId, x = 0, z = 0) => ({ id: structureId + ':' + x + ':' + z, structureId, position: [x, 0, z], rotationY: 0 });
@@ -389,14 +394,17 @@ test('dusk window: fireflies appear only in 0.79-0.92', () => {
 });
 
 // ---------- session 6 U1 (#11): auto-advancing season calendar ----------
-test('season clock: 12-minute season, rollover reports the crossed season', () => {
-  assert.strictEqual(SEASON_SECONDS, 720, 'season length per approved plan (10-15 min window)');
+test('season clock: 9-minute season (25% shorter, #6384616654), rollover reports the crossed season', () => {
+  assert.strictEqual(SEASON_SECONDS, 540, 'season length 25% shorter per the close-round pacing call');
   resumeSeasonClock();
   setSeasonProgressForTest(0);
-  let crossed = advanceSeasons(360, 'summer');
+  // half a season, DERIVED from the constant (never the old 360 literal —
+  // the 25% shorten would silently break a hardcoded half)
+  const halfSeason = SEASON_SECONDS / 2;
+  let crossed = advanceSeasons(halfSeason, 'summer');
   assert.strictEqual(crossed.length, 0, 'half a season crosses nothing');
   assert.ok(Math.abs(seasonProgress() - 0.5) < 1e-9, 'progress is half');
-  crossed = advanceSeasons(360, 'summer');
+  crossed = advanceSeasons(halfSeason, 'summer');
   assert.deepStrictEqual(crossed, ['autumn'], 'a full season rolls into autumn');
   assert.ok(Math.abs(seasonProgress() - 0) < 1e-9, 'rollover leaves progress at season start');
 });
@@ -529,9 +537,9 @@ test('rain never lowers appeal: the no-fail invariant', () => {
     season: 'summer',
   };
   const dry = computeAppeal({ x: 0, z: 0 }, w, FORAGE_RADIUS);
-  setRaining(true);
+  setPrecipitatingForTest(true);
   const wet = computeAppeal({ x: 0, z: 0 }, w, FORAGE_RADIUS);
-  setRaining(false);
+  setPrecipitatingForTest(false);
   assert.strictEqual(dry.score, wet.score, 'rain must not change appeal (no fail state)');
   assert.strictEqual(isRaining(), false, 'rain toggles back off');
 });
@@ -683,7 +691,7 @@ test('save v7 additive: session-6 blob loads without loss and derives a stable s
   const w3 = loadWorld();
   assert.strictEqual(w3.worldSeed, w1.worldSeed, 'v7 seed round-trips');
   assert.strictEqual(w3.seedingEpoch, 3, 'v7 epoch round-trips');
-  assert.strictEqual(w3.version, 7, 'save writes v7');
+  assert.strictEqual(w3.version, 8, 'save writes v8 (N2 additive bump)');
   // volunteer flag persists through the round-trip
   saveWorld({ ...w3, items: [...w3.items.map((it) => ({ ...it, volunteer: true }))] });
   const w4 = loadWorld();
@@ -1083,6 +1091,273 @@ test('placement collision: flowers respect structure footprints; structures resp
   assert.ok(structureBlocked(1, 0, 'bath', [hive], []), 'bath on hive footprint must be blocked');
   assert.ok(!structureBlocked(8, 8, 'bath', [hive], []), 'far bath must be free');
 });
+
+// ---------- session 8 N1 (round 2): natural, seasonally-weighted precipitation ----------
+// Binary windows, seeded per (worldSeed, ordinal): same world = same weather
+// calendar; spring/fall wet, summer dry, winter = SNOW (decided); windows
+// arrive and end MID-SEASON (never tied to boundaries); the 8x rule —
+// one accelerated year visibly precipitates several times.
+const wetShareOf = (windows) => {
+  let wet = 0;
+  for (const win of windows) wet += Math.min(win.end, 1) - win.start;
+  return Math.max(0, wet);
+};
+
+test('N1 determinism: same seed + ordinal = same weather calendar', () => {
+  const a = seasonWindows(1234, 3, 'spring');
+  const b = seasonWindows(1234, 3, 'spring');
+  assert.deepStrictEqual(a, b, 'same inputs replay identically');
+  assert.notDeepStrictEqual(seasonWindows(1234, 3, 'autumn'), a, 'different season weathers differently');
+  assert.notDeepStrictEqual(seasonWindows(9999, 3, 'spring'), a, 'different world weathers differently');
+  assert.notDeepStrictEqual(seasonWindows(1234, 4, 'spring'), a, 'next year weathers differently (ordinal)');
+});
+
+test('N1 seasonal weights: spring+fall wetter than summer; windows are mid-season', () => {
+  const share = (season) => {
+    let s = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      for (let ord = 0; ord < 4; ord++) {
+        s += wetShareOf(seasonWindows(seed, ord, season));
+      }
+    }
+    return s / 80;
+  };
+  const spring = share('spring');
+  const autumn = share('autumn');
+  const summer = share('summer');
+  assert.ok(spring > summer + 0.1, 'spring wetter than summer by structure (' + spring.toFixed(2) + ' vs ' + summer.toFixed(2) + ')');
+  assert.ok(autumn > summer + 0.1, 'fall wetter than summer by structure');
+  assert.ok(summer < 0.25, 'summer stays mostly dry (cozy)');
+  assert.ok(spring > 0.2, 'spring is observably wet (the 8x rule: weather must happen)');
+});
+
+test('N1 winter-is-snow: every winter window is snow; spring/summer/autumn are rain', () => {
+  for (let seed = 1; seed <= 10; seed++) {
+    for (const win of seasonWindows(seed, 7, 'winter')) {
+      assert.strictEqual(win.kind, 'snow', 'winter precipitation is SNOW (decided)');
+    }
+    for (const s of ['spring', 'summer', 'autumn']) {
+      for (const win of seasonWindows(seed, 7, s)) {
+        assert.strictEqual(win.kind, 'rain', s + ' precipitation is rain');
+      }
+    }
+  }
+});
+
+test('N1 windows live mid-season: a boundary crossing never resets or silences weather', () => {
+  // windows are continuous on the 0..1 progress axis and may spill past 1 —
+  // a storm in progress at the rollover keeps falling (the round-2 bug
+  // report: "rain stopped with the season change")
+  let sawMidSeason = false;
+  let sawSpill = false;
+  for (let seed = 1; seed <= 40; seed++) {
+    for (let ord = 0; ord < 4; ord++) {
+      const w = seasonWindows(seed, ord, 'spring');
+      for (const win of w) {
+        if (win.start > 0.15 && win.end < 0.9) sawMidSeason = true;
+        if (win.end > 1) sawSpill = true;
+      }
+    }
+  }
+  assert.ok(sawMidSeason, 'windows start/end mid-season, not only at boundaries');
+  assert.ok(sawSpill, 'some windows spill past the boundary (weather survives rollover)');
+  // and the resolver keeps evaluating: a forced season holds progress 0,
+  // so the verdict comes from the season OPENING windows, never a stale carry
+  resumeSeasonClock();
+  setSeasonProgressForTest(0.5);
+  tickPrecipScheduleForTest(5, 2, 'autumn');
+  const held = precipReadback().current;
+  tickPrecipScheduleForTest(5, 2, 'autumn');
+  assert.deepStrictEqual(precipReadback().current, held, 'same world point = same live verdict');
+});
+
+
+// ---------- session 8 N2: pollinator-visit seeding precondition ----------
+test('N2 visit ledger: withVisit dedupes per season; absent field = unvisited', () => {
+  const item = mkItem('lavender', 1, 1);
+  assert.strictEqual(wasVisitedThisSeason(item, 'summer'), false, 'no ledger = never visited (pre-v8 saves)');
+  const a = withVisit(item, 'summer');
+  assert.deepStrictEqual(a, ['summer']);
+  const b = withVisit({ ...item, visitedSeasons: a }, 'summer');
+  assert.deepStrictEqual(b, ['summer'], 'second visit the same season is a no-op (one visit suffices)');
+  const c = withVisit({ ...item, visitedSeasons: a }, 'autumn');
+  assert.deepStrictEqual(c, ['summer', 'autumn'], 'seasons accumulate additively');
+  assert.strictEqual(wasVisitedThisSeason({ ...item, visitedSeasons: c }, 'autumn'), true);
+});
+
+test('N2 seeding gate: only VISITED blooming flowers parent volunteers', () => {
+  const items = [
+    { ...mkItem('lavender', 0, 0), visitedSeasons: ['summer'] }, // blooming + visited
+    mkItem('lavender', 3, 0),                                    // blooming, UNVISITED
+    { ...mkItem('lavender', 6, 0), visitedSeasons: ['spring'] }, // blooming, visited LAST season only
+    { ...mkItem('crocus', 9, 0), visitedSeasons: ['summer'] },  // visited but NOT blooming in summer
+  ];
+  const parents = visitedParents(items, 'summer');
+  assert.strictEqual(parents.length, 1, 'only the visited-and-blooming flower parents');
+  assert.strictEqual(parents[0].id, items[0].id);
+});
+
+test('N2 rollVolunteers honors the precondition without touching the roll sequence', () => {
+  const isPlantable = () => true;
+  const flowerBlockedFn = () => false;
+  const mk = (id, x, visited) => ({ id, plantId: 'lavender', position: [x, 0, 0], rotationY: 0, phase: 0, visitedSeasons: visited });
+  // two visited parents: their volunteer rolls must be IDENTICAL to a
+  // pre-N2 run with the same parents (the RNG parity lesson — the filter
+  // runs BEFORE the rolls, so surviving parents roll byte-identically)
+  const visited = [mk('a', -6, ['summer']), mk('b', 6, ['summer'])];
+  const fromVisited = rollVolunteers(visited, 'summer', 'autumn', 42, 3, isPlantable, flowerBlockedFn);
+  const plain = visited.map((v) => ({ ...v, visitedSeasons: undefined }));
+  const fromPlain = rollVolunteers(plain, 'summer', 'autumn', 42, 3, isPlantable, flowerBlockedFn);
+  assert.strictEqual(fromVisited.length, fromPlain.length, 'same parents = same volunteer count');
+  for (let i = 0; i < fromVisited.length; i++) {
+    assert.deepStrictEqual(fromVisited[i], fromPlain[i], 'roll sequence untouched (positions, phases, variations)');
+  }
+  // and unvisited parents seed NOTHING
+  const unvisited = [mk('a', -6, undefined), mk('b', 6, ['spring'])];
+  const none = rollVolunteers(unvisited, 'summer', 'autumn', 42, 3, isPlantable, flowerBlockedFn);
+  assert.strictEqual(none.length, 0, 'unvisited flowers set no seed');
+});
+
+test('N2 save v8 load path: a v7 blob loads losslessly; visitedSeasons round-trips', () => {
+  // the session-7 localStorage shim (top of the self-seeding section) is
+  // already in place — never re-assign the global (probe hygiene: build on
+  // the shared fixture instead of replacing it)
+  clearSavedWorld();
+  // a v7-shaped blob (session-7 save, no visitedSeasons anywhere)
+  const v7 = {
+    version: 7,
+    items: [
+      { id: 'x', plantId: 'lavender', position: [1, 0, 1], rotationY: 0, phase: 0.5, volunteer: true,
+        variation: { rotationY: 0.2, heightJitter: 0, tiltX: 0, tiltZ: 0 } },
+    ],
+    structures: [], milestones: [], season: 'summer',
+    placementVariation: true, randomRotation: true, seenFacts: [], wildSeasons: [],
+    onboardingDismissed: false, visitorWindows: ['queenbumble:spring'],
+    worldSeed: 777, seedingEpoch: 3, dayPhase: 0.4, seasonProgress: 0.5,
+  };
+  localStorage.setItem('meadowlight.world.v2', JSON.stringify(v7));
+  const loaded = loadWorld();
+  assert.strictEqual(loaded.version >= 7, true, 'loads, not backed up');
+  assert.strictEqual(loaded.items.length, 1, 'the item survives');
+  assert.strictEqual(loaded.items[0].volunteer, true, 'volunteer flag preserved');
+  assert.strictEqual(loaded.items[0].visitedSeasons, undefined, 'pre-v8 item = unvisited, eligible on next visit');
+  assert.strictEqual(loaded.visitorWindows[0], 'queenbumble:spring', 'visitor windows preserved');
+  assert.strictEqual(loaded.worldSeed, 777, 'seed preserved');
+  assert.strictEqual(loaded.seedingEpoch, 3, 'epoch preserved');
+  // round-trip a v8 save with a visit ledger
+  loaded.items[0].visitedSeasons = ['summer'];
+  saveWorld(loaded);
+  const again = loadWorld();
+  assert.deepStrictEqual(again.items[0].visitedSeasons, ['summer'], 'visitedSeasons round-trips');
+  assert.strictEqual(again.version, 8, 'saves write v8');
+  clearSavedWorld();
+});
+
+test('N1 8x observability: every season of every world precipitates multiple times', () => {
+  // the gate case made structural: an accelerated year MUST visibly rain
+  // (spring/autumn), snow (winter), and mostly dry (summer) — weather that
+  // cannot be observed is a bug, not subtlety.
+  for (let seed = 1; seed <= 12; seed++) {
+    for (let ord = 0; ord < 4; ord++) {
+      assert.ok(seasonWindows(seed, ord, 'spring').length >= 2, 'spring has several windows (seed ' + seed + ')');
+      assert.ok(seasonWindows(seed, ord, 'autumn').length >= 2, 'autumn has several windows');
+      assert.ok(seasonWindows(seed, ord, 'winter').length >= 2, 'winter has several snow windows');
+    }
+  }
+});
+const { butterflyColors, BUTTERFLY_WING_PALETTE } = require(OUT + '/data/wildpollinators.js');
+
+// --- butterfly color determinism (PR #38 comment #6383907384) ---
+test('butterfly colors: same identity = same color, always from the palette', () => {
+  const a = butterflyColors(12345, 3, 2);
+  const b = butterflyColors(12345, 3, 2);
+  assert.deepStrictEqual(a, b, 'deterministic: same world/ordinal/index = same butterfly');
+  assert.ok(BUTTERFLY_WING_PALETTE.includes(a.wing), 'wing color comes from the data palette');
+  assert.ok(BUTTERFLY_WING_PALETTE.length === 4, 'palette has the four approved colors');
+});
+
+test('butterfly colors: different identities spread across the palette', () => {
+  const seen = new Set();
+  for (let ord = 0; ord < 12; ord++) {
+    for (let i = 0; i < 4; i++) seen.add(butterflyColors(98765, ord, i).wing);
+  }
+  assert.ok(seen.size >= 2, 'the palette actually varies across creatures');
+  for (const c of seen) assert.ok(BUTTERFLY_WING_PALETTE.includes(c));
+});
+
+// --- N3 magnifier wildlife hit resolution (PR #38 comment #6383586724) ---
+test('wildlife hit: the pointer ray hits a creature within reach', () => {
+  // synthetic pair: camera at origin looking down -Z, creature 10 ahead
+  const cam = { camX: 0, camY: 0, camZ: 0, dirX: 0, dirY: 0, dirZ: -1 };
+  const sightings = [{ kind: 'hivebee', x: 0, y: 0.3, z: -10 }];
+  const hit = resolveWildlifeHit(cam, sightings, 1.1);
+  assert.ok(hit, 'creature near the ray must hit');
+  assert.strictEqual(hit.kind, 'hivebee');
+});
+
+test('wildlife hit: a creature beyond reach misses', () => {
+  const cam = { camX: 0, camY: 0, camZ: 0, dirX: 0, dirY: 0, dirZ: -1 };
+  const far = [{ kind: 'dragonfly', x: 4, y: 0, z: -10 }]; // 4u off-axis
+  assert.strictEqual(resolveWildlifeHit(cam, far, 1.1), null);
+});
+
+test('wildlife hit: behind the camera never hits', () => {
+  const cam = { camX: 0, camY: 0, camZ: 0, dirX: 0, dirY: 0, dirZ: -1 };
+  const behind = [{ kind: 'fireflies', x: 0, y: 0, z: 5 }];
+  assert.strictEqual(resolveWildlifeHit(cam, behind, 1.1), null);
+});
+
+test('wildlife hit: the creature NEAREST THE RAY wins, not the nearest to camera', () => {
+  const cam = { camX: 0, camY: 0, camZ: 0, dirX: 0, dirY: 0, dirZ: -1 };
+  const two = [
+    { kind: 'butterfly', x: 0.9, y: 0, z: -4 },  // near camera but off-axis
+    { kind: 'queenbumble', x: 0.05, y: 0, z: -30 }, // far but dead-on
+  ];
+  const hit = resolveWildlifeHit(cam, two, 1.1);
+  assert.ok(hit);
+  assert.strictEqual(hit.kind, 'queenbumble', 'dead-on creature wins the lock');
+});
+
+test('wildlife hit: MOVES — the hit uses the CURRENT position, not a stale capture', () => {
+  const cam = { camX: 0, camY: 0, camZ: 0, dirX: 0, dirY: 0, dirZ: -1 };
+  // frame 1: creature at A misses; it moves under the pointer; frame 2 hits
+  const frame1 = [{ kind: 'lavendermoth', x: 5, y: 0, z: -10 }];
+  assert.strictEqual(resolveWildlifeHit(cam, frame1, 1.1), null);
+  const frame2 = [{ kind: 'lavendermoth', x: 0.1, y: 0, z: -10 }];
+  const hit = resolveWildlifeHit(cam, frame2, 1.1);
+  assert.ok(hit, 'after the creature moves under the pointer, the SAME function hits');
+  assert.strictEqual(hit.kind, 'lavendermoth');
+});
+
+test('entry decision: a MISS KEEPS the current visitor entry (no null-wipe)', () => {
+  // the chain break the user saw: an in-between frame must not clear the hover
+  assert.deepStrictEqual(
+    nextWildlifeEntry(null, 'hoverfly'),
+    { kind: 'visitor', visitorId: 'hoverfly' },
+  );
+  // a hit replaces it with the new lock
+  assert.deepStrictEqual(
+    nextWildlifeEntry({ kind: 'hivebee' }, 'hoverfly'),
+    { kind: 'visitor', visitorId: 'hivebee' },
+  );
+  // with nothing held, a miss stays null
+  assert.strictEqual(nextWildlifeEntry(null, null), null);
+});
+
+test('kind taxonomy: the resolver kinds and the card table share ONE enum', () => {
+  // every kind the resolver can emit has a card entry (no card filter drop)
+  for (const k of MAGNIFIER_KINDS) {
+    const entry = MAGNIFIER_WILDLIFE[k];
+    assert.ok(entry, 'card table must cover kind: ' + k);
+    assert.ok(entry.name && entry.fact, 'card entry must have name+fact: ' + k);
+  }
+  // and the hit function only emits kinds from that same enum
+  const cam = { camX: 0, camY: 0, camZ: 0, dirX: 0, dirY: 0, dirZ: -1 };
+  const hit = resolveWildlifeHit(cam, [{ kind: 'solitarybee', x: 0, y: 0, z: -5 }], 1.1);
+  assert.ok(MAGNIFIER_KINDS.includes(hit.kind));
+});
+
+
 `;
   mkdirSync(join(work, 'tests'), { recursive: true });
   writeFileSync(join(work, 'tests/engine.test.cjs'), testSrc);

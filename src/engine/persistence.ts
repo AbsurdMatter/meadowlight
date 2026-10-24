@@ -17,6 +17,15 @@ export interface PlacedItem {
    */
   volunteer?: boolean;
   /**
+   * Session 8 N2 (v8, additive): seasons in which this flower received a
+   * pollinator visit (the seeding precondition — unvisited flowers don't
+   * set seed). Absent = never visited: the flower is eligible on its next
+   * visit, and pre-v8 saves load losslessly with seeding intact (never a
+   * hard reset — the foragers visit constantly, so the meadow keeps
+   * seeding as soon as flowers are visited).
+   */
+  visitedSeasons?: string[];
+  /**
    * Placement-variation jitter, decided once at placement time and frozen
    * into the save. Items saved before session 2 have undefined fields and
    * are NEVER re-randomized: loaders backfill neutral values (jitter 0).
@@ -54,16 +63,20 @@ export interface PlacedStructure {
  *         as deterministic seeding keys — additive; old saves derive their
  *         seed from their own contents so the same blob always seeds the
  *         same meadow, and items may carry volunteer: true)
+ *   v8: { version: 8, ... items[].visitedSeasons }
+ *         (session 8 N2: the pollinator-visit seeding precondition —
+ *         per-flower visit ledger, additive; absent = unvisited = eligible
+ *         on next visit, never a seeding reset)
  */
 const STORAGE_KEY = 'meadowlight.world.v2';
 const LEGACY_KEY = 'meadowlight.world.v1';
 /** corrupt/unknown-version saves are preserved here before booting fresh */
 const BACKUP_KEY = 'meadowlight.world._backup';
 /** versions this build understands (anything else = unknown, backed up) */
-const KNOWN_VERSIONS = new Set([1, 2, 3, 4, 5, 6, 7]);
+const KNOWN_VERSIONS = new Set([1, 2, 3, 4, 5, 6, 7, 8]);
 
 export interface WorldData {
-  version: 4 | 5 | 6 | 7;
+  version: 4 | 5 | 6 | 7 | 8;
   items: PlacedItem[];
   structures: PlacedStructure[];
   milestones: MilestoneId[];
@@ -141,7 +154,13 @@ function parseItems(parsed: unknown): PlacedItem[] {
       // re-randomize already-placed items)
       phase: typeof (p as PlacedItem).phase === 'number' ? (p as PlacedItem).phase : 0,
       variation: p.variation ?? { rotationY: 0, heightJitter: 0, tiltX: 0, tiltZ: 0 },
-    }));
+      // N2 (v8 additive): sanitize the visit ledger — strings only, deduped;
+      // absent/invalid = undefined (unvisited, eligible on next visit)
+      visitedSeasons: Array.isArray(p.visitedSeasons)
+        ? [...new Set(p.visitedSeasons.filter((s: unknown): s is string => typeof s === 'string'))]
+        : undefined,
+    }))
+    .map((p) => (p.visitedSeasons && p.visitedSeasons.length > 0 ? p : { ...p, visitedSeasons: undefined }));
 }
 
 function parseStructures(parsed: unknown): PlacedStructure[] {
@@ -238,7 +257,7 @@ function parseVisitorWindows(parsed: unknown): string[] {
 
 function freshWorld(): WorldData {
   return {
-    version: 7,
+    version: 8,
     items: [],
     structures: [],
     milestones: [],
@@ -295,7 +314,7 @@ export function loadWorld(): WorldData {
             ? data.randomRotation
             : DEFAULT_PLACEMENT_VARIATION;
       return {
-        version: 7,
+        version: 8,
         items: parseItems(data.items),
         structures: parseStructures(data.structures),
         milestones: parseMilestones(data.milestones),
@@ -342,7 +361,7 @@ export function clearSavedWorld(): void {
 
 export function saveWorld(data: Omit<WorldData, 'version'>): void {
   try {
-    const payload: WorldData = { version: 7, ...data };
+    const payload: WorldData = { version: 8, ...data };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     localStorage.removeItem(LEGACY_KEY);
   } catch {

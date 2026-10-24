@@ -50,6 +50,62 @@ function getRenderer(): THREE.WebGLRenderer | null {
 }
 
 /** Render one voxel model (list of box parts) to a cached PNG data URL. */
+/**
+ * UI round 2 (#6383805035): CLOSE-UP flower art for palette chips — the same
+ * voxel model, a tighter camera centered on the BLOOM (petal parts), so the
+ * flower is identifiable at a glance. One source: it renders the actual
+ * model; nothing hand-drawn.
+ */
+export function renderVoxelCloseUp(parts: PlantPart[]): string | null {
+  const petals = parts.filter((p) => p.petal);
+  const focusParts = petals.length > 0 ? petals : parts;
+  // the bloom's vertical center (world units)
+  const centerY =
+    focusParts.reduce((a, p) => a + p.offset[1], 0) / Math.max(1, focusParts.length);
+  const extent = focusParts.reduce(
+    (a, p) =>
+      Math.max(a, p.size[0] + p.size[1] + p.size[2] + Math.abs(p.offset[1] - centerY)),
+    0.6,
+  );
+  const renderer = getRenderer();
+  if (!renderer) return null;
+  boxGeometry = boxGeometry ?? new THREE.BoxGeometry(1, 1, 1);
+  try {
+    const scene = new THREE.Scene();
+    const sun = new THREE.DirectionalLight(LIGHT.sun, LIGHT.intensity);
+    sun.position.set(3, 5, 4);
+    scene.add(sun);
+    scene.add(new THREE.AmbientLight(LIGHT.ambient, 0.55));
+    const group = new THREE.Group();
+    for (const part of parts) {
+      const mesh = new THREE.Mesh(
+        boxGeometry,
+        new THREE.MeshLambertMaterial({ color: part.color }),
+      );
+      mesh.position.set(part.offset[0], part.offset[1], part.offset[2]);
+      mesh.scale.set(part.size[0], part.size[1], part.size[2]);
+      group.add(mesh);
+    }
+    scene.add(group);
+    // tight orbit just off the bloom — close but the whole flower reads
+    const camera = new THREE.PerspectiveCamera(26, 1, 0.05, 100);
+    const d = Math.max(1.15, extent * 1.05);
+    camera.position.set(d * 0.55, centerY + d * 0.45, d);
+    camera.lookAt(0, centerY, 0);
+    renderer.render(scene, camera);
+    const url = renderer.domElement.toDataURL('image/png');
+    scene.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh && mesh.material) {
+        (mesh.material as THREE.Material).dispose();
+      }
+    });
+    return url;
+  } catch {
+    return null;
+  }
+}
+
 export function renderVoxelThumb(parts: PlantPart[], maxHeight: number): string | null {
   const renderer = getRenderer();
   if (!renderer) return null;

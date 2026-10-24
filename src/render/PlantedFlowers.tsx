@@ -4,6 +4,7 @@ import { scaledElapsed } from '../engine/scaledTime';
 import * as THREE from 'three';
 import { PLANTS } from '../data/plants';
 import { usePlacementStore } from './placementStore';
+import { meshMayClaim, releaseClaim } from '../data/magnifierKinds';
 import { noVariation } from '../engine/variation';
 import { inBloom } from '../engine/pollinator';
 import { isRaining, RAIN_TUNING } from '../engine/weather';
@@ -43,24 +44,54 @@ const SWAY_LOD_DISTANCE = 30;
 function FlowerInstances() {
   const items = usePlacementStore((s) => s.items);
   const season = usePlacementStore((s) => s.season);
-  const openNotebook = usePlacementStore((s) => s.openNotebook);
   const refs = useRef<{ meshes: Record<string, THREE.InstancedMesh | null> }>({
     meshes: {},
   });
-  /** instanceId -> item id per species, rebuilt each frame alongside matrices */
+  /**
+   * instanceId -> item id per species, per PART instance (the raycast returns
+   * a per-part instanceId). Rebuilt ONLY when the item array reference
+   * changes (plant/remove swap the array) — the per-frame matrix loop does
+   * not touch it. Perf fix (#6384252148): rebuilding ~items x parts entries
+   * every frame was pure allocation churn; steady-state frames are now
+   * allocation-free on this path.
+   */
   const idMaps = useRef<Record<string, string[]>>({});
+  const lastItems = useRef<unknown>(null);
   /** last (season, itemCount) each species' colors were written for */
   const colorKey = useRef<Record<string, string>>({});
 
-  const onClick = (e: ThreeEvent<MouseEvent>, plantId: string) => {
-    e.stopPropagation();
-    // with a placement tool active, clicking the meadow means planting —
-    // the notebook only opens when the player is just looking around
+  // #6384878002: the flower click handler is REMOVED ENTIRELY — flowers
+  // have no click behavior anymore (glass-only inspection), and the no-op
+  // handler's stopPropagation was KILLING THE HIVE CLICK whenever a
+  // flower stood nearer the camera than the hive behind it. No handler, no
+  // propagation block: a click that passes through a flower now reaches
+  // the hive beneath (the harvest ceremony, restored).
+
+  // N3: the magnifying glass — hover inspection, zero mutation. Rides the
+  // SAME instanced-mesh pointer events the click path uses (one input path:
+  // no new DOM handlers, no stopPropagation chains — hover never swallows
+  // the placement click; the card is pure display elsewhere)
+  const onOver = (e: ThreeEvent<PointerEvent>, plantId: string) => {
     const s = usePlacementStore.getState();
-    if (s.selectedPlantId || s.selectedStructureId) return;
+    if (!s.magnifierOn) return;
+    // #6384878002: the SYMMETRIC claim — when the ray intersects several
+    // meshes, the NEARER one may overtake (meshMayClaim compares the
+    // raycast distance). The old claimable-only rule let a flower's claim
+    // stick forever beside a hive (the hive's own pointer-out never fires
+    // while the ray still hits it) — flowers and equipment each blocked
+    // the other. Symmetric: nearest to the pointer wins, either kind.
+    if (!meshMayClaim(s.magnifierEntry, e.distance)) return;
     const idx = e.instanceId;
     const itemId = idx === undefined ? undefined : idMaps.current[plantId]?.[idx];
-    if (itemId) openNotebook({ kind: 'plant', id: itemId });
+    if (itemId) s.setMagnifierEntry({ kind: 'flower', itemId });
+  };
+  const onOut = () => {
+    const s = usePlacementStore.getState();
+    // pointer-out releases ONLY our own kind — never another owner's entry
+    if (s.magnifierOn && s.magnifierEntry?.kind === 'flower') {
+      s.setMagnifierEntry(null);
+      releaseClaim();
+    }
   };
   useFrame(({ camera }) => {
     const r = refs.current;
@@ -82,7 +113,10 @@ function FlowerInstances() {
       const colorsDirty = colorKey.current[def.id] !== thisColorKey;
       colorKey.current[def.id] = thisColorKey;
       void glistened;
-      const ids: string[] = [];
+      // id maps change only with the item SET (reference swap on
+      // plant/remove), never with sway/bloom per-frame state
+      const itemsChanged = items !== lastItems.current;
+      const ids = itemsChanged ? [] : (idMaps.current[def.id] ?? []);
       let i = 0;
       for (const item of items) {
         if (item.plantId !== def.id) continue;
@@ -93,8 +127,10 @@ function FlowerInstances() {
         const near = dx * dx + dz * dz <= SWAY_LOD_DISTANCE * SWAY_LOD_DISTANCE;
         const swayZ = near ? Math.sin(t * 0.9 + item.phase) * def.sway : 0;
         const swayX = near ? Math.cos(t * 0.7 + item.phase * 1.3) * def.sway * 0.5 : 0;
-        ids.push(item.id);
         for (let pi = 0; pi < def.parts.length; pi++) {
+          // every part instance maps back to its item (hit anywhere on
+          // the flower resolves to it) — pushed only on rebuild
+          if (itemsChanged) ids.push(item.id);
           const part = def.parts[pi];
           const petal = part.petal === true;
           const partSway = part.offset[1] / Math.max(def.height, 0.001);
@@ -144,10 +180,11 @@ function FlowerInstances() {
         }
       }
       mesh.count = i;
-      idMaps.current[def.id] = ids;
+      if (itemsChanged) idMaps.current[def.id] = ids;
       mesh.instanceMatrix.needsUpdate = true;
       if (colorsDirty && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
+    lastItems.current = items;
   });
   return (
     <group>
@@ -161,7 +198,8 @@ function FlowerInstances() {
           castShadow
           receiveShadow
           frustumCulled={false}
-          onClick={(e) => onClick(e, def.id)}
+          onPointerOver={(e) => onOver(e, def.id)}
+          onPointerOut={onOut}
         >
           <boxGeometry args={[1, 1, 1]} />
           <meshLambertMaterial />

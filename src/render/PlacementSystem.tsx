@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
+import { isRemovalRefused } from '../data/environment';
 import * as THREE from 'three';
 import { MEADOW_SIZE } from '../engine/terrain';
 import { groundAt } from '../engine/ground';
@@ -307,6 +308,34 @@ export function PlacementSystem() {
         return;
       }
       if (button !== 2) return;
+      // #6384994711: the ONE removal-refusal guard (both states — zoomed
+      // close, or armed glass with an active entry). In GLASS CONTEXT the
+      // right-click is CONSUMED BY THE GLASS: it dismisses the inspection
+      // card (and disarms if nothing is showing), never forwarded to
+      // removal. Visible toast names the reason either way — the soft-voice
+      // pattern; never a silent no-op.
+      const refusal = isRemovalRefused(
+        camera.position.length(),
+        s.magnifierOn,
+        s.magnifierEntry !== null,
+      );
+      if (refusal.refused) {
+        if (s.magnifierOn && s.magnifierEntry !== null) {
+          // the glass consumes the right-click: dismiss the card
+          s.setMagnifierEntry(null);
+        }
+        usePlacementStore.setState((st) => ({
+          toasts: [
+            ...st.toasts,
+            {
+              id: Date.now(),
+              title: refusal.toastTitle,
+              body: refusal.toastBody,
+            },
+          ],
+        }));
+        return;
+      }
       const spot = resolveFromNdc(pressNdcX, pressNdcY);
       if (!spot) return;
       const x = spot[0];

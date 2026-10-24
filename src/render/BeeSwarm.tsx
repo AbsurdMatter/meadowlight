@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { scaledDelta, scaledElapsed } from '../engine/scaledTime';
 import { advanceColony, colonyIntensity } from '../engine/lifecycle';
@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { BEE_TUNING } from '../data/bees';
 import { PLANT_BY_ID } from '../data/plants';
 import { usePlacementStore } from './placementStore';
+import { registerWildlifeProbe } from './magnifierProbes';
 import { computeAppeal, beesForHive, inBloom, FORAGE_RADIUS, type PollinatorWorld } from '../engine/pollinator';
 import { isRaining, RAIN_TUNING } from '../engine/weather';
 import { dayPhase, isDaylight } from '../engine/dayCycle';
@@ -35,6 +36,8 @@ interface BeeState {
 }
 
 const MAX_BEES = BEE_TUNING.maxBeesTotal;
+// per-frame scratch: reused every frame, zero steady-state allocations
+const scratchDir = new THREE.Vector3();
 
 /** live swarm telemetry, exposed for the test hook / P panel bee debug */
 export const beeDebug = {
@@ -101,6 +104,14 @@ export function BeeSwarm() {
   const stripeRef = useRef<THREE.InstancedMesh>(null);
   const wingRef = useRef<THREE.InstancedMesh>(null);
   const bees = useRef<BeeState[]>([]);
+  // N3 coverage: read-only live positions for the magnifier's hit resolution
+  useEffect(
+    () =>
+      registerWildlifeProbe('hivebee', () =>
+        bees.current.map((b) => ({ kind: 'hivebee' as const, x: b.pos.x, y: b.pos.y, z: b.pos.z })),
+      ),
+    [],
+  );
   const adaptiveCap = useRef<number>(MAX_BEES);
   const frameEma = useRef<number>(16);
   const lastAdapt = useRef(0);
@@ -309,9 +320,12 @@ export function BeeSwarm() {
       }
 
       if (bee.restingUntil <= t) {
-        const toTarget = target.clone().sub(bee.pos);
+        const toTarget = scratchDir.copy(target).sub(bee.pos); // perf #6384252148: scratch, not per-frame alloc
         const dist = toTarget.length();
         if (dist < BEE_TUNING.arriveRadius) {
+          // N2: arrival at a flower IS the visit — record it through the
+          // ONE write path (no new detection; the ledger dedupes per season)
+          if (bee.targetFlowerId !== null) usePlacementStore.getState().recordVisit(bee.targetFlowerId);
           // arrived: rest a moment, then pick a new target
           bee.restingUntil =
             t +

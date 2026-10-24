@@ -4,10 +4,12 @@ import { MEADOW_SIZE } from '../engine/terrain';
 import { groundAt } from '../engine/ground';
 import { usePlacementStore } from '../render/placementStore';
 import { beeDebug } from '../render/BeeSwarm';
-import { isRaining, setRaining } from '../engine/weather';
+import { precipitationVisual } from '../engine/weather';
+import { precipReadback } from '../engine/rainSchedule';
 import { dayPhase, setDayPhase, resumeDayCycle, dayCycleOverridden } from '../engine/dayCycle';
 import { fireflyDebug, setFireflyForce, fireflyForced } from '../render/Fireflies';
 import { setCellMapVisible, cellMapVisible } from '../render/CellMapOverlay';
+import { hash2 } from '../engine/seededHash';
 import { CELL_KINDS } from '../render/CellMapOverlay';
 import { MILESTONES } from '../data/milestones';
 import {
@@ -214,51 +216,129 @@ function PerfOverlayPanel() {
       `[perf] stress test: placing ${STRESS_ITEMS} flowers, measuring ${MEASURE_SECONDS}s`,
     );
     const half = MEADOW_SIZE / 2 - 2;
+    // #6384329017: ONE plantMany burst — one store set + one companion
+    // scan for all 200 (plant() per flower was 200 sets + 200 scans,
+    // the 341ms placement frame). The placement phase is still VISIBLE in
+    // the measurement (first frames) but now coalesces.
+    const batch: Parameters<typeof store.plantMany>[0] = [];
     for (let i = 0; i < STRESS_ITEMS; i++) {
       const a = i * 2.399963;
       const r = Math.sqrt((i + 1) / STRESS_ITEMS) * half;
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;
       const def = PLANTS[i % PLANTS.length];
-      store.plant({
-        id: crypto.randomUUID(),
+      // #6384252148: FIXED seeded layout — deterministic spiral + hash2
+      // for rotation/phase, so every stress run places the SAME world and
+      // the stored baseline compares like-for-like
+      batch.push({
+        id: 'stress-' + i,
         plantId: def.id,
         position: [x, groundAt(x, z).height, z],
-        rotationY: Math.random() * Math.PI * 2,
-        phase: Math.random() * Math.PI * 2,
+        rotationY: hash2(i, 7, 0x57ee) * Math.PI * 2,
+        phase: hash2(i, 11, 0xabcd) * Math.PI * 2,
       });
     }
+    store.plantMany(batch);
     frameTimes.current = [];
     const startedAt = performance.now();
     const report = () => {
-      const times = frameTimes.current.filter((_, i) => i >= 60);
-      if (times.length === 0) {
+      // #6384329017: SPLIT measurement — the first PLACEMENT_WINDOW frames
+      // are the placement phase (burst + first-world-build); everything
+      // after is steady-state. Budgeted separately: steady-state against
+      // the 20ms bar, placement tracked against its own recorded bar
+      // (proposal — the user decides the placement budget verdict).
+      const PLACEMENT_WINDOW = 90;
+      const all = frameTimes.current.filter((_, i) => i >= 60);
+      const placement = all.slice(0, PLACEMENT_WINDOW);
+      const steady = all.slice(PLACEMENT_WINDOW);
+      if (steady.length === 0) {
         console.log('[perf] stress test result: no frame samples collected (rAF never ticked?)');
         usePlacementStore.setState({ items: before });
         setRunning(false);
         return;
       }
-      const avg = times.reduce((a, b) => a + b, 0) / times.length;
-      const sorted = [...times].sort((a, b) => a - b);
+      // steady-state is the budgeted metric; placement reported alongside
+      const avg = steady.reduce((a, b) => a + b, 0) / steady.length;
+      const sorted = [...steady].sort((a, b) => a - b);
       const p95 = sorted[Math.floor(sorted.length * 0.95)];
       const min = sorted[0];
       const max = sorted[sorted.length - 1];
+      const placementSorted = [...placement].sort((a, b) => a - b);
+      const placementP95 =
+        placementSorted.length > 0
+          ? placementSorted[Math.floor(placementSorted.length * 0.95)]
+          : 0;
+      const placementMax = placementSorted.length > 0 ? placementSorted[placementSorted.length - 1] : 0;
+      // #6384252148 DIFF GATE: machine-relative budgets alone just failed —
+      // a 20ms budget passes on a fast machine while the same machine
+      // REGRESSED 40%. This machine's own stored baseline (localStorage,
+      // beside the save) is the truth: only a >15% regression over it
+      // flags. First run on a machine stores the baseline (that run only
+      // checks the absolute budget); every later run is a diff.
+      // schema v2 (#6384329017): steady-state + placement split, and the
+      // bump deliberately REGENERATES the baseline — the v1 bar was
+      // burst-polluted (its avg included the unbatched 341ms placement)
+      const BASELINE_KEY = 'meadowlight.perf.baseline.v2';
+      const REGRESSION_FLAG = 1.15; // >15% slower than this machine's baseline
+      const baselineRaw = localStorage.getItem(BASELINE_KEY);
+      const prev = baselineRaw
+        ? (JSON.parse(baselineRaw) as { avgFrameMs: number; placementP95Ms: number })
+        : null;
+      const avgFrameMs = Number(avg.toFixed(2));
+      const diffVsBaseline = prev ? avgFrameMs / prev.avgFrameMs : null;
+      const regression = diffVsBaseline !== null && diffVsBaseline > REGRESSION_FLAG;
+      const withinBudget = avg < FRAME_BUDGET_MS;
+      const pass = withinBudget && !regression;
       const result = {
         items: usePlacementStore.getState().items.length,
-        samples: times.length,
-        avgFrameMs: Number(avg.toFixed(2)),
+        samples: all.length,
+        steadySamples: steady.length,
+        placementSamples: placement.length,
+        avgFrameMs,
         p95FrameMs: Number(p95.toFixed(2)),
         minFrameMs: Number(min.toFixed(2)),
         maxFrameMs: Number(max.toFixed(2)),
         fps: Number((1000 / avg).toFixed(1)),
-        budget: `${FRAME_BUDGET_MS} ms (~60 fps)`,
-        pass: avg < FRAME_BUDGET_MS,
+        budget: `${FRAME_BUDGET_MS} ms steady-state (~60 fps)`,
+        placementPhase: {
+          p95Ms: Number(placementP95.toFixed(2)),
+          maxMs: Number(placementMax.toFixed(2)),
+          note: 'tracked against its own recorded bar — not part of the steady budget',
+          baselineP95Ms: prev?.placementP95Ms ?? null,
+        },
+        baseline: prev
+          ? `${prev.avgFrameMs} ms steady (this machine) — diff x${(diffVsBaseline ?? 0).toFixed(2)}`
+          : 'none yet — this run becomes it',
+        pass,
+        regressionFlagged: regression,
       };
       console.log('[perf] stress test result:', result);
+      if (regression) {
+        console.log(
+          `[perf] REGRESSION: avg ${avgFrameMs} ms vs this machine's baseline ${prev?.avgFrameMs} ms (x${(diffVsBaseline ?? 0).toFixed(2)}, flag > 1.15)`,
+        );
+      }
+      // store/update the baseline: a passing (or first) run sets the bar;
+      // a flagged regression does NOT overwrite the baseline (the good
+      // number stays as the reference to fix back toward)
+      if (pass || !prev) {
+        localStorage.setItem(
+          BASELINE_KEY,
+          JSON.stringify({
+            avgFrameMs,
+            p95FrameMs: result.p95FrameMs,
+            placementP95Ms: Number(placementP95.toFixed(2)),
+            at: Date.now(),
+          }),
+        );
+        console.log('[perf] baseline stored for this machine (schema v2)');
+      }
       console.log(
         result.pass
           ? `[perf] PASS: ${result.fps} fps (avg ${result.avgFrameMs} ms/frame)`
-          : `[perf] FAIL: ${result.fps} fps (avg ${result.avgFrameMs} ms/frame) exceeds ${FRAME_BUDGET_MS} ms budget`,
+          : regression
+            ? `[perf] FAIL: REGRESSION over this machine's baseline (x${(diffVsBaseline ?? 0).toFixed(2)} > 1.15)`
+            : `[perf] FAIL: ${result.fps} fps (avg ${result.avgFrameMs} ms/frame) exceeds ${FRAME_BUDGET_MS} ms budget`,
       );
       usePlacementStore.setState({ items: before });
       console.log('[perf] meadow restored to pre-stress state');
@@ -276,10 +356,18 @@ function PerfOverlayPanel() {
 
   return (
     <div
+      data-perf-panel="p"
       style={{
+        // #6384003544: narrow DOCKED side panel, its OWN lane — top-right,
+        // below the season dial, with width 300 + the lane's own right
+        // offset; overlaps nothing (palette bottom band, corner controls
+        // bottom-right, journal panel center, magnifier card bottom-right
+        // dock at bottom:116 — all below/right of this lane).
         position: 'absolute',
-        top: 48,
-        left: 12,
+        top: 108,
+        right: 12,
+        width: 300,
+        boxSizing: 'border-box',
         padding: '10px 14px',
         borderRadius: 12,
         background: 'rgba(30, 30, 30, 0.82)',
@@ -386,13 +474,21 @@ function Session5Triggers() {
   return (
     <div style={{ marginTop: 10, borderTop: '1px solid #555', paddingTop: 8 }}>
       <div style={{ fontWeight: 'bold' }}>session 5 triggers</div>
-      <div style={{ fontSize: 12, marginTop: 4 }}>weather</div>
-      <div>
-        {btn('rain ON', () => setRaining(true), isRaining(), 'rain-on')}
-        {btn('rain OFF', () => setRaining(false), !isRaining(), 'rain-off')}
-        <span style={{ fontSize: 11, opacity: 0.7 }}>
-          {' '}toggle only — no natural rain trigger exists yet (noted in commit)
-        </span>
+      <div style={{ fontSize: 12, marginTop: 4 }}>
+        weather (N1: natural only — readback, no force; drive the season below)
+      </div>
+      <div data-perf-s8="weather-readback" style={{ fontSize: 11, opacity: 0.85 }}>
+        {(() => {
+          const now = precipitationVisual();
+          const rb = precipReadback();
+          const next = rb.next;
+          const eta = next
+            ? 'next ' + next.kind + ' in ' + Math.max(0, next.start - seasonProgress()).toFixed(2) + ' of the season'
+            : 'dry through the season\u2019s end';
+          return now
+            ? 'now: ' + now.kind + ' (settling ' + (now.intensity * 100).toFixed(0) + '%) \u2014 ' + eta
+            : 'now: dry \u2014 ' + eta;
+        })()}
       </div>
       <div style={{ fontSize: 12, marginTop: 4 }}>time of day (override; natural clock pauses)</div>
       <div>

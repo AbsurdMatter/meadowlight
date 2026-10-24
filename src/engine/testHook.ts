@@ -10,7 +10,9 @@ import { beeDebug } from '../render/BeeSwarm';
 import { wildDebug } from '../render/WildPollinators';
 import { fireflyDebug } from '../render/Fireflies';
 import { setDayPhase } from './dayCycle';
-import { setRaining } from './weather';
+import { precipitationVisual } from './weather';
+import { precipReadback, tickPrecipScheduleForTest } from './rainSchedule';
+import { allWildlife } from '../render/magnifierProbes';
 import { dayPhase } from './dayCycle';
 import { seasonProgress, seasonClockOverridden } from './seasonClock';
 import { honeyDebug } from '../render/BeeSwarm';
@@ -55,6 +57,15 @@ declare global {
       seedingEpochReadback: () => number;
       /** U1: id -> volunteer flag for every item (persisted in the save) */
       volunteersReadback: () => { id: string; plantId: string; volunteer: boolean }[];
+      /** N2: per-flower visit ledger (id -> visited seasons) */
+      visitsReadback: () => { id: string; plantId: string; visitedSeasons: string[] }[];
+      /** N3: the magnifying-glass inspect tool (pure inspection, zero mutation) */
+      magnifierReadback: () => { on: boolean; entry: unknown };
+      toggleMagnifier: () => void;
+      setMagnifierOnForTest: (on: boolean) => void;
+      setMagnifierEntryForTest: (e: unknown) => void;
+      /** N3 coverage: live wildlife sightings the glass can reach (read-only) */
+      wildlifeSightings: () => unknown[];
       /** U2: visitor-window log — (visitorId, season) pairs, one per window */
       visitorWindowsReadback: () => string[];
       /** U3: the colony breath — live intensity + the season's line (one source) */
@@ -107,7 +118,9 @@ declare global {
     wildDebug: () => unknown;
     fireflyDebug: () => unknown;
     setDayPhase: (p: number) => void;
-    setRaining: (v: boolean) => void;
+    precipReadback: () => unknown;
+    precipitationVisual: () => unknown;
+    tickPrecipScheduleForTest: (worldSeed: number, ordinal: number, season: string) => void;
     setFireflyForce: (v: boolean | null) => void;
     dayPhaseReadback: () => number;
     rainDebug: () => unknown;
@@ -211,6 +224,28 @@ export function installTestHook() {
     seasonClockOverridden: () => seasonClockOverridden(),
     worldSeedReadback: () => usePlacementStore.getState().worldSeed,
     seedingEpochReadback: () => usePlacementStore.getState().seedingEpoch,
+    /** N2: per-flower visit ledger readback (persisted v8) */
+    visitsReadback: () =>
+      usePlacementStore.getState().items.map((it) => ({
+        id: it.id,
+        plantId: it.plantId,
+        visitedSeasons: it.visitedSeasons ?? [],
+      })),
+    /** N3: the magnifying-glass inspect tool (pure inspection, zero mutation) */
+    magnifierReadback: () => {
+      const s = usePlacementStore.getState();
+      return { on: s.magnifierOn, entry: s.magnifierEntry };
+    },
+    toggleMagnifier: () => usePlacementStore.getState().toggleMagnifier(),
+    wildlifeSightings: () => allWildlife().map((w) => ({ ...w })),
+    setMagnifierOnForTest: (on) => {
+      const s = usePlacementStore.getState();
+      // deterministic glass state (no toggle parity to reason about) —
+      // turning off clears the entry, same as toggleMagnifier
+      usePlacementStore.setState({ magnifierOn: on, magnifierEntry: on ? s.magnifierEntry : null });
+    },
+    setMagnifierEntryForTest: (e) =>
+      usePlacementStore.getState().setMagnifierEntry(e as never),
     volunteersReadback: () =>
       usePlacementStore.getState().items.map((it) => ({
         id: it.id,
@@ -257,7 +292,9 @@ export function installTestHook() {
     wildDebug: () => ({ ...wildDebug }),
     fireflyDebug: () => ({ ...fireflyDebug }),
     setDayPhase,
-    setRaining,
+    precipReadback: () => precipReadback(),
+    precipitationVisual: () => precipitationVisual(),
+    tickPrecipScheduleForTest: (worldSeed, ordinal, season) => tickPrecipScheduleForTest(worldSeed, ordinal, season as never),
     setFireflyForce,
     dayPhaseReadback: () => dayPhase(),
     rainDebug: () => ({ ...rainDebug }),

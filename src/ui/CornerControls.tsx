@@ -3,6 +3,7 @@ import { AudioToggle } from './AudioToggle';
 import { PostcardButton } from './PostcardButton';
 import { NotebookHub } from './NotebookHub';
 import { theme } from './theme';
+import { usePlacementStore } from '../render/placementStore';
 
 /**
  * One shared bottom-right container: Sound, Postcard, the notebook hub, and
@@ -54,8 +55,36 @@ function ControlsPopover({ open, onClose }: { open: boolean; onClose: () => void
   );
 }
 
+/** UI round 3 (#6383867199): ONE row, ONE control style — every corner
+ *  button shares this style (equal height enforced by the row's
+ *  align-items: stretch; glass, postcard, audio, help all in sequence).
+ *  The armed (sage) styling is applied by the caller when armed.
+ */
+const controlButtonStyle = (armed: boolean): React.CSSProperties => ({
+  height: 36,
+  padding: '0 10px',
+  boxSizing: 'border-box',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderRadius: theme.border.radius,
+  border: `${theme.border.chunk}px solid ${armed ? theme.color.sage : theme.color.honey}`,
+  background: armed ? theme.color.sageLight : theme.color.parchment,
+  color: theme.color.text,
+  fontFamily: theme.font.family,
+  fontSize: 14,
+  lineHeight: 1,
+  cursor: 'pointer',
+  boxShadow: theme.border.shadow,
+});
+
 export function CornerControls() {
   const [helpOpen, setHelpOpen] = useState(false);
+  // UI verdict (#6383659472): the magnifying glass lives HERE, beside the
+  // journal and postcard — it is an inspect TOOL, not a placement item,
+  // and grouping it with placeable things was the confusion
+  const magnifierOn = usePlacementStore((s) => s.magnifierOn);
+  const toggleMagnifier = usePlacementStore((s) => s.toggleMagnifier);
   return (
     <div
       style={{
@@ -68,31 +97,38 @@ export function CornerControls() {
         gap: 8,
       }}
     >
-      <div style={{ position: 'relative', display: 'flex', gap: 8, alignItems: 'center' }}>
+      {/* UI round 3 (#6383867199): ONE flex row, align-items stretch —
+          every control the same height on the same baseline, equal gaps,
+          glass in sequence between audio and postcard. No hand-positioned
+          offsets; the armed sage styling stays on the glass. */}
+      {/* #6384003544: ONE unwrapped row (flexWrap nowrap) — the journal
+          button JOINED the row (it used to sit alone in the outer column,
+          which read as a wrapped second line). All five controls share the
+          36px baseline; the dock yields the space, the controls never
+          yield alignment. */}
+      <div style={{ position: 'relative', display: 'flex', flexWrap: 'nowrap', gap: 8, alignItems: 'stretch' }}>
         <ControlsPopover open={helpOpen} onClose={() => setHelpOpen(false)} />
         <AudioToggle />
+        <button
+          onClick={toggleMagnifier}
+          data-corner-tool="magnifier"
+          title="Magnifying glass — hover a flower or a visitor for a close read"
+          aria-pressed={magnifierOn}
+          style={controlButtonStyle(magnifierOn)}
+        >
+          <span role="img" aria-label="magnifying glass">{'🔍'}</span>
+        </button>
+        <NotebookHub />
         <PostcardButton />
         <button
           onClick={() => setHelpOpen((o) => !o)}
           data-controls-help
           title="How to play"
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: theme.border.radius,
-            border: `${theme.border.chunk}px solid ${theme.color.honey}`,
-            background: theme.color.parchment,
-            color: theme.color.text,
-            fontFamily: theme.font.family,
-            fontSize: 16,
-            cursor: 'pointer',
-            boxShadow: theme.border.shadow,
-          }}
+          style={controlButtonStyle(false)}
         >
           ?
         </button>
       </div>
-      <NotebookHub />
     </div>
   );
 }
