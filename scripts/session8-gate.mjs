@@ -503,29 +503,94 @@ async function checkMagnifier() {
   // Glass state is SET (deterministic hook), not toggled — the previous
   // version toggled blind and a parity drift left the glass OFF here:
   // "no card rendered" was the check's own state, not the product chain.
-  const beeEntry = await page.evaluate(() => {
-    window.__meadowlight.setMagnifierOnForTest(true);
-    window.__meadowlight.setMagnifierEntryForTest({ kind: 'visitor', visitorId: 'hivebee' });
-    return window.__meadowlight.magnifierReadback();
+  // #6386798136: the pinned-target form (the queen check's machinery,
+  // reused). The old check wrote the hivebee entry SYNTHETICALLY while the
+  // pointer sat wherever the previous check left it — the resolver's correct
+  // nearest-wins overwrote it with whatever creature was actually near the
+  // pointer (the user's Butterfly card). The check now pins its target the
+  // same way: freeze the clock, project every sighting, walk the pointer
+  // until a REAL hivebee is the nearest creature to the pixel, hover it,
+  // and assert the HIVEBEE fact — not 'any wildlife fact counts'.
+  const beeHover = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    w.setMagnifierOnForTest(true);
+    const cam = w.__three?.camera;
+    if (!cam) return { ok: false, reason: 'no camera' };
+    const sightings = w.wildlifeSightings();
+    const bees = sightings.filter((s) => s.kind === 'hivebee');
+    if (bees.length === 0) return { ok: false, reason: 'no live hivebee', total: sightings.length };
+    w.timeSetPaused(true); // pin the creatures (deterministic ecology)
+    const proj = cam.projectionMatrix.elements;
+    const view = cam.matrixWorldInverse.elements;
+    function mul(a, v3) {
+      return {
+        x: a[0] * v3.x + a[4] * v3.y + a[8] * v3.z + a[12],
+        y: a[1] * v3.x + a[5] * v3.y + a[9] * v3.z + a[13],
+        z: a[2] * v3.x + a[6] * v3.y + a[10] * v3.z + a[14],
+        w: a[3] * v3.x + a[7] * v3.y + a[11] * v3.z + a[15],
+      };
+    }
+    const project = (p3) => {
+      const pv = { x: p3.x, y: p3.y, z: p3.z, w: 1 };
+      const eye = mul(view, pv);
+      const clip = mul(proj, eye);
+      return {
+        x: ((clip.x / clip.w + 1) / 2) * window.innerWidth,
+        y: ((-clip.y / clip.w + 1) / 2) * window.innerHeight,
+      };
+    };
+    // walk until a real hivebee is nearest the pixel (resolver-agreement)
+    for (const bee of bees) {
+      const base = project(bee);
+      const others = sightings.filter((s) => s !== bee);
+      for (let step = 0; step < 8; step++) {
+        const ang = (step / 8) * Math.PI * 2;
+        const cand = { x: base.x + Math.cos(ang) * step * 6, y: base.y + Math.sin(ang) * step * 6 };
+        const beeD = Math.hypot(cand.x - base.x, cand.y - base.y);
+        const otherD = Math.min(
+          ...others.map((o) => {
+            const op = project(o);
+            return Math.hypot(cand.x - op.x, cand.y - op.y);
+          }),
+          Infinity,
+        );
+        if (beeD < 12 && otherD > beeD) return { ok: true, screen: cand, targeted: 'hivebee' };
+      }
+    }
+    return { ok: false, reason: 'no pixel where a hivebee wins', total: sightings.length };
   });
-  await page.waitForTimeout(1200); // past any transition before reading
+  if (beeHover.ok) {
+    await page.mouse.move(beeHover.screen.x, beeHover.screen.y);
+  }
+  await page.waitForTimeout(1200); // hover + resolver frames, then read
   const beeCard = await page.evaluate(() => {
     const el = document.querySelector('[data-magnifier-card="true"]');
     if (!el) return null;
     const r = el.getBoundingClientRect();
     return {
+      entry: window.__meadowlight.magnifierReadback(),
       visible: r.width > 0 && r.height > 0 && r.top <= window.innerHeight && r.bottom >= 0,
       text: el.textContent ?? '',
       pointerEvents: getComputedStyle(el).pointerEvents,
     };
   });
+  // resume the clock the targeting walk froze
+  await page.evaluate(() => {
+    window.__meadowlight.timeSetPaused(false);
+  });
+  // targeted-vs-claimed logging: one run tells all
+  const claimed = beeCard?.entry.entry?.kind === 'visitor' ? beeCard.entry.entry.visitorId : null;
   const beeFactShown =
+    beeHover.ok &&
     !!beeCard &&
     beeCard.visible &&
+    claimed === 'hivebee' &&
     /Honeybee worker/i.test(beeCard.text) &&
     beeCard.text.includes('flowers per foraging trip');
   rec.record('magnifier.wildlife-entry-shows-its-fact', beeFactShown,
-    beeCard ? 'card: ' + beeCard.text.slice(0, 80) : 'no card rendered');
+    !beeHover.ok
+      ? 'setup failed: ' + (beeHover.reason ?? '') + ' (' + (beeHover.total ?? 0) + ' creatures live)'
+      : 'targeted: ' + beeHover.targeted + ' — claimed: ' + claimed + ' — card: ' + beeCard.text.slice(0, 70));
   // #6384994711: the removal-refusal gate sibling — with the glass ARMED
   // and an ACTIVE entry, a right-click ON a target must NOT remove it:
   // the target stays present, the save is unchanged, the right-click is
