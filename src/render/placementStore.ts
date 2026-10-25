@@ -26,6 +26,7 @@ import { isPlantableCell } from '../engine/ground';
 import { flowerBlocked } from '../engine/collision';
 import { groundAt } from '../engine/ground';
 import type { MilestoneId } from '../data/milestones';
+import { starterPatchFor } from '../engine/starterPatch';
 
 export interface Toast {
   id: number;
@@ -109,6 +110,14 @@ export interface PlacementState {
    * per visit-window (persisted v7 additive; the notebook reads it).
    */
   visitorWindows: string[];
+  /**
+   * O1 (v4, #39): timed notebook nudges, in-fiction. The nudge state is
+   * the SAME state the player's own actions write (openNotebook) — one
+   * input path. Show-once persisted with the onboarding dismissal.
+   */
+  nudgesShown: string[];
+  /** O1: mark a nudge shown (idempotent; persists) */
+  markNudgeShown: (id: string) => void;
   /** #10: harvest a ready hive — jar + ceremony state + warm fact toast */
   harvestHoney: (hiveId: string) => boolean;
   /** #10: hive ids currently mid-harvest-dip (the render reads this) */
@@ -294,6 +303,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   worldSeed: initial.worldSeed ?? 12345,
   seedingEpoch: initial.seedingEpoch ?? 0,
   visitorWindows: initial.visitorWindows ?? [],
+  nudgesShown: initial.nudgesShown ?? [],
   harvestDips: {},
   hivePopup: null,
   openHivePopup: (hiveId) => set({ hivePopup: hiveId }),
@@ -317,6 +327,12 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   },
   magnifierEntry: null,
   setMagnifierEntry: (e) => set({ magnifierEntry: e }),
+  markNudgeShown: (id) => {
+    // O1: idempotent; the nudge list persists so a nudge never re-fires
+    const s = get();
+    if (s.nudgesShown.includes(id)) return;
+    set({ nudgesShown: [...s.nudgesShown, id] });
+  },
   harvestHoney: (hiveId) => {
     const s = get();
     const fill = s.hiveCombs[hiveId] ?? 0;
@@ -362,6 +378,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       worldSeed: Math.floor(Math.random() * 2147483647),
       seedingEpoch: 0,
       visitorWindows: [],
+      nudgesShown: [],
       // #11: reset returns the calendar to a fresh summer start, unheld
       toasts: [],
       modalOpen: false,
@@ -411,6 +428,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       worldSeed: w.worldSeed ?? 12345,
       seedingEpoch: w.seedingEpoch ?? 0,
       visitorWindows: w.visitorWindows ?? [],
+      nudgesShown: w.nudgesShown ?? [],
     });
     // #11: the reload must re-derive the calendar position from the blob —
     // same semantics as a fresh page load, not the live clock
@@ -436,9 +454,40 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       worldSeed: s.worldSeed,
       seedingEpoch: s.seedingEpoch,
       visitorWindows: s.visitorWindows,
+      nudgesShown: s.nudgesShown,
     });
   },
 }));
+
+
+/**
+ * O1 (v4, #39): seed the starter patch into an EMPTY world — a few
+ * flowers + a hive alive on frame one. Deterministic from the worldSeed
+ * (never Math.random): the same seed grows the same welcome meadow.
+ * Called only when the world is empty AND onboarding has not been
+ * dismissed (a returning player's meadow is never re-seeded).
+ */
+export function seedStarterPatchIfFresh(): void {
+  const s = usePlacementStore.getState();
+  if (s.items.length > 0 || s.structures.length > 0) return;
+  if (s.onboardingDismissed) return;
+  const patch = starterPatchFor(s.worldSeed);
+  if (patch.items.length === 0 && patch.structures.length === 0) return;
+  usePlacementStore.setState({ items: patch.items, structures: patch.structures });
+  s.save();
+}
+
+/**
+ * O1 (v4, #39): a FULL fresh boot — resetWorld clears the save and state,
+ * then the starter patch seeds the empty world (the onboarding hint shows,
+ * the meadow is alive on frame one). One path: App calls seedStarterPatchIfFresh
+ * after resetWorld too, so the gate's resetWorld + boot reads exactly what
+ * a first-time visitor sees.
+ */
+export function freshBootForTest(): void {
+  usePlacementStore.getState().resetWorld();
+  seedStarterPatchIfFresh();
+}
 
 /**
  * U1: the ONE seeding site — called only from the season-boundary crossings

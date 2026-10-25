@@ -34,6 +34,7 @@ import { audioDebugInfo, audioRunning } from './audio';
 import { ghostDebug } from '../render/PlacementSystem';
 import { DAY_CYCLE_SECONDS, resumeDayCycle } from './dayCycle';
 import { rainSpreadDebug } from '../render/Rain';
+import { freshBootForTest } from '../render/placementStore';
 
 declare global {
   interface Window {
@@ -135,6 +136,10 @@ declare global {
     dayCycleSecondsReadback: () => number;
     /** release the day-phase override so the natural clock drifts */
     resumeDayCycleForTest: () => void;
+    /** O1: the full first-time boot (reset + starter patch) */
+    freshBootForTest: () => void;
+    /** O1 tests: pin the world seed (same-seed determinism check) */
+    __setWorldSeedForTest: (seed: number) => void;
     /** #45 (v4): the precip burst spread readback */
     rainSpreadReadback: () => { x: number; z: number };
       ghostPosition: () => { pos: [number, number, number] | null; valid: boolean };
@@ -313,6 +318,9 @@ export function installTestHook() {
     audioIsRunning: () => audioRunning(),
     dayCycleSecondsReadback: () => DAY_CYCLE_SECONDS,
     resumeDayCycleForTest: () => resumeDayCycle(),
+    /** O1 (v4, #39): the full first-time boot — reset + starter patch */
+    freshBootForTest: () => freshBootForTest(),
+    __setWorldSeedForTest: (seed) => usePlacementStore.setState({ worldSeed: seed }),
     rainSpreadReadback: () => ({ ...rainSpreadDebug }),
     ghostPosition: () => ({ pos: ghostDebug.pos, valid: ghostDebug.valid }),
     ghostVariation: () => ghostDebug.variation,

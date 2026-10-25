@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { usePlacementStore } from '../render/placementStore';
 import { theme, headingStyle } from './theme';
+import { CHROME_TUNING } from '../data/chrome';
 
 /**
  * Gentle 3-step onboarding: "plant a flower" -> "click it to learn" ->
@@ -41,9 +42,12 @@ export function Onboarding() {
       style={{
         // #6384003544: renders ABOVE the palette dock — anchored to the
         // dock's top edge (the dock is bottom:16 + its height), never
-        // overlapping the dock or the corner controls
+        // overlapping the dock or the corner controls. #v4 O1/O4: the dock
+        // grows a scrollable body at narrow frames, so the hint's bottom
+        // offset is the ONE chrome constant (data/chrome) — the gate reads
+        // the rendered rect at 1280/900/480px widths.
         position: 'absolute',
-        bottom: 120,
+        bottom: CHROME_TUNING.onboardingHintBottom,
         left: 16,
         maxWidth: 320,
         padding: theme.spacing.panelPadding,

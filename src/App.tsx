@@ -25,6 +25,7 @@ import { SeasonDial, TimeControls } from './ui/SeasonDial';
 import { ResetDialog } from './ui/ResetDialog';
 import { CornerControls } from './ui/CornerControls';
 import { Onboarding } from './ui/Onboarding';
+import { NudgeSystem } from './ui/NudgeSystem';
 import { Toasts } from './ui/Toasts';
 import { Notebook } from './ui/Notebook';
 import { MagnifierCard } from './ui/MagnifierCard';
@@ -32,7 +33,7 @@ import { MagnifierResolver } from './render/MagnifierInspector';
 import { HivePopup } from './ui/HivePopup';
 import { MilestoneWatcher } from './ui/MilestoneWatcher';
 import { PerfOverlay } from './ui/PerfOverlay';
-import { usePlacementStore } from './render/placementStore';
+import { usePlacementStore, seedStarterPatchIfFresh } from './render/placementStore';
 import { maybeSeedDemoWorld } from './engine/testHook';
 import { SEASON_INFO } from './data/seasons';
 import { LIGHT_WARMTH, LONG_SHADOWS } from './data/polish';
@@ -149,6 +150,12 @@ export default function App() {
   useEffect(() => {
     if (loaded) maybeSeedDemoWorld();
   }, [loaded]);
+  // O1 (v4, #39): a fresh world greets with a living meadow — a few
+  // flowers + a hive on frame one, seeded from the worldSeed (never
+  // Math.random). A returning player's saved meadow is never re-seeded.
+  useEffect(() => {
+    if (loaded) seedStarterPatchIfFresh();
+  }, [loaded]);
   const magnifierOn = usePlacementStore((s) => s.magnifierOn);
   const placing = selectedPlantId ?? selectedStructureId;
   return (
@@ -186,6 +193,7 @@ body[data-magnifier-hit='1'] canvas { cursor: url("data:image/svg+xml,%3Csvg xml
       )}
       {loaded && <CornerControls />}
       {loaded && <Onboarding />}
+      {loaded && <NudgeSystem />}
       {loaded && <Toasts />}
       {loaded && <Notebook />}
       {loaded && <MagnifierCard />}

@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts', 'visits.ts', 'magnifierHit.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts', 'visits.ts', 'magnifierHit.ts', 'starterPatch.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -106,6 +106,8 @@ const { wasVisitedThisSeason, withVisit, visitedParents } = require(OUT + '/engi
 const { resolveWildlifeHit, nextWildlifeEntry } = require(OUT + '/engine/magnifierHit.js');
 const { MAGNIFIER_WILDLIFE } = require(OUT + '/data/magnifierWildlife.js');
 const { MAGNIFIER_KINDS } = require(OUT + '/data/magnifierKinds.js');
+const { starterPatchFor } = require(OUT + '/engine/starterPatch.js');
+const { ONBOARDING_TUNING } = require(OUT + '/data/onboarding.js');
 
 const mkItem = (plantId, x = 0, z = 0) => ({ id: plantId + ':' + x + ':' + z, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
 const mkStruct = (structureId, x = 0, z = 0) => ({ id: structureId + ':' + x + ':' + z, structureId, position: [x, 0, z], rotationY: 0 });
@@ -738,7 +740,7 @@ test('save v7 additive: session-6 blob loads without loss and derives a stable s
   const w3 = loadWorld();
   assert.strictEqual(w3.worldSeed, w1.worldSeed, 'v7 seed round-trips');
   assert.strictEqual(w3.seedingEpoch, 3, 'v7 epoch round-trips');
-  assert.strictEqual(w3.version, 8, 'save writes v8 (N2 additive bump)');
+  assert.strictEqual(w3.version, 9, 'save writes v9 (O1/O2 additive bump)');
   // volunteer flag persists through the round-trip
   saveWorld({ ...w3, items: [...w3.items.map((it) => ({ ...it, volunteer: true }))] });
   const w4 = loadWorld();
@@ -1291,12 +1293,13 @@ test('N2 save v8 load path: a v7 blob loads losslessly; visitedSeasons round-tri
   assert.strictEqual(loaded.visitorWindows[0], 'queenbumble:spring', 'visitor windows preserved');
   assert.strictEqual(loaded.worldSeed, 777, 'seed preserved');
   assert.strictEqual(loaded.seedingEpoch, 3, 'epoch preserved');
+  assert.deepStrictEqual(loaded.nudgesShown, [], 'pre-v9 save = no nudges shown (additive)');
   // round-trip a v8 save with a visit ledger
   loaded.items[0].visitedSeasons = ['summer'];
   saveWorld(loaded);
   const again = loadWorld();
   assert.deepStrictEqual(again.items[0].visitedSeasons, ['summer'], 'visitedSeasons round-trips');
-  assert.strictEqual(again.version, 8, 'saves write v8');
+  assert.strictEqual(again.version, 9, 'saves write v9');
   clearSavedWorld();
 });
 
@@ -1402,6 +1405,38 @@ test('kind taxonomy: the resolver kinds and the card table share ONE enum', () =
   const cam = { camX: 0, camY: 0, camZ: 0, dirX: 0, dirY: 0, dirZ: -1 };
   const hit = resolveWildlifeHit(cam, [{ kind: 'solitarybee', x: 0, y: 0, z: -5 }], 1.1);
   assert.ok(MAGNIFIER_KINDS.includes(hit.kind));
+});
+
+// ---------- session 9 v4: O1 starter patch, O2 journal, O5 keys ----------
+
+test('O1: the starter patch is deterministic from the world seed (never Math.random)', () => {
+  const a = starterPatchFor(424242);
+  const b = starterPatchFor(424242);
+  assert.deepStrictEqual(a, b, 'same seed = same patch');
+  const c = starterPatchFor(777);
+  assert.notDeepStrictEqual(a, c, 'different seed = different patch');
+  // the patch is alive on frame one: flowers + a hive
+  assert.ok(a.items.length >= 3, 'a few flowers (got ' + a.items.length + ')');
+  assert.strictEqual(a.structures.length, 1, 'exactly one hive');
+  assert.strictEqual(a.structures[0].structureId, 'hive');
+  // every position is on plantable ground (the oracle was consulted)
+  for (const it of a.items) {
+    assert.ok(isPlantableCell(it.position[0], it.position[2]), 'flower on plantable ground: ' + it.position);
+  }
+  assert.ok(isPlantableCell(a.structures[0].position[0], a.structures[0].position[2]), 'hive on plantable ground');
+  // stable ids: a reload never duplicates them
+  const ids = [...a.items.map((i) => i.id), ...a.structures.map((s) => s.id)];
+  assert.strictEqual(new Set(ids).size, ids.length, 'ids unique');
+  assert.ok(ids.every((id) => id.startsWith('starter:424242:')), 'ids keyed by the seed');
+});
+
+test('O1: the starter patch species bloom in the boot season (alive on frame one)', () => {
+  const patch = starterPatchFor(31337);
+  for (const it of patch.items) {
+    const def = PLANT_BY_ID[it.plantId];
+    assert.ok(def, 'known species: ' + it.plantId);
+    assert.ok(def.bloom.includes('summer'), it.plantId + ' blooms in the boot season');
+  }
 });
 
 

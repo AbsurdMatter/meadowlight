@@ -259,8 +259,107 @@ async function checkPolish() {
   }
 }
 
+async function checkOnboarding() {
+  const results = [];
+  for (const width of [1280, 900, 480]) {
+    const { page, errors } = await newPage(browser, url);
+    await page.setViewportSize({ width, height: 800 });
+    // a FRESH world: the full first-time boot (reset + starter patch) —
+    // exactly what a stranger sees on the deployed link
+    await page.evaluate(() => {
+      window.__meadowlight.freshBootForTest();
+    });
+    await page.waitForTimeout(2500);
+    const read = await page.evaluate(() => {
+      const hint = document.querySelector('[data-onboarding]');
+      if (!hint) return { hint: false };
+      const r = hint.getBoundingClientRect();
+      // the dock's TOP EDGE: the palette's tab column is taller than the
+      // dock's bottom bar — the dock element is the bar, but its top edge
+      // zone is the tab column above it. The hint must clear the taller
+      // of the two (the session-8 anchor: the dock's top edge, never
+      // overlapping the dock or the corner controls).
+      const dock = document.querySelector('[data-palette-dock]');
+      const tabCol = document.querySelector('[data-palette-tab="planting"]')?.parentElement;
+      const dockR = dock ? dock.getBoundingClientRect() : null;
+      const tabR = tabCol ? tabCol.getBoundingClientRect() : null;
+      const dockTop = Math.min(dockR ? dockR.top : Infinity, tabR ? tabR.top : Infinity);
+      const corner = document.querySelector('[data-corner-controls]');
+      const cornerR = corner ? corner.getBoundingClientRect() : null;
+      const items = window.__meadowlight.items();
+      const hives = window.__meadowlight.structures().filter((s) => s.structureId === 'hive');
+      // the dock is the palette's bottom band; the hint must sit ABOVE its
+      // top edge (session-8 anchor: the dock's top edge zone)
+      const hintBottom = r.bottom;
+      return {
+        hint: true,
+        inViewport: r.top >= 0 && r.left >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight,
+        aboveDock: dockR || tabR ? hintBottom <= dockTop + 1 : null,
+        clearOfCorners: cornerR ? r.right <= cornerR.left || r.left >= cornerR.right || r.bottom <= cornerR.top || r.top >= cornerR.bottom : null,
+        starterFlowers: items.length,
+        starterHives: hives.length,
+      };
+    });
+    results.push({ width, ...read });
+    const re = realErrors(errors);
+    rec.record(
+      'onboarding.hint-above-dock@' + width,
+      !!read.hint && !!read.inViewport && read.aboveDock === true && read.clearOfCorners !== false,
+      JSON.stringify(read),
+    );
+    rec.record(
+      'onboarding.starter-patch@' + width,
+      read.starterFlowers > 0 && read.starterHives > 0,
+      'starter patch: ' + read.starterFlowers + ' flowers + ' + read.starterHives + ' hive(s) on frame one',
+    );
+    rec.record('onboarding.no-console-errors@' + width, re.length === 0, re.slice(0, 3).join(' | '));
+    await page.close();
+  }
+  // determinism: two fresh worlds with the same seed show the same layout
+  {
+    const { page } = await newPage(browser, url);
+    // pin the world seed FIRST (before any boot) so the two boots are
+    // comparable — the determinism claim is same-SEED same-layout
+    // pin the seed + empty the world + save, so the RELOAD below is a real
+    // first-time boot from the pinned save (the honest determinism path)
+    const pinnedSeed = await page.evaluate(() => {
+      const w = window.__meadowlight;
+      const seed = w.worldSeedReadback();
+      w.__setWorldSeedForTest(seed);
+      w.clear();
+      w.save();
+      return seed;
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(3000);
+    const a = await page.evaluate(() =>
+      window.__meadowlight.items().map((i) => i.plantId + '@' + i.position[0].toFixed(2) + ',' + i.position[2].toFixed(2)),
+    );
+    await page.evaluate((seed) => {
+      const w = window.__meadowlight;
+      // same pinned seed, emptied, saved — then a REAL reload: the boot
+      // must grow the same meadow from the same seed
+      w.__setWorldSeedForTest(seed);
+      w.clear();
+      w.save();
+    }, pinnedSeed);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(3000);
+    const b = await page.evaluate(() =>
+      window.__meadowlight.items().map((i) => i.plantId + '@' + i.position[0].toFixed(2) + ',' + i.position[2].toFixed(2)),
+    );
+    rec.record(
+      'onboarding.starter-patch-seeded',
+      a.length > 0 && JSON.stringify(a) === JSON.stringify(b),
+      'two first-time boots from seed ' + pinnedSeed + ': ' + a.length + ' vs ' + b.length + ' items, identical layout: ' + (JSON.stringify(a) === JSON.stringify(b)),
+    );
+    await page.close();
+  }
+}
+
 for (const check of checks.split(',')) {
   if (check === 'polish') await checkPolish();
+  if (check === 'onboarding') await checkOnboarding();
   else {
     console.error('[GATE] unknown check: ' + check);
     process.exit(2);
