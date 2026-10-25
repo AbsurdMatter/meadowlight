@@ -32,6 +32,7 @@ import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
 import { capturePostcardPng } from './postcard';
 import { audioDebugInfo, audioRunning } from './audio';
 import { ghostDebug } from '../render/PlacementSystem';
+import { DAY_CYCLE_SECONDS, resumeDayCycle } from './dayCycle';
 
 declare global {
   interface Window {
@@ -129,6 +130,10 @@ declare global {
     audioDebug: () => unknown;
     terrainHeightAt: (x: number, z: number) => number;
     audioIsRunning: () => boolean;
+    /** #44 (v4): the day-cycle length readback + the resume hook */
+    dayCycleSecondsReadback: () => number;
+    /** release the day-phase override so the natural clock drifts */
+    resumeDayCycleForTest: () => void;
       ghostPosition: () => { pos: [number, number, number] | null; valid: boolean };
       ghostVariation: () => { rotationY: number; heightJitter: number; tiltX: number; tiltZ: number } | null;
       resetWorld: () => void;
@@ -303,6 +308,8 @@ export function installTestHook() {
     audioDebug: () => audioDebugInfo(),
     terrainHeightAt: (x, z) => groundAt(x, z).height,
     audioIsRunning: () => audioRunning(),
+    dayCycleSecondsReadback: () => DAY_CYCLE_SECONDS,
+    resumeDayCycleForTest: () => resumeDayCycle(),
     ghostPosition: () => ({ pos: ghostDebug.pos, valid: ghostDebug.valid }),
     ghostVariation: () => ghostDebug.variation,
     resetWorld: () => usePlacementStore.getState().resetWorld(),

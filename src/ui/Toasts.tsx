@@ -12,6 +12,7 @@ function Toast({ id, title, body }: { id: number; title: string; body: string })
   }, [id, dismiss]);
   return (
     <div
+      data-toast
       style={{
         padding: theme.spacing.panelPadding,
         borderRadius: theme.border.radiusPanel,

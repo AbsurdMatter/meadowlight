@@ -364,21 +364,21 @@ test('daylight window matches the sky (PR #35 blocker regression test)', () => {
 
 // ---------- session 5 U6 (#13): day/night clock ----------
 
-test('day clock: 12-minute cycle, overrides hold, resume drifts again', () => {
-  assert.strictEqual(DAY_CYCLE_SECONDS, 720, 'cycle length per approved plan');
+test('day clock: 6-minute cycle (#44), overrides hold, resume drifts again', () => {
+  assert.strictEqual(DAY_CYCLE_SECONDS, 360, 'cycle length halved per #44 (6-minute day)');
   // override semantics (P panel): setDayPhase holds the clock still
   resumeDayCycle();
   setDayPhase(0.5);
   assert.strictEqual(dayPhase(), 0.5);
   assert.ok(dayCycleOverridden(), 'override must hold the clock');
-  advanceDay(720);
+  advanceDay(DAY_CYCLE_SECONDS);
   assert.ok(Math.abs(dayPhase() - 0.5) < 1e-9, 'override: clock does not drift');
   // resume: natural drift returns
   resumeDayCycle();
   assert.ok(!dayCycleOverridden(), 'resume releases the override');
-  advanceDay(360);
+  advanceDay(DAY_CYCLE_SECONDS / 2);
   assert.ok(Math.abs(dayPhase() - 0.0) < 1e-9, 'half cycle wraps to midnight');
-  advanceDay(720);
+  advanceDay(DAY_CYCLE_SECONDS);
   assert.ok(Math.abs(dayPhase() - 0.0) < 1e-9, 'one full cycle returns to start');
   // negative phases wrap
   setDayPhase(-0.25);
@@ -391,6 +391,20 @@ test('dusk window: fireflies appear only in 0.79-0.92', () => {
   assert.ok(isDusk(0.79) && isDusk(0.92), 'window is inclusive');
   assert.ok(!isDusk(0.5), 'noon is not dusk');
   assert.ok(!isDusk(0.95) && !isDusk(0.78), 'night and late afternoon are not dusk');
+});
+
+// ---------- session 9 v4 polish: #44/#45 ----------
+
+test('#44: the day cycle is 6 minutes — every window derives from the phase', () => {
+  assert.strictEqual(DAY_CYCLE_SECONDS, 360, 'DAY_CYCLE_SECONDS halved per #44');
+  // dusk and daylight windows are PHASE fractions (unchanged): halving the
+  // cycle halves their wall-clock length automatically — one source
+  setDayPhase(0.5);
+  resumeDayCycle(); // release the override so the natural clock drifts
+  advanceDay(DAY_CYCLE_SECONDS / 4);
+  assert.ok(Math.abs(dayPhase() - 0.75) < 1e-6, 'a quarter day is a quarter phase');
+  assert.ok(isDusk(0.82) && isDaylight(0.82), 'the dusk/daylight windows themselves are untouched');
+  resumeDayCycle();
 });
 
 // ---------- session 6 U1 (#11): auto-advancing season calendar ----------

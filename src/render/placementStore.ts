@@ -137,6 +137,8 @@ export interface PlacementState {
   closeHivePopup: () => void;
   earnMilestone: (id: MilestoneId, label: string, detail: string) => void;
   dismissToast: (id: number) => void;
+  /** tests: clear the whole toast stack (a gate reads its own delta) */
+  dismissAllToastsForTest: () => void;
   openNotebook: (entry: PlacementState['notebook']) => void;
   closeNotebook: () => void;
   /** full reset: empty world + cleared save + default season/milestones */
@@ -347,6 +349,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
     get().save();
   },
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+  dismissAllToastsForTest: () => set({ toasts: [] }),
   openNotebook: (entry) => set({ notebook: entry }),
   closeNotebook: () => set({ notebook: null }),
   resetWorld: () => {
