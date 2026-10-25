@@ -26,12 +26,15 @@ export const rainDebug = { count: 0, kind: 'dry' as 'dry' | 'rain' | 'snow', int
 export const rainSpreadDebug = { x: 0, z: 0 };
 
 /**
- * #45 (v4): ONE spawn-distribution source for the initial burst AND the
- * steady fall. Both derive x/z from the shared seeded hash — the initial
- * burst spreads across the whole area exactly like the steady emitter
- * re-seeds a landed drop (the user-observed "concentrated burst" was the
- * Math.random initial positions vs the wider steady area). A tiny hash
- * salt keeps the burst and the steady positions from coinciding exactly.
+ * #45 (v4) + round-1 finding 1: ONE spawn-distribution source for the
+ * initial burst AND the steady fall. Both derive x/z from the shared seeded
+ * hash over the SAME full area (RAIN_VISUAL.areaHalf) — the initial burst
+ * spreads across the whole area exactly like the steady emitter re-seeds a
+ * landed drop. (The user-observed "concentrated burst" was the Math.random
+ * initial positions vs the wider steady area; the round-1 regression was the
+ * snow onset scaling the area by the flake SIZE — a 4.3u center box. The
+ * flake size is the cube SCALE, never the spawn area.) A tiny hash salt
+ * keeps the burst and the steady positions from coinciding exactly.
  * Pure: no Math.random anywhere in the distribution.
  */
 function spawnPosition(index: number, salt: number, area: number): { x: number; z: number } {
@@ -93,10 +96,16 @@ export function Rain() {
     if (seededFor.current !== vis.kind) {
       seededFor.current = vis.kind;
       const list: Drop[] = [];
-      // #45: the burst is distributed by the SAME seeded function the
-      // steady fall uses — full area from the first frame, never a
-      // concentrated patch
-      const area = vis.kind === 'snow' ? PRECIP_TUNING.snow.size * RAIN_VISUAL.areaHalf : RAIN_VISUAL.areaHalf;
+      // #45 + round-1 finding 1: the burst is distributed by the SAME seeded
+      // function the steady fall uses, over the SAME full area — never a
+      // concentrated patch. The old snow onset multiplied the area by the
+      // flake SIZE (0.09), seeding every flake into a 4.3u box at the
+      // meadow's center; the first visible frames were a tight cluster
+      // mid-screen while the rest of the viewport stayed empty (the
+      // user-observed "circular cluster ~1/3 screen width"). The area is
+      // RAIN_VISUAL.areaHalf for BOTH kinds — the flake size is the cube
+      // SCALE, not the spawn area.
+      const area = RAIN_VISUAL.areaHalf;
       for (let i = 0; i < RAIN_VISUAL.drops; i++) {
         const spawn = spawnPosition(i, 1, area);
         list.push({

@@ -9,11 +9,16 @@
  *     --checks polish,onboarding,journal,keys,audio,touch \
  *     [--lib-path /path/to/libs]
  *
- *   polish — #44/#45/#46/#47:
+ *   polish — #44/#45/#46/#47 + round-1 finding 1:
  *     daycycle.halved — DAY_CYCLE_SECONDS reads 360 in the live page.
- *     precip.burst-spreads — force winter snow; the FIRST frame's drops
- *       cover the full spawn area (the #45 user-observed concentrated
- *       burst is gone): readback of drop xz positions at burst.
+ *     precip.burst-spreads — force winter snow; the settled field covers
+ *       the full spawn area (the #45 user-observed concentrated burst is
+ *       gone): readback of drop xz positions after the settle.
+ *     precip.onset-spreads-from-first-frame — round-1 finding 1: the snow
+ *       ONSET spreads across the full area from the FIRST measurable frame
+ *       (>= 80% of steady-state spread), not just after settling. Guards
+ *       the regression where the snow onset path seeded into a 4.3u center
+ *       box (flake size used as the spawn area).
  *     fireflies.note-only-when-glowing — set summer + a wild corner +
  *       natural dusk: note appears; forced-ON outside dusk: no note
  *       (the #46 gate: present-but-not-glowing writes nothing).
@@ -227,6 +232,81 @@ async function checkPolish() {
     );
     const re = realErrors(errors);
     rec.record('precip.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+    await page.close();
+  }
+
+  // 2b. round-1 finding 1: the snow ONSET spreads across the full area
+  //     from the FIRST measurable frame — not just after settling. The
+  //     old burst-spreads check measures AFTER the settle (answers "spread
+  //     eventually"); this one samples the onset itself. The regression it
+  //     guards: the snow onset path seeded into a 4.3u center box (flake
+  //     size used as the spawn area), so the first frames were a tight
+  //     mid-screen cluster. The first measurable snow frame's spawn
+  //     coverage must be >= 80% of the steady-state spread.
+  {
+    const { page, errors } = await newPage(browser, url);
+    await page.evaluate(() => {
+      const w = window.__meadowlight;
+      w.clear();
+      w.setSeason('winter');
+    });
+    // find the first snow window (same sweep)
+    let snowP = null;
+    for (let p = 0; p <= 0.999 && !snowP; p += 0.01) {
+      await page.evaluate((pp) => window.__meadowlight.setSeasonProgressForTest(pp), p);
+      await page.waitForTimeout(2600);
+      const rb = await page.evaluate(() => window.__meadowlight.rainDebug());
+      if (rb.kind === 'snow' && rb.count > 0) snowP = p;
+    }
+    if (snowP === null) {
+      rec.record('precip.onset-spreads-from-first-frame', false, 'no snow window found in the sweep');
+    } else {
+      // jump dry, then to the window edge, and sample EVERY rAF frame
+      await page.evaluate((p) => window.__meadowlight.setSeasonProgressForTest(Math.max(0, p - 0.02)), snowP);
+      await page.waitForTimeout(2600); // dry + settle off
+      const samples = await page.evaluate(async (startP) => {
+        const w = window.__meadowlight;
+        const out = [];
+        const t0 = performance.now();
+        w.setSeasonProgressForTest(startP);
+        for (let i = 0; i < 200; i++) {
+          const rb = w.rainDebug();
+          const spread = w.rainSpreadReadback();
+          out.push({
+            i,
+            t: +(performance.now() - t0).toFixed(0),
+            count: rb.count,
+            intensity: +rb.intensity.toFixed(4),
+            spreadX: +spread.x.toFixed(2),
+            spreadZ: +spread.z.toFixed(2),
+          });
+          if (rb.intensity >= 1 && i > 130) break;
+          await new Promise((r) => requestAnimationFrame(r));
+        }
+        return out;
+      }, snowP);
+      const firstSnow = samples.find((s) => s.count > 0);
+      const steady = samples[samples.length - 1];
+      // the first measurable frame must already cover >= 80% of steady spread
+      const onsetX = firstSnow && steady.spreadX > 0 ? firstSnow.spreadX / steady.spreadX : 0;
+      const onsetZ = firstSnow && steady.spreadZ > 0 ? firstSnow.spreadZ / steady.spreadZ : 0;
+      const ok =
+        !!firstSnow &&
+        steady.count >= 200 && // the settle actually completed (steady is real)
+        onsetX >= 0.8 &&
+        onsetZ >= 0.8;
+      rec.record(
+        'precip.onset-spreads-from-first-frame',
+        ok,
+        firstSnow
+          ? 'onset frame #' + firstSnow.i + ' (t=' + firstSnow.t + 'ms, n=' + firstSnow.count + '): coverage x=' +
+            (onsetX * 100).toFixed(0) + '% / z=' + (onsetZ * 100).toFixed(0) +
+            '% of steady (x ' + steady.spreadX.toFixed(1) + 'u / z ' + steady.spreadZ.toFixed(1) + 'u, n=' + steady.count + ')'
+          : 'no snow frame sampled',
+      );
+    }
+    const re = realErrors(errors);
+    rec.record('precip.onset-no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
     await page.close();
   }
 
