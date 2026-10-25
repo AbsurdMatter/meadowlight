@@ -611,12 +611,55 @@ async function checkAudio() {
   await page.close();
 }
 
+async function checkTouch() {
+  for (const width of [360, 480, 700]) {
+    const { page, errors } = await newPage(browser, url);
+    await page.setViewportSize({ width, height: 800 });
+    await freshWorld(page);
+    const geo = await page.evaluate(() => {
+      const dock = document.querySelector('[data-palette-dock]');
+      const corner = document.querySelector('[data-corner-controls]');
+      const r = dock?.getBoundingClientRect();
+      const c = corner?.getBoundingClientRect();
+      if (!r || !c) return { ok: false };
+      // O4: the no-overlap invariant — the dock's full box never
+      // intersects the corner controls' box. At narrow widths the dock
+      // grows UPWARD from the bottom inset (bottom-anchored, height
+      // bounded by the wrapped corner lane), so the boxes stack vertically
+      // instead of overlapping.
+      const noOverlap = r.right <= c.left || r.left >= c.right || r.bottom <= c.top || r.top >= c.bottom;
+      return {
+        ok: true,
+        inViewport: r.left >= 0 && r.right <= window.innerWidth,
+        noOverlap,
+        // the dock is bottom-anchored and grows upward within a maxHeight
+        // bound — its full box must stay inside the viewport vertically
+        // (the bound exists to guarantee exactly this)
+        inViewportVertical: r.top >= 0 && r.bottom <= window.innerHeight,
+        dockWidth: +r.width.toFixed(1),
+        dockHeight: +r.height.toFixed(1),
+        cornerTop: +c.top.toFixed(1),
+        viewport: window.innerWidth,
+      };
+    });
+    rec.record(
+      'touch.dock-geometry@' + width,
+      geo.ok && geo.inViewport && geo.noOverlap && geo.inViewportVertical,
+      JSON.stringify(geo),
+    );
+    const re = realErrors(errors);
+    rec.record('touch.no-console-errors@' + width, re.length === 0, re.slice(0, 3).join(' | '));
+    await page.close();
+  }
+}
+
 for (const check of checks.split(',')) {
   if (check === 'polish') await checkPolish();
-  if (check === 'onboarding') await checkOnboarding();
-  if (check === 'journal') await checkJournal();
-  if (check === 'keys') await checkKeys();
-  if (check === 'audio') await checkAudio();
+  else if (check === 'onboarding') await checkOnboarding();
+  else if (check === 'journal') await checkJournal();
+  else if (check === 'keys') await checkKeys();
+  else if (check === 'audio') await checkAudio();
+  else if (check === 'touch') await checkTouch();
   else {
     console.error('[GATE] unknown check: ' + check);
     process.exit(2);
