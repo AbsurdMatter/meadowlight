@@ -560,11 +560,63 @@ async function checkKeys() {
   await page.close();
 }
 
+async function checkAudio() {
+  const { page, errors } = await newPage(browser, url);
+  await freshWorld(page);
+  const before = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    return { running: w.audioIsRunning(), toggle: w.audioEnabledReadback() };
+  });
+  rec.record('audio.off-by-default', before.running === false, 'audioRunning at boot: ' + before.running);
+  // the corner toggle is the single switch — click the real button
+  const clicked = await page.evaluate(() => {
+    const btn = document.querySelector('[data-audio-toggle]');
+    if (!btn) return false;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    return true;
+  });
+  await page.waitForTimeout(600);
+  const after = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    return { running: w.audioIsRunning(), info: w.audioDebug(), toggle: w.audioEnabledReadback() };
+  });
+  rec.record(
+    'audio.toggle-drives-lifecycle',
+    clicked && after.running === true && after.info !== null,
+    'corner toggle clicked: ' + clicked + ', audioRunning ' + before.running + ' -> ' + after.running +
+      ', graph nodes present: ' + (after.info ? Object.values(after.info.nodes).every(Boolean) : false),
+  );
+  // volume follows the bee count through the pure function (unit-testable)
+  const vol = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    return w.buzzLevelForBees?.(0) !== undefined
+      ? { at0: w.buzzLevelForBees(0), atCap: w.buzzLevelForBees(60), atHalf: w.buzzLevelForBees(30) }
+      : null;
+  });
+  rec.record(
+    'audio.volume-follows-bee-count',
+    !!vol && vol.at0 === 0 && vol.atHalf > 0 && vol.atCap > vol.atHalf,
+    vol ? 'buzz level at 0/30/60 bees: ' + vol.at0 + ' / ' + vol.atHalf.toFixed(4) + ' / ' + vol.atCap.toFixed(4) : 'pure function not exposed',
+  );
+  // toggle off tears the graph down
+  await page.evaluate(() => {
+    const btn = document.querySelector('[data-audio-toggle]');
+    btn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+  await page.waitForTimeout(400);
+  const off = await page.evaluate(() => window.__meadowlight.audioIsRunning());
+  rec.record('audio.toggle-off-stops-graph', off === false, 'audioRunning after second click: ' + off);
+  const re = realErrors(errors);
+  rec.record('audio.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
 for (const check of checks.split(',')) {
   if (check === 'polish') await checkPolish();
   if (check === 'onboarding') await checkOnboarding();
   if (check === 'journal') await checkJournal();
   if (check === 'keys') await checkKeys();
+  if (check === 'audio') await checkAudio();
   else {
     console.error('[GATE] unknown check: ' + check);
     process.exit(2);

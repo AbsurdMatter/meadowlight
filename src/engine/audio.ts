@@ -65,6 +65,41 @@ export function setBeeCountSource(fn: () => number) {
   getBeeCount = fn;
 }
 
+/**
+ * O3 (v4, #41): the PURE buzz-level function — the one source the live
+ * tick and the unit/gate tests read. Volume follows the live bee count
+ * (0..1 scaled to maxGain), hushed by rain/snow (the same natural-condition
+ * source the visuals read — one clock, one truth). Unit-testable: no
+ * WebAudio, no DOM.
+ */
+export function buzzLevelForBeeCount(count: number): number {
+  const bees = Math.max(0, count);
+  let level = Math.min(1, bees / AMBIENT_AUDIO.buzz.fullAtBees) * AMBIENT_AUDIO.buzz.maxGain;
+  if (isRaining()) level *= RAIN_TUNING.audioDamp;
+  return level;
+}
+
+/**
+ * O3 (v4, #41): the toggle's persisted state (save-additive: the audio
+ * preference survives reloads; OFF by default, ever). The corner toggle is
+ * the SINGLE switch — this is its state, nothing else writes it.
+ */
+const AUDIO_PREF_KEY = 'meadowlight.audio';
+export function audioEnabled(): boolean {
+  try {
+    return localStorage.getItem(AUDIO_PREF_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+export function setAudioEnabled(on: boolean): void {
+  try {
+    localStorage.setItem(AUDIO_PREF_KEY, on ? '1' : '0');
+  } catch {
+    // storage unavailable — the toggle just lives in memory
+  }
+}
+
 function makeNoiseBuffer(ctx: AudioContext): AudioBuffer {
   const len = ctx.sampleRate * 2;
   const buf = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -146,22 +181,22 @@ export function startAmbientAudio(): boolean {
     audio.windSource = windSource;
     audio.lfo = lfo;
 
-    // buzz volume follows the live bee count (cheap tick, not per frame)
+    // buzz volume follows the live bee count (cheap tick, not per frame) —
+    // through the ONE pure function (buzzLevelForBeeCount), so the gate and
+    // the tick read the same source. Rain/snow hush comes from the same
+    // natural-condition source the visuals read (one clock, one truth).
     audio.tickTimer = setInterval(() => {
       try {
         const count = getBeeCount();
         audio.beeCountAtLastTick = count;
         if (!audio.buzzGain || !audio.ctx) return;
         const t = audio.ctx.currentTime;
-        let level =
-          Math.min(1, count / AMBIENT_AUDIO.buzz.fullAtBees) * AMBIENT_AUDIO.buzz.maxGain;
-        // #14: rain hushes the meadow - a gentle damp, never silence
-        if (isRaining()) level *= RAIN_TUNING.audioDamp;
-        audio.buzzGain.gain.setTargetAtTime(level, t, 0.4);
+        audio.buzzGain.gain.setTargetAtTime(buzzLevelForBeeCount(count), t, 0.4);
       } catch {
         // never let the audio tick throw
       }
     }, 1000);
+    setAudioEnabled(true);
     return true;
   } catch {
     audio.ctx = null;
@@ -190,6 +225,7 @@ export function stopAmbientAudio(): void {
   audio.buzzOsc2 = null;
   audio.windSource = null;
   audio.lfo = null;
+  setAudioEnabled(false);
 }
 
 /** Is the audio graph live right now? */

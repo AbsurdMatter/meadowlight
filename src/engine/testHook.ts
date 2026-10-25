@@ -30,7 +30,7 @@ import { setFireflyForce } from '../render/Fireflies';
 import { rainDebug } from '../render/Rain';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
 import { capturePostcardPng } from './postcard';
-import { audioDebugInfo, audioRunning } from './audio';
+import { audioDebugInfo, audioRunning, audioEnabled, buzzLevelForBeeCount } from './audio';
 import { ghostDebug } from '../render/PlacementSystem';
 import { DAY_CYCLE_SECONDS, resumeDayCycle } from './dayCycle';
 import { rainSpreadDebug } from '../render/Rain';
@@ -133,27 +133,29 @@ declare global {
     audioDebug: () => unknown;
     terrainHeightAt: (x: number, z: number) => number;
     audioIsRunning: () => boolean;
-    /** #44 (v4): the day-cycle length readback + the resume hook */
+    /** O5 (v4, #43): readbacks for the keyboard gate */
+    hubOpenReadback: () => boolean;
+    modalOpenReadback: () => boolean;
+    toastsReadback: () => { id: number; title: string; body: string }[];
+    dismissAllToastsForTest: () => void;
+    /** O2 (v4, #40): the journal readback (the store reads the saved blob) */
+    journalReadback: () => unknown[];
+    seenFactsReadback: () => string[];
+    /** O3 (v4, #41): the audio toggle's persisted state + the pure buzz level */
+    audioEnabledReadback: () => boolean;
+    buzzLevelForBees: (count: number) => number;
+    /** #44/#45 (v4): the day-cycle length + the precip burst spread */
     dayCycleSecondsReadback: () => number;
+    rainSpreadReadback: () => { x: number; z: number };
     /** release the day-phase override so the natural clock drifts */
     resumeDayCycleForTest: () => void;
     /** O1: the full first-time boot (reset + starter patch) */
     freshBootForTest: () => void;
     /** O1 tests: pin the world seed (same-seed determinism check) */
     __setWorldSeedForTest: (seed: number) => void;
-    /** O2 (v4, #40): the journal readback (the store reads the saved blob) */
-    journalReadback: () => unknown[];
-    seenFactsReadback: () => string[];
-    /** O5 (v4, #43): readbacks for the keyboard gate */
-    hubOpenReadback: () => boolean;
-    modalOpenReadback: () => boolean;
-    toastsReadback: () => { id: number; title: string; body: string }[];
-    dismissAllToastsForTest: () => void;
     /** O5-era: set/read the camera distance directly (the zoom-refusal gate) */
     setCameraDistanceForTest: (d: number) => void;
     cameraDistanceReadback: () => number;
-    /** #45 (v4): the precip burst spread readback */
-    rainSpreadReadback: () => { x: number; z: number };
       ghostPosition: () => { pos: [number, number, number] | null; valid: boolean };
       ghostVariation: () => { rotationY: number; heightJitter: number; tiltX: number; tiltZ: number } | null;
       resetWorld: () => void;
@@ -328,23 +330,25 @@ export function installTestHook() {
     audioDebug: () => audioDebugInfo(),
     terrainHeightAt: (x, z) => groundAt(x, z).height,
     audioIsRunning: () => audioRunning(),
-    dayCycleSecondsReadback: () => DAY_CYCLE_SECONDS,
-    resumeDayCycleForTest: () => resumeDayCycle(),
-    /** O1 (v4, #39): the full first-time boot — reset + starter patch */
-    freshBootForTest: () => freshBootForTest(),
-    __setWorldSeedForTest: (seed) => usePlacementStore.setState({ worldSeed: seed }),
-    journalReadback: () => usePlacementStore.getState().journal,
-    seenFactsReadback: () => usePlacementStore.getState().seenFacts,
     hubOpenReadback: () => usePlacementStore.getState().hubOpen,
     modalOpenReadback: () => usePlacementStore.getState().modalOpen,
     toastsReadback: () => usePlacementStore.getState().toasts,
     dismissAllToastsForTest: () => usePlacementStore.getState().dismissAllToastsForTest(),
+    journalReadback: () => usePlacementStore.getState().journal,
+    seenFactsReadback: () => usePlacementStore.getState().seenFacts,
+    audioEnabledReadback: () => audioEnabled(),
+    buzzLevelForBees: (count) => buzzLevelForBeeCount(count),
+    dayCycleSecondsReadback: () => DAY_CYCLE_SECONDS,
+    rainSpreadReadback: () => ({ ...rainSpreadDebug }),
+    resumeDayCycleForTest: () => resumeDayCycle(),
     setCameraDistanceForTest: (d) => setCameraDistanceForTestImpl(d),
     cameraDistanceReadback: () => cameraDistanceForTestReadback(),
-    rainSpreadReadback: () => ({ ...rainSpreadDebug }),
     ghostPosition: () => ({ pos: ghostDebug.pos, valid: ghostDebug.valid }),
     ghostVariation: () => ghostDebug.variation,
     resetWorld: () => usePlacementStore.getState().resetWorld(),
+    /** O1 (v4, #39): the full first-time boot — reset + starter patch */
+    freshBootForTest: () => freshBootForTest(),
+    __setWorldSeedForTest: (seed) => usePlacementStore.setState({ worldSeed: seed }),
     reloadFromSave: () => usePlacementStore.getState().reloadFromSave(),
     openNotebookPlant: (itemId) =>
       usePlacementStore.getState().openNotebook({ kind: 'plant', id: itemId }),
