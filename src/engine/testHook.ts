@@ -34,6 +34,7 @@ import { audioDebugInfo, audioRunning } from './audio';
 import { ghostDebug } from '../render/PlacementSystem';
 import { DAY_CYCLE_SECONDS, resumeDayCycle } from './dayCycle';
 import { rainSpreadDebug } from '../render/Rain';
+import { setCameraDistanceForTestImpl, cameraDistanceForTestReadback } from '../render/DebugBridge';
 import { freshBootForTest } from '../render/placementStore';
 
 declare global {
@@ -143,6 +144,14 @@ declare global {
     /** O2 (v4, #40): the journal readback (the store reads the saved blob) */
     journalReadback: () => unknown[];
     seenFactsReadback: () => string[];
+    /** O5 (v4, #43): readbacks for the keyboard gate */
+    hubOpenReadback: () => boolean;
+    modalOpenReadback: () => boolean;
+    toastsReadback: () => { id: number; title: string; body: string }[];
+    dismissAllToastsForTest: () => void;
+    /** O5-era: set/read the camera distance directly (the zoom-refusal gate) */
+    setCameraDistanceForTest: (d: number) => void;
+    cameraDistanceReadback: () => number;
     /** #45 (v4): the precip burst spread readback */
     rainSpreadReadback: () => { x: number; z: number };
       ghostPosition: () => { pos: [number, number, number] | null; valid: boolean };
@@ -326,6 +335,12 @@ export function installTestHook() {
     __setWorldSeedForTest: (seed) => usePlacementStore.setState({ worldSeed: seed }),
     journalReadback: () => usePlacementStore.getState().journal,
     seenFactsReadback: () => usePlacementStore.getState().seenFacts,
+    hubOpenReadback: () => usePlacementStore.getState().hubOpen,
+    modalOpenReadback: () => usePlacementStore.getState().modalOpen,
+    toastsReadback: () => usePlacementStore.getState().toasts,
+    dismissAllToastsForTest: () => usePlacementStore.getState().dismissAllToastsForTest(),
+    setCameraDistanceForTest: (d) => setCameraDistanceForTestImpl(d),
+    cameraDistanceReadback: () => cameraDistanceForTestReadback(),
     rainSpreadReadback: () => ({ ...rainSpreadDebug }),
     ghostPosition: () => ({ pos: ghostDebug.pos, valid: ghostDebug.valid }),
     ghostVariation: () => ghostDebug.variation,

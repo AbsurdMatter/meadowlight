@@ -28,6 +28,7 @@ import { groundAt } from '../engine/ground';
 import type { MilestoneId } from '../data/milestones';
 import { starterPatchFor } from '../engine/starterPatch';
 import { recordForInspection, appendRecord, type JournalRecord } from '../engine/sightingJournal';
+import type { Season as _Season } from '../data/seasons';
 
 export interface Toast {
   id: number;
@@ -57,6 +58,12 @@ export interface PlacementState {
   /** true once onboarding was dismissed — overlay never shows again (v4) */
   onboardingDismissed: boolean;
   dismissOnboarding: () => void;
+  /**
+   * O5 (v4, #43): the journal hub's open state — ONE store the pointer
+   * button and the J key both write (aria-pressed reads it, syncing both
+   * ways). Display state, never world state.
+   */
+  hubOpen: boolean;
   /** true while a blocking dialog (reset confirmation) is open: no placement */
   modalOpen: boolean;
   setModalOpen: (open: boolean) => void;
@@ -112,14 +119,6 @@ export interface PlacementState {
    */
   visitorWindows: string[];
   /**
-   * O1 (v4, #39): timed notebook nudges, in-fiction. The nudge state is
-   * the SAME state the player's own actions write (openNotebook) — one
-   * input path. Show-once persisted with the onboarding dismissal.
-   */
-  nudgesShown: string[];
-  /** O1: mark a nudge shown (idempotent; persists) */
-  markNudgeShown: (id: string) => void;
-  /**
    * O2 (v4, #40): the first-sighting journal — a permanent record of what
    * the glass has shown (persisted v9 additive). One record per
    * (kind, subject, season); the journal adds no new facts, only a record.
@@ -127,6 +126,14 @@ export interface PlacementState {
   journal: JournalRecord[];
   /** O2: record a glass inspection (idempotent per kind+subject+season) */
   recordSighting: (entry: MagnifierEntry) => void;
+  /**
+   * O1 (v4, #39): timed notebook nudges, in-fiction. The nudge state is
+   * the SAME state the player's own actions write (openNotebook) — one
+   * input path. Show-once persisted with the onboarding dismissal.
+   */
+  nudgesShown: string[];
+  /** O1: mark a nudge shown (idempotent; persists) */
+  markNudgeShown: (id: string) => void;
   /** #10: harvest a ready hive — jar + ceremony state + warm fact toast */
   harvestHoney: (hiveId: string) => boolean;
   /** #10: hive ids currently mid-harvest-dip (the render reads this) */
@@ -201,6 +208,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   seenFacts: initial.seenFacts ?? [],
   wildSeasons: initial.wildSeasons ?? [],
   onboardingDismissed: initial.onboardingDismissed ?? false,
+  hubOpen: false,
   dismissOnboarding: () => {
     set({ onboardingDismissed: true });
     get().save();
@@ -481,7 +489,6 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
     });
   },
 }));
-
 
 /**
  * O1 (v4, #39): seed the starter patch into an EMPTY world — a few

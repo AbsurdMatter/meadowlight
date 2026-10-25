@@ -1,4 +1,4 @@
-import { Component, useEffect, useState, type ReactNode } from 'react';
+import { Component, type ReactNode } from 'react';
 import { PLANTS } from '../data/plants';
 import { STRUCTURES } from '../data/structures';
 import { MAGNIFIER_WILDLIFE } from '../data/magnifierWildlife';
@@ -88,20 +88,18 @@ const hubPanelStyle: React.CSSProperties = {
 };
 
 function HubInner() {
-  const [open, setOpen] = useState(false);
+  // O5 (v4, #43): the hub's open state lives in the store — the pointer
+  // button and the J key write ONE source; aria-pressed syncs both ways.
+  const open = usePlacementStore((s) => s.hubOpen);
+  const setOpen = (v: boolean) => usePlacementStore.setState({ hubOpen: v });
   const seenFacts = usePlacementStore((s) => s.seenFacts);
   const milestones = usePlacementStore((s) => s.milestones);
   const foundRecipes = usePlacementStore((s) => s.foundRecipes);
   const visitorWindows = usePlacementStore((s) => s.visitorWindows);
   const journal = usePlacementStore((s) => s.journal);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  // O2 (v4, #40): the journal section renders from the store, which reads
+  // the SAVED blob at load — ground truth, never in-memory proxies.
 
   const learnedByGroup: { group: string; facts: { id: string; text: string }[] }[] = [];
   const groups: { name: string; ids: string[] }[] = [
@@ -124,8 +122,10 @@ function HubInner() {
   return (
     <>
       <button
-        onClick={() => setOpen((o) => !o)}
-        title="Field notebook"
+        onClick={() => setOpen(!open)}
+        data-notebook-hub
+        title="Field notebook (J)"
+        aria-pressed={open}
         style={{
           // #6384003544: shares the corner row's 36px baseline with the
           // other controls (one unwrapped row)

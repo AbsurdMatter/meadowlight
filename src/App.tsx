@@ -26,6 +26,7 @@ import { ResetDialog } from './ui/ResetDialog';
 import { CornerControls } from './ui/CornerControls';
 import { Onboarding } from './ui/Onboarding';
 import { NudgeSystem } from './ui/NudgeSystem';
+import { KeyboardShortcuts, SceneKeyboard } from './ui/KeyboardShortcuts';
 import { Toasts } from './ui/Toasts';
 import { Notebook } from './ui/Notebook';
 import { MagnifierCard } from './ui/MagnifierCard';
@@ -124,6 +125,7 @@ function Scene() {
       <PlacementSystem />
       <DebugBridge />
       <OrbitControlsLite />
+      <SceneKeyboard />
     </>
   );
 }
@@ -194,6 +196,7 @@ body[data-magnifier-hit='1'] canvas { cursor: url("data:image/svg+xml,%3Csvg xml
       {loaded && <CornerControls />}
       {loaded && <Onboarding />}
       {loaded && <NudgeSystem />}
+      {loaded && <KeyboardShortcuts />}
       {loaded && <Toasts />}
       {loaded && <Notebook />}
       {loaded && <MagnifierCard />}

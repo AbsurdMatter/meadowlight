@@ -1,4 +1,4 @@
-import { Component, useState, type ReactNode } from 'react';
+import { Component, type ReactNode } from 'react';
 import { usePlacementStore } from '../render/placementStore';
 import { theme, headingStyle } from './theme';
 
@@ -19,9 +19,11 @@ class DialogBoundary extends Component<{ children: ReactNode }, { failed: boolea
 function ResetDialogInner() {
   const resetWorld = usePlacementStore((s) => s.resetWorld);
   const setModalOpen = usePlacementStore((s) => s.setModalOpen);
-  const [open, setOpen] = useState(false);
+  // O5 (v4, #43): the confirm modal's open state is the store's modalOpen
+  // — the R key opens the SAME modal (one input path); Esc dismisses it
+  // through the ESC semantics table (engine/keyboardShortcuts).
+  const open = usePlacementStore((s) => s.modalOpen);
   const show = (v: boolean) => {
-    setOpen(v);
     setModalOpen(v);
   };
   const onReset = () => {

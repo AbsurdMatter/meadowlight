@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts', 'visits.ts', 'magnifierHit.ts', 'starterPatch.ts', 'sightingJournal.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts', 'visits.ts', 'magnifierHit.ts', 'starterPatch.ts', 'sightingJournal.ts', 'keyboardShortcuts.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -108,6 +108,7 @@ const { MAGNIFIER_WILDLIFE } = require(OUT + '/data/magnifierWildlife.js');
 const { MAGNIFIER_KINDS } = require(OUT + '/data/magnifierKinds.js');
 const { starterPatchFor } = require(OUT + '/engine/starterPatch.js');
 const { recordForInspection, appendRecord, journalKey } = require(OUT + '/engine/sightingJournal.js');
+const { emptyKeyState, applyKey, toggleForKey, escActionFor, isTypingTarget } = require(OUT + '/engine/keyboardShortcuts.js');
 const { ONBOARDING_TUNING } = require(OUT + '/data/onboarding.js');
 
 const mkItem = (plantId, x = 0, z = 0) => ({ id: plantId + ':' + x + ':' + z, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
@@ -1480,6 +1481,49 @@ test('O2: the journal round-trips through the save (v9 additive)', () => {
   assert.deepStrictEqual(back.journal[0], rec);
   assert.deepStrictEqual(back.nudgesShown, [], 'nudges absent = none shown');
   clearSavedWorld();
+});
+
+test('O5: held keys drive the key state; toggles are single-fire', () => {
+  let ks = emptyKeyState();
+  let r = applyKey(ks, 'w', true);
+  assert.ok(r.consumed && r.state.forward, 'W starts forward');
+  ks = r.state;
+  r = applyKey(ks, 'w', true);
+  assert.ok(r.consumed && r.state.forward, 'held repeat is consumed, state stable');
+  r = applyKey(ks, 'w', false);
+  assert.ok(r.consumed && !r.state.forward, 'release stops forward');
+  r = applyKey(r.state, 'q', true);
+  assert.ok(r.state.rotateLeft, 'Q rotates left');
+  r = applyKey(r.state, 'e', true);
+  assert.ok(r.state.rotateRight, 'E rotates right');
+  r = applyKey(r.state, 'x', true);
+  assert.ok(!r.consumed, 'an unbound key is not consumed');
+  // toggles
+  assert.strictEqual(toggleForKey('i'), 'inspector');
+  assert.strictEqual(toggleForKey('J'), 'journal');
+  assert.strictEqual(toggleForKey('r'), 'reset');
+  assert.strictEqual(toggleForKey('Escape'), 'cancel');
+  assert.strictEqual(toggleForKey('k'), null, 'unbound = no toggle');
+  // typing targets are never consumed
+  assert.ok(isTypingTarget({ tagName: 'INPUT' }), 'input is a typing target');
+  assert.ok(isTypingTarget({ tagName: 'TEXTAREA' }), 'textarea is a typing target');
+  assert.ok(!isTypingTarget({ tagName: 'CANVAS' }), 'canvas is not a typing target');
+  assert.ok(!isTypingTarget(null), 'null target is not typing');
+});
+
+test('O5: the ESC semantics table — cancel-anything, one order, one place', () => {
+  const open = { modalOpen: false, notebookOpen: false, hubOpen: false, hivePopupOpen: false, glassArmed: false };
+  assert.strictEqual(escActionFor(open), null, 'nothing open = ESC does nothing');
+  assert.strictEqual(escActionFor({ ...open, glassArmed: true }), 'disarm-glass', 'armed glass disarms');
+  assert.strictEqual(escActionFor({ ...open, hivePopupOpen: true }), 'close-hive-popup');
+  assert.strictEqual(escActionFor({ ...open, hubOpen: true }), 'close-hub');
+  assert.strictEqual(escActionFor({ ...open, notebookOpen: true }), 'close-notebook');
+  // the modal wins over everything (it blocks input — cancel it first)
+  assert.strictEqual(
+    escActionFor({ modalOpen: true, notebookOpen: true, hubOpen: true, hivePopupOpen: true, glassArmed: true }),
+    'close-modal',
+    'the modal is first in the cancel order',
+  );
 });
 
 

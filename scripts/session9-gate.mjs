@@ -471,10 +471,100 @@ async function checkJournal() {
   await page.close();
 }
 
+async function checkKeys() {
+  const { page, errors } = await newPage(browser, url);
+  await freshWorld(page);
+  // I toggles the glass (the SAME store the pointer drives)
+  const i1 = await page.evaluate(() => window.__meadowlight.magnifierReadback().on);
+  await page.keyboard.press('i');
+  await page.waitForTimeout(200);
+  const i2 = await page.evaluate(() => window.__meadowlight.magnifierReadback().on);
+  await page.keyboard.press('i');
+  await page.waitForTimeout(200);
+  const i3 = await page.evaluate(() => window.__meadowlight.magnifierReadback().on);
+  rec.record('keys.i-toggles-glass', !i1 && i2 && !i3, 'magnifierOn ' + i1 + ' -> ' + i2 + ' -> ' + i3);
+  // J toggles the hub open state
+  const j1 = await page.evaluate(() => window.__meadowlight.hubOpenReadback());
+  await page.keyboard.press('j');
+  await page.waitForTimeout(200);
+  const j2 = await page.evaluate(() => window.__meadowlight.hubOpenReadback());
+  rec.record('keys.j-toggles-hub', j1 !== j2, 'hubOpen ' + j1 + ' -> ' + j2);
+  // ESC cancels the open hub
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  const j3 = await page.evaluate(() => window.__meadowlight.hubOpenReadback());
+  rec.record('keys.esc-cancels-hub', j2 && !j3, 'hubOpen after ESC: ' + j3);
+  // keys ignored while typing (focus an input)
+  const typed = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    const before = w.magnifierReadback().on;
+    return { before };
+  });
+  // focus through the real DOM path (a synthetic focus() call can race the
+  // element's insertion in headless chromium — the Skia fontconfig crash
+  // above was the browser dying while rendering the focused input)
+  await page.evaluate(() => {
+    const input = document.createElement('input');
+    input.id = 'gate-typing-target';
+    // opacity 0 + off-viewport-ish but rendered: headless chromium's Skia
+    // fontconfig path crashes (FATAL) when a VISIBLE input is focused in
+    // this minimal container — a fully hidden input never receives focus
+    input.style.cssText = 'position:fixed;top:0;left:0;z-index:9999;opacity:0.01;width:40px;height:20px';
+    document.body.appendChild(input);
+    input.focus();
+  });
+  await page.waitForTimeout(300);
+  // dispatch the REAL keydown on the focused input (the browser's own text
+  // insertion needs a font backend this minimal container lacks — the
+  // check's claim is about the EVENT TARGET, not about glyph rendering:
+  // the shortcut layer must ignore a keydown whose target is the input)
+  const dispatched = await page.evaluate(() => {
+    const input = document.getElementById('gate-typing-target');
+    if (!input) return false;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', bubbles: true, cancelable: true }));
+    return document.activeElement === input;
+  });
+  await page.waitForTimeout(200);
+  const typedAfter = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    return {
+      on: w.magnifierReadback().on,
+      stillFocused: document.activeElement?.id === 'gate-typing-target',
+    };
+  });
+  rec.record(
+    'keys.ignored-while-typing',
+    dispatched && typedAfter.on === typed.before && typedAfter.stillFocused,
+    'keydown targeted at the input (focus held: ' + typedAfter.stillFocused + '), magnifierOn unchanged (' + typed.before + ' -> ' + typedAfter.on + ') — the shortcut layer ignored it',
+  );
+  await page.evaluate(() => document.getElementById('gate-typing-target')?.remove());
+  // R opens the confirm modal, never instant
+  await page.keyboard.press('r');
+  await page.waitForTimeout(300);
+  const rState = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    return { modalOpen: w.modalOpenReadback(), items: w.items().length };
+  });
+  rec.record(
+    'keys.r-opens-confirm-never-instant',
+    rState.modalOpen === true && rState.items > 0,
+    'R: modalOpen=' + rState.modalOpen + ', items still ' + rState.items + ' (the world is NOT reset — confirmation required)',
+  );
+  // ESC dismisses the modal
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  const rEsc = await page.evaluate(() => window.__meadowlight.modalOpenReadback());
+  rec.record('keys.esc-dismisses-confirm', rEsc === false, 'modalOpen after ESC: ' + rEsc);
+  const re = realErrors(errors);
+  rec.record('keys.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
 for (const check of checks.split(',')) {
   if (check === 'polish') await checkPolish();
   if (check === 'onboarding') await checkOnboarding();
   if (check === 'journal') await checkJournal();
+  if (check === 'keys') await checkKeys();
   else {
     console.error('[GATE] unknown check: ' + check);
     process.exit(2);
