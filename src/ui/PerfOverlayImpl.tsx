@@ -14,7 +14,6 @@ import { CELL_KINDS } from '../render/CellMapOverlay';
 import { MILESTONES } from '../data/milestones';
 import {
   seasonProgress,
-  seasonClockOverridden,
   setSeasonProgressForTest,
 } from '../engine/seasonClock';
 
@@ -515,9 +514,10 @@ function Session5Triggers() {
   );
 }
 
-/** session 6 trigger section: the season calendar (#11) — force seasons
- *  (same override path as the manual dial), resume natural drift, and a
- *  fast-forward for rollover/toast testing. Dev-only (prod-excluded). */
+/** session 6 trigger section: the season calendar (#11) — start seasons
+ *  (the same start-and-continue path as the manual dial — a jump never
+ *  stops progression, round-1 finding 3) and a fast-forward for
+ *  rollover/toast testing. Dev-only (prod-excluded). */
 function Session6SeasonTriggers() {
   const [, forceRender] = useState(0);
   const refresh = () => forceRender((n) => n + 1);
@@ -553,13 +553,12 @@ function Session6SeasonTriggers() {
         {btn('force summer', () => usePlacementStore.getState().setSeason('summer'), season === 'summer', 'season-summer')}
         {btn('force autumn', () => usePlacementStore.getState().setSeason('autumn'), season === 'autumn', 'season-autumn')}
         {btn('force winter', () => usePlacementStore.getState().setSeason('winter'), season === 'winter', 'season-winter')}
-        {btn('resume natural', () => usePlacementStore.getState().resumeSeasonClock(), !seasonClockOverridden(), 'season-resume')}
       </div>
       <div>
         {btn('progress → 0.95', () => { setSeasonProgressForTest(0.95); refresh(); }, false, 'season-near-end')}
         {btn('progress → 0.999…', () => { setSeasonProgressForTest(0.999999); refresh(); }, false, 'season-boundary')}
         <span style={{ fontSize: 11, opacity: 0.7 }}>
-          {' '}progress {seasonProgress().toFixed(3)} {seasonClockOverridden() ? '(held)' : '(drifting)'}
+          {' '}progress {seasonProgress().toFixed(3)} (drifting)
         </span>
       </div>
     </div>

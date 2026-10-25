@@ -4,6 +4,7 @@ import { PostcardButton } from './PostcardButton';
 import { NotebookHub } from './NotebookHub';
 import { theme } from './theme';
 import { usePlacementStore } from '../render/placementStore';
+import { CHROME_TUNING } from '../data/chrome';
 
 /**
  * One shared bottom-right container: Sound, Postcard, the notebook hub, and
@@ -80,6 +81,17 @@ const controlButtonStyle = (armed: boolean): React.CSSProperties => ({
 
 export function CornerControls() {
   const [helpOpen, setHelpOpen] = useState(false);
+  // O4 (v4, #42): at narrow frames the corner row WRAPS to two rows
+  // (right-anchored) instead of running under the dock — the reserved lane
+  // becomes the wrapped row's height, never an overlap
+  const [wrapped, setWrapped] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < CHROME_TUNING.cornerWrapBelow : false,
+  );
+  useEffect(() => {
+    const onResize = () => setWrapped(window.innerWidth < CHROME_TUNING.cornerWrapBelow);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   // UI verdict (#6383659472): the magnifying glass lives HERE, beside the
   // journal and postcard — it is an inspect TOOL, not a placement item,
   // and grouping it with placeable things was the confusion
@@ -87,6 +99,7 @@ export function CornerControls() {
   const toggleMagnifier = usePlacementStore((s) => s.toggleMagnifier);
   return (
     <div
+      data-corner-controls
       style={{
         position: 'absolute',
         bottom: 16,
@@ -95,6 +108,8 @@ export function CornerControls() {
         flexDirection: 'column',
         alignItems: 'flex-end',
         gap: 8,
+        // O4: the wrapped row needs the viewport's width to wrap in
+        maxWidth: wrapped ? 'calc(100vw - 24px)' : undefined,
       }}
     >
       {/* UI round 3 (#6383867199): ONE flex row, align-items stretch —
@@ -106,7 +121,23 @@ export function CornerControls() {
           which read as a wrapped second line). All five controls share the
           36px baseline; the dock yields the space, the controls never
           yield alignment. */}
-      <div style={{ position: 'relative', display: 'flex', flexWrap: 'nowrap', gap: 8, alignItems: 'stretch' }}>
+      <div
+        data-corner-row
+        style={{
+          position: 'relative',
+          display: 'flex',
+          // O4: nowrap at wide frames (one row, the session-8 geometry);
+          // wrap at narrow frames (right-anchored rows). The row's WIDTH
+          // at narrow frames is the viewport minus insets, so five 36px
+          // controls + gaps wrap to two rows instead of running off-screen
+          // or under the dock.
+          flexWrap: wrapped ? 'wrap' : 'nowrap',
+          justifyContent: wrapped ? 'flex-end' : undefined,
+          width: wrapped ? '100%' : undefined,
+          gap: 8,
+          alignItems: 'stretch',
+        }}
+      >
         <ControlsPopover open={helpOpen} onClose={() => setHelpOpen(false)} />
         <AudioToggle />
         <button

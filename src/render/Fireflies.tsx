@@ -97,16 +97,17 @@ export function Fireflies() {
     const summerBloom = FIREFLY_SUMMER_TUNING.seasons.includes(s.season);
     // rebuild only when the corner set changes
     const corners = s.structures.filter((st) => st.structureId === 'wildcorner');
-    // DoD-walk fix (#6384544116): the notebook record must consult the SAME
-    // visibility window the renderer draws — ONE source, the natural dusk
-    // window in engine/dayCycle (isDusk). The old condition recorded when
-    // (a) the P harness FORCED fireflies on (a test state, not a visit) and
-    // (b) with ZERO wild corners (no fireflies rendered at all) — the note
-    // fired for fireflies nobody could see. Now: NATURAL dusk only (a
-    // forced state never writes a visit), fireflies actually PRESENT
-    // (at least one corner), in a bloom season.
+    // DoD-walk fix (#6384544116) + #46 (v4): the notebook record must
+    // consult the SAME visibility window the renderer draws — ONE source,
+    // the natural dusk window in engine/dayCycle (isDusk). The #6384544116
+    // fix gated on dusk + corners present, but "present" is not "glowing":
+    // the render loop below draws the flies ONLY while `dusk` is true, and
+    // `dusk` is `fireflyForced() ?? isDusk(dayPhase())` — the note now reads
+    // that exact variable, so it fires only in the frame window the player
+    // actually SEES glow. A forced state never writes a visit (a test state
+    // is not a sighting), and zero corners means nothing renders.
     const naturalDusk = fireflyForced() === null && isDusk(dayPhase());
-    if (summerBloom && naturalDusk && corners.length > 0) {
+    if (summerBloom && naturalDusk && dusk && corners.length > 0) {
       recordVisitorWindow('fireflies', s.season);
     }
     const key = corners.map((c) => c.id).join(',') + (summerBloom ? ':summer' : '');

@@ -3,7 +3,7 @@ export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
 export const SEASONS: Season[] = ['spring', 'summer', 'autumn', 'winter'];
 /**
  * #11 (session 6): auto-advancing season length, seconds. 12 sits in the
- * approved 10–15 min window and pairs with the 12-minute day — one day
+ * approved 10–15 min window and pairs with the 6-minute day (#44) — one day
  * of in-world light per season reads as a gentle "week" of meadow time.
  * Tuning value: lives here, never hardcoded in components.
  */

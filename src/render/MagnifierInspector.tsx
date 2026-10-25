@@ -40,7 +40,55 @@ export function MagnifierResolver() {
         e.clientY <= rect.bottom;
     };
     window.addEventListener('pointermove', onMove);
-    return () => window.removeEventListener('pointermove', onMove);
+    // O4 (v4, #42): TAP-TO-INSPECT — hover has no touch equivalent, so a
+    // tap IS the inspect affordance. A tap (pointerdown+up within the click
+    // slop) while the glass is armed resolves the entry AT THE TAP POINT
+    // through the SAME resolver the hover drives: one input path, the tap
+    // just supplies the pointer position the resolver reads. A long-press
+    // (travel past the slop, or held past the threshold) is NOT a tap —
+    // it belongs to removal/camera, never to inspection.
+    let tapX = 0;
+    let tapY = 0;
+    let tapTravel = 0;
+    let tapDown = false;
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch' || e.button !== 0) return;
+      tapDown = true;
+      tapTravel = 0;
+      tapX = e.clientX;
+      tapY = e.clientY;
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (!tapDown) return;
+      tapTravel = Math.max(tapTravel, Math.hypot(e.clientX - tapX, e.clientY - tapY));
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      if (!tapDown || e.pointerType !== 'touch') return;
+      tapDown = false;
+      if (tapTravel > 12) return; // a drag, not a tap — never inspection
+      const rect = canvas.getBoundingClientRect();
+      pointerNdc.current.set(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      inside.current =
+        e.clientX >= rect.left &&
+        e.clientX <= rect.right &&
+        e.clientY >= rect.top &&
+        e.clientY <= rect.bottom;
+      // the resolver's next frame resolves the entry at the tap point —
+      // the same per-frame path the hover uses (one input path)
+    };
+    window.addEventListener('pointermove', onMove);
+    canvas.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
   }, [gl]);
 
   // visitor locks get a short miss-grace: a creature crossing the reach

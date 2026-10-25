@@ -25,6 +25,8 @@ import { SeasonDial, TimeControls } from './ui/SeasonDial';
 import { ResetDialog } from './ui/ResetDialog';
 import { CornerControls } from './ui/CornerControls';
 import { Onboarding } from './ui/Onboarding';
+import { NudgeSystem } from './ui/NudgeSystem';
+import { KeyboardShortcuts, SceneKeyboard } from './ui/KeyboardShortcuts';
 import { Toasts } from './ui/Toasts';
 import { Notebook } from './ui/Notebook';
 import { MagnifierCard } from './ui/MagnifierCard';
@@ -32,9 +34,10 @@ import { MagnifierResolver } from './render/MagnifierInspector';
 import { HivePopup } from './ui/HivePopup';
 import { MilestoneWatcher } from './ui/MilestoneWatcher';
 import { PerfOverlay } from './ui/PerfOverlay';
-import { usePlacementStore } from './render/placementStore';
+import { usePlacementStore, seedStarterPatchIfFresh } from './render/placementStore';
 import { maybeSeedDemoWorld } from './engine/testHook';
 import { SEASON_INFO } from './data/seasons';
+import { CHROME_TUNING } from './data/chrome';
 import { LIGHT_WARMTH, LONG_SHADOWS } from './data/polish';
 import { theme } from './ui/theme';
 
@@ -123,6 +126,7 @@ function Scene() {
       <PlacementSystem />
       <DebugBridge />
       <OrbitControlsLite />
+      <SceneKeyboard />
     </>
   );
 }
@@ -148,6 +152,12 @@ export default function App() {
   // dev-only demo seed (?demo=1): lazy, error-bounded, no default-play effect
   useEffect(() => {
     if (loaded) maybeSeedDemoWorld();
+  }, [loaded]);
+  // O1 (v4, #39): a fresh world greets with a living meadow — a few
+  // flowers + a hive on frame one, seeded from the worldSeed (never
+  // Math.random). A returning player's saved meadow is never re-seeded.
+  useEffect(() => {
+    if (loaded) seedStarterPatchIfFresh();
   }, [loaded]);
   const magnifierOn = usePlacementStore((s) => s.magnifierOn);
   const placing = selectedPlantId ?? selectedStructureId;
@@ -180,12 +190,14 @@ body[data-magnifier-hit='1'] canvas { cursor: url("data:image/svg+xml,%3Csvg xml
       {loaded && <SeasonDial />}
       {loaded && <TimeControls />}
       {loaded && (
-        <div style={{ position: 'absolute', top: 108, right: 12 }}>
+        <div style={{ position: 'absolute', top: CHROME_TUNING.toastLaneTop, right: 12 }}>
           <ResetDialog />
         </div>
       )}
       {loaded && <CornerControls />}
       {loaded && <Onboarding />}
+      {loaded && <NudgeSystem />}
+      {loaded && <KeyboardShortcuts />}
       {loaded && <Toasts />}
       {loaded && <Notebook />}
       {loaded && <MagnifierCard />}

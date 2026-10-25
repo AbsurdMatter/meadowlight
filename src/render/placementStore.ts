@@ -10,8 +10,7 @@ import { variationFor, type PlacementVariation } from '../engine/variation';
 import type { Season } from '../data/seasons';
 import { setDayPhase, dayPhase } from '../engine/dayCycle';
 import {
-  forceSeason,
-  resumeSeasonClock,
+  startSeasonAt,
   seasonProgress,
   setSeasonProgressForTest,
 } from '../engine/seasonClock';
@@ -26,6 +25,9 @@ import { isPlantableCell } from '../engine/ground';
 import { flowerBlocked } from '../engine/collision';
 import { groundAt } from '../engine/ground';
 import type { MilestoneId } from '../data/milestones';
+import { starterPatchFor } from '../engine/starterPatch';
+import { recordForInspection, appendRecord, type JournalRecord } from '../engine/sightingJournal';
+import type { Season as _Season } from '../data/seasons';
 
 export interface Toast {
   id: number;
@@ -55,6 +57,12 @@ export interface PlacementState {
   /** true once onboarding was dismissed — overlay never shows again (v4) */
   onboardingDismissed: boolean;
   dismissOnboarding: () => void;
+  /**
+   * O5 (v4, #43): the journal hub's open state — ONE store the pointer
+   * button and the J key both write (aria-pressed reads it, syncing both
+   * ways). Display state, never world state.
+   */
+  hubOpen: boolean;
   /** true while a blocking dialog (reset confirmation) is open: no placement */
   modalOpen: boolean;
   setModalOpen: (open: boolean) => void;
@@ -77,8 +85,6 @@ export interface PlacementState {
   setSeason: (season: Season) => void;
   /** #11: natural season rollover — store label + gentle toast, one path */
   arriveAtSeason: (season: Season, announce: boolean) => void;
-  /** #11: P panel / tests — release the manual override, calendar drifts */
-  resumeSeasonClock: () => void;
   /** #11: readback for the P panel / test hook */
   seasonProgress: () => number;
   /** #11: tests only — drive the calendar boundary directly */
@@ -109,6 +115,22 @@ export interface PlacementState {
    * per visit-window (persisted v7 additive; the notebook reads it).
    */
   visitorWindows: string[];
+  /**
+   * O2 (v4, #40): the first-sighting journal — a permanent record of what
+   * the glass has shown (persisted v9 additive). One record per
+   * (kind, subject, season); the journal adds no new facts, only a record.
+   */
+  journal: JournalRecord[];
+  /** O2: record a glass inspection (idempotent per kind+subject+season) */
+  recordSighting: (entry: MagnifierEntry) => void;
+  /**
+   * O1 (v4, #39): timed notebook nudges, in-fiction. The nudge state is
+   * the SAME state the player's own actions write (openNotebook) — one
+   * input path. Show-once persisted with the onboarding dismissal.
+   */
+  nudgesShown: string[];
+  /** O1: mark a nudge shown (idempotent; persists) */
+  markNudgeShown: (id: string) => void;
   /** #10: harvest a ready hive — jar + ceremony state + warm fact toast */
   harvestHoney: (hiveId: string) => boolean;
   /** #10: hive ids currently mid-harvest-dip (the render reads this) */
@@ -137,6 +159,8 @@ export interface PlacementState {
   closeHivePopup: () => void;
   earnMilestone: (id: MilestoneId, label: string, detail: string) => void;
   dismissToast: (id: number) => void;
+  /** tests: clear the whole toast stack (a gate reads its own delta) */
+  dismissAllToastsForTest: () => void;
   openNotebook: (entry: PlacementState['notebook']) => void;
   closeNotebook: () => void;
   /** full reset: empty world + cleared save + default season/milestones */
@@ -181,6 +205,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   seenFacts: initial.seenFacts ?? [],
   wildSeasons: initial.wildSeasons ?? [],
   onboardingDismissed: initial.onboardingDismissed ?? false,
+  hubOpen: false,
   dismissOnboarding: () => {
     set({ onboardingDismissed: true });
     get().save();
@@ -222,9 +247,11 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       return { placementVariation: next };
     }),
   setSeason: (season) => {
-    // #11: the manual dial is the SAME override path the P panel uses —
-    // one trigger pattern (forceSeason holds the calendar; resume releases)
-    forceSeason(season);
+    // #11: the manual dial is the SAME start path the P panel uses — one
+    // trigger pattern. Round-1 finding 3: a selection STARTS the season
+    // (clock at its start, auto-advance continues); it never holds the
+    // calendar — the TimeControls pause button is the only pause.
+    startSeasonAt(season);
     // U1: crossing into a different season is a rollover for the flora —
     // the dial seeds exactly like the natural calendar (one shared site)
     if (get().season !== season) seedVolunteers(season, false);
@@ -252,10 +279,6 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
     // state + epoch. The dial (setSeason) crosses a season boundary too and
     // shares this helper; nothing else may seed.
     seedVolunteers(season, false);
-    get().save();
-  },
-  resumeSeasonClock: () => {
-    resumeSeasonClock();
     get().save();
   },
   seasonProgress: () => seasonProgress(),
@@ -292,6 +315,8 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   worldSeed: initial.worldSeed ?? 12345,
   seedingEpoch: initial.seedingEpoch ?? 0,
   visitorWindows: initial.visitorWindows ?? [],
+  journal: initial.journal ?? [],
+  nudgesShown: initial.nudgesShown ?? [],
   harvestDips: {},
   hivePopup: null,
   openHivePopup: (hiveId) => set({ hivePopup: hiveId }),
@@ -315,6 +340,22 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   },
   magnifierEntry: null,
   setMagnifierEntry: (e) => set({ magnifierEntry: e }),
+  recordSighting: (entry) => {
+    // O2: the journal records what the glass SHOWS. One write path, keyed
+    // per (kind, subject, season) — inspecting gains purpose, seasons gain
+    // a goal. Pure record; no facts, no new state shapes.
+    const s = get();
+    const record = recordForInspection(entry, s.season);
+    if (!record) return;
+    const next = appendRecord(s.journal, record);
+    if (next !== s.journal) set({ journal: next });
+  },
+  markNudgeShown: (id) => {
+    // O1: idempotent; the nudge list persists so a nudge never re-fires
+    const s = get();
+    if (s.nudgesShown.includes(id)) return;
+    set({ nudgesShown: [...s.nudgesShown, id] });
+  },
   harvestHoney: (hiveId) => {
     const s = get();
     const fill = s.hiveCombs[hiveId] ?? 0;
@@ -347,6 +388,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
     get().save();
   },
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+  dismissAllToastsForTest: () => set({ toasts: [] }),
   openNotebook: (entry) => set({ notebook: entry }),
   closeNotebook: () => set({ notebook: null }),
   resetWorld: () => {
@@ -359,7 +401,9 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       worldSeed: Math.floor(Math.random() * 2147483647),
       seedingEpoch: 0,
       visitorWindows: [],
-      // #11: reset returns the calendar to a fresh summer start, unheld
+      journal: [],
+      nudgesShown: [],
+      // #11: reset returns the calendar to a fresh summer start
       toasts: [],
       modalOpen: false,
       seenFacts: [],
@@ -371,8 +415,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       harvestDips: {},
       hivePopup: null,
     });
-    forceSeason('summer');
-    resumeSeasonClock();
+    startSeasonAt('summer');
     setSeasonProgressForTest(0);
     get().save();
   },
@@ -408,6 +451,8 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       worldSeed: w.worldSeed ?? 12345,
       seedingEpoch: w.seedingEpoch ?? 0,
       visitorWindows: w.visitorWindows ?? [],
+      journal: w.journal ?? [],
+      nudgesShown: w.nudgesShown ?? [],
     });
     // #11: the reload must re-derive the calendar position from the blob —
     // same semantics as a fresh page load, not the live clock
@@ -433,9 +478,40 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       worldSeed: s.worldSeed,
       seedingEpoch: s.seedingEpoch,
       visitorWindows: s.visitorWindows,
+      journal: s.journal,
+      nudgesShown: s.nudgesShown,
     });
   },
 }));
+
+/**
+ * O1 (v4, #39): seed the starter patch into an EMPTY world — a few
+ * flowers + a hive alive on frame one. Deterministic from the worldSeed
+ * (never Math.random): the same seed grows the same welcome meadow.
+ * Called only when the world is empty AND onboarding has not been
+ * dismissed (a returning player's meadow is never re-seeded).
+ */
+export function seedStarterPatchIfFresh(): void {
+  const s = usePlacementStore.getState();
+  if (s.items.length > 0 || s.structures.length > 0) return;
+  if (s.onboardingDismissed) return;
+  const patch = starterPatchFor(s.worldSeed);
+  if (patch.items.length === 0 && patch.structures.length === 0) return;
+  usePlacementStore.setState({ items: patch.items, structures: patch.structures });
+  s.save();
+}
+
+/**
+ * O1 (v4, #39): a FULL fresh boot — resetWorld clears the save and state,
+ * then the starter patch seeds the empty world (the onboarding hint shows,
+ * the meadow is alive on frame one). One path: App calls seedStarterPatchIfFresh
+ * after resetWorld too, so the gate's resetWorld + boot reads exactly what
+ * a first-time visitor sees.
+ */
+export function freshBootForTest(): void {
+  usePlacementStore.getState().resetWorld();
+  seedStarterPatchIfFresh();
+}
 
 /**
  * U1: the ONE seeding site — called only from the season-boundary crossings
