@@ -93,6 +93,7 @@ const { rollVolunteers, compatibleSeedling } = require(OUT + '/engine/seeding.js
 const { colonyIntensityTarget, LIFECYCLE_LINES } = require(OUT + '/data/lifecycle.js');
 const { HABITAT_TUNING, cornerFoldCells, cornerKey, pondSegments, fringeCells, pondClusters } = require(OUT + '/data/habitatScenery.js');
 const { NIGHT_SKY_TUNING, CLOUDS_OPACITY_BEFORE } = require(OUT + '/data/nightSky.js');
+const { hash2 } = require(OUT + '/engine/seededHash.js');
 const { starVisibility } = require(OUT + '/engine/nightSky.js');
 const { treePlacements, pondExclusionRadius } = require(OUT + '/engine/treeLayout.js');
 const { advanceColony, colonyIntensity: colonyIntensityExport, colonyReadback: colonyReadbackExport, setColonyIntensityForTest } = require(OUT + '/engine/lifecycle.js');
@@ -405,6 +406,38 @@ test('#44: the day cycle is 6 minutes — every window derives from the phase', 
   assert.ok(Math.abs(dayPhase() - 0.75) < 1e-6, 'a quarter day is a quarter phase');
   assert.ok(isDusk(0.82) && isDaylight(0.82), 'the dusk/daylight windows themselves are untouched');
   resumeDayCycle();
+});
+
+test('#45: the precipitation spawn distribution spreads the burst across the full area', () => {
+  // mirrors Rain.tsx's spawnPosition (the render side keeps its own copy so
+  // the renderer never imports the engine hash mid-frame — the test pins the
+  // distribution's properties against the same hash source)
+  const spawn = (index, salt, area) => ({
+    x: (hash2(index, salt, 0x5eed) * 2 - 1) * area,
+    z: (hash2(salt, index, 0x5eed) * 2 - 1) * area,
+  });
+  const area = 24; // RAIN_VISUAL.areaHalf
+  const n = 220; // RAIN_VISUAL.drops
+  const xs = [], zs = [];
+  for (let i = 0; i < n; i++) {
+    const s = spawn(i, 1, area);
+    xs.push(s.x);
+    zs.push(s.z);
+    assert.ok(Math.abs(s.x) <= area && Math.abs(s.z) <= area, 'every burst position is inside the area');
+  }
+  // the user-observed flaw was a CONCENTRATED burst: pin the spread — the
+  // burst must cover the area like the steady fall, not cluster mid-field
+  const spread = (v) => Math.max(...v) - Math.min(...v);
+  assert.ok(spread(xs) > area * 1.5, 'burst x spread covers the area (got ' + spread(xs).toFixed(1) + ' of ' + (area * 2) + ')');
+  assert.ok(spread(zs) > area * 1.5, 'burst z spread covers the area (got ' + spread(zs).toFixed(1) + ' of ' + (area * 2) + ')');
+  // corners reached: positions in every quadrant
+  const quad = (v) => [v.some((p) => p < -area / 2), v.some((p) => p > area / 2)];
+  assert.ok(quad(xs).every(Boolean) && quad(zs).every(Boolean), 'burst reaches both halves on both axes');
+  // deterministic: same indices -> same positions (the seeded convention)
+  const again = spawn(7, 1, area);
+  assert.deepStrictEqual(again, spawn(7, 1, area), 'spawn positions are deterministic');
+  // distinct from the steady-fall salt (burst and steady rolls differ)
+  assert.notDeepStrictEqual(spawn(7, 1, area), spawn(7, 5, area), 'burst and steady salts differ');
 });
 
 // ---------- session 6 U1 (#11): auto-advancing season calendar ----------

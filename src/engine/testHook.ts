@@ -33,6 +33,7 @@ import { capturePostcardPng } from './postcard';
 import { audioDebugInfo, audioRunning } from './audio';
 import { ghostDebug } from '../render/PlacementSystem';
 import { DAY_CYCLE_SECONDS, resumeDayCycle } from './dayCycle';
+import { rainSpreadDebug } from '../render/Rain';
 
 declare global {
   interface Window {
@@ -134,6 +135,8 @@ declare global {
     dayCycleSecondsReadback: () => number;
     /** release the day-phase override so the natural clock drifts */
     resumeDayCycleForTest: () => void;
+    /** #45 (v4): the precip burst spread readback */
+    rainSpreadReadback: () => { x: number; z: number };
       ghostPosition: () => { pos: [number, number, number] | null; valid: boolean };
       ghostVariation: () => { rotationY: number; heightJitter: number; tiltX: number; tiltZ: number } | null;
       resetWorld: () => void;
@@ -310,6 +313,7 @@ export function installTestHook() {
     audioIsRunning: () => audioRunning(),
     dayCycleSecondsReadback: () => DAY_CYCLE_SECONDS,
     resumeDayCycleForTest: () => resumeDayCycle(),
+    rainSpreadReadback: () => ({ ...rainSpreadDebug }),
     ghostPosition: () => ({ pos: ghostDebug.pos, valid: ghostDebug.valid }),
     ghostVariation: () => ghostDebug.variation,
     resetWorld: () => usePlacementStore.getState().resetWorld(),

@@ -4,6 +4,7 @@ import { scaledDelta } from '../engine/scaledTime';
 import * as THREE from 'three';
 import { precipitationVisual } from '../engine/weather';
 import { PRECIP_TUNING, RAIN_VISUAL } from '../data/rain';
+import { hash2 } from '../engine/seededHash';
 
 /**
  * #14 (session 5) + session 8 N1: gentle voxel precipitation — one
@@ -16,6 +17,29 @@ import { PRECIP_TUNING, RAIN_VISUAL } from '../data/rain';
  * no input path.
  */
 export const rainDebug = { count: 0, kind: 'dry' as 'dry' | 'rain' | 'snow', intensity: 0 };
+
+/**
+ * #45 (v4): the burst spread telemetry — the xz extent of the LIVE drop
+ * field, read back by the gate to prove the initial burst covers the full
+ * spawn area (the user-observed concentrated burst). Display/test only.
+ */
+export const rainSpreadDebug = { x: 0, z: 0 };
+
+/**
+ * #45 (v4): ONE spawn-distribution source for the initial burst AND the
+ * steady fall. Both derive x/z from the shared seeded hash — the initial
+ * burst spreads across the whole area exactly like the steady emitter
+ * re-seeds a landed drop (the user-observed "concentrated burst" was the
+ * Math.random initial positions vs the wider steady area). A tiny hash
+ * salt keeps the burst and the steady positions from coinciding exactly.
+ * Pure: no Math.random anywhere in the distribution.
+ */
+function spawnPosition(index: number, salt: number, area: number): { x: number; z: number } {
+  return {
+    x: (hash2(index, salt, 0x5eed) * 2 - 1) * area,
+    z: (hash2(salt, index, 0x5eed) * 2 - 1) * area,
+  };
+}
 
 interface Drop {
   x: number;
@@ -69,16 +93,20 @@ export function Rain() {
     if (seededFor.current !== vis.kind) {
       seededFor.current = vis.kind;
       const list: Drop[] = [];
+      // #45: the burst is distributed by the SAME seeded function the
+      // steady fall uses — full area from the first frame, never a
+      // concentrated patch
       const area = vis.kind === 'snow' ? PRECIP_TUNING.snow.size * RAIN_VISUAL.areaHalf : RAIN_VISUAL.areaHalf;
       for (let i = 0; i < RAIN_VISUAL.drops; i++) {
+        const spawn = spawnPosition(i, 1, area);
         list.push({
-          x: (Math.random() * 2 - 1) * area,
-          z: (Math.random() * 2 - 1) * area,
-          y: Math.random() * RAIN_VISUAL.top,
+          x: spawn.x,
+          z: spawn.z,
+          y: hash2(i, 2, 0x5eed) * RAIN_VISUAL.top,
           speed: vis.kind === 'snow'
-            ? PRECIP_TUNING.snow.fallSpeed * (0.85 + Math.random() * 0.3)
-            : RAIN_VISUAL.fallSpeed * (0.85 + Math.random() * 0.3),
-          len: 0.5 + Math.random() * 0.5,
+            ? PRECIP_TUNING.snow.fallSpeed * (0.85 + hash2(i, 3, 0x5eed) * 0.3)
+            : RAIN_VISUAL.fallSpeed * (0.85 + hash2(i, 3, 0x5eed) * 0.3),
+          len: 0.5 + hash2(i, 4, 0x5eed) * 0.5,
         });
       }
       drops.current = list;
@@ -101,13 +129,18 @@ export function Rain() {
     const mat = new THREE.Matrix4();
     let i = 0;
     const cap = Math.floor(RAIN_VISUAL.drops * vis.intensity);
-    for (const d of drops.current) {
+    for (let di = 0; di < drops.current.length; di++) {
+      const d = drops.current[di];
       d.y -= d.speed * delta;
       d.x += windX * delta;
       if (d.y < 0) {
         d.y = RAIN_VISUAL.top;
-        d.x = (Math.random() * 2 - 1) * RAIN_VISUAL.areaHalf;
-        d.z = (Math.random() * 2 - 1) * RAIN_VISUAL.areaHalf;
+        // #45: the steady re-seed rides the SAME distribution function —
+        // one source for burst and steady fall (the drop's own index keeps
+        // the roll stable and distinct from the initial-burst rolls)
+        const spawn = spawnPosition(di, 5, RAIN_VISUAL.areaHalf);
+        d.x = spawn.x;
+        d.z = spawn.z;
       }
       if (i < cap) {
         mat.makeScale(thickness, d.len, thickness);
@@ -119,6 +152,23 @@ export function Rain() {
     rainDebug.count = i;
     mesh.count = i;
     mesh.instanceMatrix.needsUpdate = true;
+    // #45: track the live field's xz extent (the burst-spread readback —
+    // reads the drop list the mesh mirrors, no matrix round-trip)
+    if (i > 0) {
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      for (let k = 0; k < i; k++) {
+        const d = drops.current[k];
+        if (d.x < minX) minX = d.x;
+        if (d.x > maxX) maxX = d.x;
+        if (d.z < minZ) minZ = d.z;
+        if (d.z > maxZ) maxZ = d.z;
+      }
+      rainSpreadDebug.x = maxX - minX;
+      rainSpreadDebug.z = maxZ - minZ;
+    } else {
+      rainSpreadDebug.x = 0;
+      rainSpreadDebug.z = 0;
+    }
   });
 
   return (
