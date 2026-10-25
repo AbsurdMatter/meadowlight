@@ -34,6 +34,7 @@ function ResetDialogInner() {
     <>
       <button
         onClick={() => show(true)}
+        data-reset-button
         style={{
           padding: '4px 12px',
           borderRadius: theme.border.radius,

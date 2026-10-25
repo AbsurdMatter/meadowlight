@@ -13,6 +13,7 @@ import {
   type KeyState,
 } from '../engine/keyboardShortcuts';
 import { theme } from './theme';
+import { CHROME_TUNING } from '../data/chrome';
 
 /**
  * O5 (v4, #43): the keyboard grammar — PURE input translation onto the
@@ -164,8 +165,82 @@ export function KeyboardShortcuts() {
     };
   }, []);
 
+  // Round-1 finding 2: the hint panel MEASURES its placement instead of
+  // assuming it — below the live toast cards, clear of the dock and the
+  // corner row, inside the viewport. It re-measures whenever the toast
+  // stack changes (cards are ephemeral and arrive after the panel opens),
+  // so a growing stack can never collide with it.
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [panelTop, setPanelTop] = useState<number | null>(null);
+  const [panelMaxWidth, setPanelMaxWidth] = useState<number | null>(null);
+  const [panelMaxHeight, setPanelMaxHeight] = useState<number | null>(null);
+  const toastCount = usePlacementStore((s) => s.toasts.length);
+  // closed: drop the measured placement so a reopen re-measures fresh
+  useEffect(() => {
+    if (!hintOpen) {
+      setPanelTop(null);
+      setPanelMaxWidth(null);
+      setPanelMaxHeight(null);
+    }
+  }, [hintOpen]);
+  useEffect(() => {
+    if (!hintOpen) return;
+    const place = () => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      const panelRight = window.innerWidth - 12;
+      // horizontal: shrink until the left edge clears the dock's right
+      // edge (narrow frames: the dock is left-anchored, the panel
+      // right-anchored). Computed from the UNSHRUNK layout (the CSS width
+      // excludes padding 2x16 + border 2x2 = 36px) so the value is stable
+      // across re-measures.
+      const dock = document.querySelector('[data-palette-dock]');
+      const dockRight = dock ? dock.getBoundingClientRect().right : 0;
+      const naturalLeft = panelRight - (CHROME_TUNING.helpPanelWidth + 36);
+      const cssMaxWidth = naturalLeft < dockRight + 8 ? panelRight - dockRight - 8 - 36 : null;
+      if (cssMaxWidth !== panelMaxWidth) {
+        setPanelMaxWidth(cssMaxWidth);
+        return; // re-measure after the width applies (it changes the height)
+      }
+      // vertical: below the lowest live toast card, never below the lane's
+      // floor (the corner row's top minus a gap, or the viewport bottom).
+      // The panel's chrome is 36px of padding+border on top of the CSS
+      // height (content-box), so a clamp leaves room for that chrome plus
+      // a sliver of content; when even that can't fit, the top yields back
+      // toward minTop rather than starting a panel the floor would cut.
+      const cards = [...document.querySelectorAll('[data-toast]')];
+      const cardsBottom = cards.reduce((m, c) => Math.max(m, c.getBoundingClientRect().bottom), 0);
+      const minTop = CHROME_TUNING.helpLaneTop + 28 + 6;
+      const cornerRow = document.querySelector('[data-corner-row]');
+      const floorY = (cornerRow ? cornerRow.getBoundingClientRect().top : window.innerHeight) - 8;
+      const top = Math.min(
+        Math.max(minTop, cardsBottom > 0 ? cardsBottom + 6 : minTop),
+        Math.max(minTop, floorY - 84),
+      );
+      const naturalHeight = panel.scrollHeight + 4; // scrollHeight excludes the border
+      const cssMaxHeight = top + naturalHeight > floorY ? Math.max(0, floorY - top - 36) : null;
+      if (top !== panelTop || cssMaxHeight !== panelMaxHeight) {
+        setPanelTop(top);
+        setPanelMaxHeight(cssMaxHeight);
+      }
+    };
+    // measure after paint, on every toast-stack change, and on resize
+    const raf = requestAnimationFrame(place);
+    window.addEventListener('resize', place);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', place);
+    };
+  }, [hintOpen, toastCount, panelMaxWidth, panelMaxHeight, panelTop]);
+
   return (
     <>
+      {/* Round-1 finding 2: this button used to sit at top:12 — ON the
+          season dial. It now owns the lane below the time controls
+          (CHROME_TUNING.helpLaneTop), measured clear of the dial (bottom
+          62 at 700-900 wide, 48 at 360-480) and the time row (bottom 94).
+          The hint panel measures its own placement (below the toast
+          stack, clear of the dock) instead of assuming it. */}
       <button
         onClick={() => setHintOpen((o) => !o)}
         data-shortcut-hint
@@ -173,7 +248,7 @@ export function KeyboardShortcuts() {
         aria-pressed={hintOpen}
         style={{
           position: 'absolute',
-          top: 12,
+          top: CHROME_TUNING.helpLaneTop,
           right: 12,
           height: 28,
           padding: '0 10px',
@@ -192,12 +267,16 @@ export function KeyboardShortcuts() {
       </button>
       {hintOpen && (
         <div
+          ref={panelRef}
           data-shortcut-hint-panel
           style={{
             position: 'absolute',
-            top: 46,
+            top: panelTop ?? CHROME_TUNING.helpLaneTop + 28 + 6,
             right: 12,
-            width: 280,
+            width: CHROME_TUNING.helpPanelWidth,
+            maxWidth: panelMaxWidth ?? undefined,
+            maxHeight: panelMaxHeight ?? undefined,
+            overflowY: panelMaxHeight !== null ? 'auto' : undefined,
             padding: theme.spacing.panelPadding,
             borderRadius: theme.border.radiusPanel,
             background: theme.color.panel,

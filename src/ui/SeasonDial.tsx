@@ -53,6 +53,7 @@ export function SeasonDial() {
   const setSeason = usePlacementStore((s) => s.setSeason);
   return (
     <div
+      data-season-dial
       style={{
         position: 'absolute',
         top: 12,

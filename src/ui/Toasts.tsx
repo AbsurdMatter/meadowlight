@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { usePlacementStore } from '../render/placementStore';
 import { theme, headingStyle } from './theme';
+import { CHROME_TUNING } from '../data/chrome';
 
 const TOAST_MS = 7000;
 
@@ -51,9 +52,13 @@ export function Toasts() {
   const toasts = usePlacementStore((s) => s.toasts);
   return (
     <div
+      data-toast-stack
       style={{
         position: 'absolute',
-        top: 108,
+        // round-1 finding 2: the toast lane sits BELOW the help button
+        // (which owns the lane above it) — measured clear of the help
+        // button's bottom (130) + gap; the lane's ORDER is unchanged
+        top: CHROME_TUNING.toastLaneTop,
         right: 12,
         display: 'flex',
         flexDirection: 'column',

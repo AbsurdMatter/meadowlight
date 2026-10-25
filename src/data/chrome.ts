@@ -54,4 +54,20 @@ export const CHROME_TUNING = {
   narrowDockBelow: 700,
   /** the tab-column-only dock width at narrow frames (tabs + padding) */
   narrowDockWidth: 96,
+  /**
+   * Round-1 finding 2: the TOP-RIGHT stack's lanes (right: 12), measured
+   * from the real rendered boxes. The season dial owns top 12 (bottom 48
+   * at 360-480 wide, 62 at 700-1280); the time controls own top 56
+   * (bottom 80 at 360-480, 94 at 700-1280). The keyboard-help "?" button
+   * used to sit at top 12 — ON the dial — so it now owns the next lane
+   * down, clear of the time row's tallest rendered bottom (94) plus this
+   * gap. Toasts + the reset button own the lane below the help button
+   * (measured clear of the help button's bottom, 130, plus this gap);
+   * the ORDER is unchanged — toasts/reset were always the lowest lane.
+   */
+  helpLaneTop: 102,
+  /** the toast/reset lane's top (below the help button's bottom + gap) */
+  toastLaneTop: 138,
+  /** the hint panel's width (one key + action pair per line fits) */
+  helpPanelWidth: 280,
 } as const;

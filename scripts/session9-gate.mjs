@@ -46,6 +46,13 @@
  *   touch — O4 (#42): DOM-anchored geometry at narrow widths (dock row
  *     unwrapped, no overlap at 360px), tap drives the inspect store.
  *     DEVICE FEEL IS THE USER'S CHECKLIST.
+ *
+ *   chrome — round-1 finding 2: the help "?" button owns its own lane in
+ *     the top-right stack (below the time controls, clear of the season
+ *     dial) and its bounding box never intersects any other corner
+ *     control — measured with real rendered sizes at 7 viewport sizes,
+ *     with a live toast stack present (the transient that grows into
+ *     the lane). The open hint panel is also intersection-checked.
  */
 import { chromium } from 'playwright-core';
 import { parseArgs, launchChromium, newPage, makeRecorder, realErrors } from './gate-lib.mjs';
@@ -63,6 +70,117 @@ async function freshWorld(page) {
     w.placeStructure('hive', 2, -2);
   });
   await page.waitForTimeout(1500);
+}
+
+/** round-1 finding 2: help-button lane + bounding-box intersection gate.
+ *  Measures REAL rendered boxes (never assumed sizes) at 7 viewports,
+ *  with a deterministic two-card toast stack raised AFTER the panel
+ *  opened (the paused-clock trick: dismiss boot toasts, pause, open the
+ *  panel, cross two season boundaries at 8x, re-pause) — the transient
+ *  that most exercises the panel's re-measure path. */
+async function checkChrome() {
+  const sizes = [[1280, 800], [900, 800], [700, 800], [480, 800], [360, 800], [360, 500], [1280, 500]];
+  for (const [width, height] of sizes) {
+    const page = await browser.newPage({ viewport: { width, height } });
+    const errors = [];
+    page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+    page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
+    await page.addInitScript(() => localStorage.clear());
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
+    await page.waitForFunction(() => window.__meadowlight, null, { timeout: 20000 }).catch(() => {});
+    await page.waitForTimeout(2500);
+    // dismiss onboarding (the full-viewport overlay would intersect everything)
+    await page.evaluate(() => {
+      const btns = [...document.querySelectorAll('button')].filter((b) => /next|begin/i.test(b.textContent || ''));
+      btns[btns.length - 1]?.click();
+    });
+    await page.waitForTimeout(300);
+    // Deterministic toast fixture (the paused-clock trick). Boot milestone
+    // toasts expire on wall clock (TOAST_MS) at unpredictable times — they
+    // made the stack size at measurement non-deterministic — so clear them
+    // first. Then: pause the clock, open the hint panel, and raise EXACTLY
+    // two season-arrival toasts via two 8x season crossings while paused
+    // (cards never expire under pause-adjacent timing: the gate re-pauses
+    // right after, and the whole fixture runs well inside TOAST_MS). The
+    // panel is opened BEFORE the cards arrive — the transient that used to
+    // collide — so the measurement exercises the panel's re-measure path.
+    await page.evaluate(() => {
+      const w = window.__meadowlight;
+      w.clear();
+      w.dismissAllToastsForTest();
+      w.timeSetPaused(true);
+    });
+    // open the hint panel via the REAL key path
+    await page.keyboard.press('?');
+    await page.waitForTimeout(150);
+    await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.timeSetPaused(false);
+      w.timeSetSpeed(8);
+      // two re-armed crossings = exactly two "A season drifts in" cards
+      // (progress 0.999 -> ~300ms at 8x crosses one boundary each time;
+      // re-arming pins the clock at the edge so every crossing is
+      // deterministic — 675ms per season at 8x). Two cards is the most a
+      // short viewport (500px tall) can hold below the help button without
+      // the stack itself reaching the corner row.
+      for (let k = 0; k < 2; k++) {
+        w.setSeasonProgressForTest(0.999);
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      w.timeSetPaused(true);
+      w.timeSetSpeed(1);
+    });
+    await page.waitForTimeout(400); // let the panel re-measure after the cards land
+    const geo = await page.evaluate(() => {
+      const intersect = (a, b) => !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+      const box = (el) => { const b = el.getBoundingClientRect(); return { top: b.top, right: b.right, bottom: b.bottom, left: b.left }; };
+      const help = box(document.querySelector('[data-shortcut-hint]'));
+      const panelEl = document.querySelector('[data-shortcut-hint-panel]');
+      const panel = panelEl ? box(panelEl) : null;
+      const corners = {
+        dial: box(document.querySelector('[data-season-dial]')),
+        timeRow: box(document.querySelector('[data-time-row]')),
+        cornerRow: box(document.querySelector('[data-corner-row]')),
+      };
+      const toastCards = [...document.querySelectorAll('[data-toast]')].map(box);
+      const dockEl = document.querySelector('[data-palette-dock]');
+      const dockBox = dockEl ? box(dockEl) : null;
+      const hits = [];
+      for (const [name, b] of Object.entries(corners)) if (intersect(help, b)) hits.push('help∩' + name);
+      if (panel) for (const [name, b] of Object.entries(corners)) if (intersect(panel, b)) hits.push('panel∩' + name);
+      for (const [i, tb] of toastCards.entries()) {
+        if (intersect(help, tb)) hits.push('help∩toast#' + i);
+        if (panel && intersect(panel, tb)) hits.push('panel∩toast#' + i);
+      }
+      if (dockBox) {
+        if (intersect(help, dockBox)) hits.push('help∩dock');
+        if (panel && intersect(panel, dockBox)) hits.push('panel∩dock');
+      }
+      return {
+        vp: innerWidth + 'x' + innerHeight,
+        help, panel,
+        corners,
+        toastCount: toastCards.length,
+        hits,
+        helpInViewport: help.top >= 0 && help.bottom <= innerHeight && help.left >= 0 && help.right <= innerWidth,
+        panelInViewport: panel ? (panel.top >= 0 && panel.bottom <= innerHeight && panel.left >= 0 && panel.right <= innerWidth) : null,
+        // the fixture is deterministic: exactly two season-arrival cards
+        // (raised via two re-armed crossings at 8x, all inside TOAST_MS —
+        // the cards live 7s on wall clock and the fixture runs in ~1s).
+        // A wrong count means the fixture broke — fail loudly instead of
+        // measuring a wrong stack.
+        toastStackExact: toastCards.length === 2,
+      };
+    });
+    rec.record(
+      'chrome.help-lane-no-intersection@' + width + 'x' + height,
+      geo.hits.length === 0 && geo.helpInViewport && geo.panelInViewport === true && geo.toastStackExact,
+      JSON.stringify(geo),
+    );
+    const re = realErrors(errors);
+    rec.record('chrome.no-console-errors@' + width + 'x' + height, re.length === 0, re.slice(0, 3).join(' | '));
+    await page.close();
+  }
 }
 
 async function checkPolish() {
@@ -660,6 +778,7 @@ for (const check of checks.split(',')) {
   else if (check === 'keys') await checkKeys();
   else if (check === 'audio') await checkAudio();
   else if (check === 'touch') await checkTouch();
+  else if (check === 'chrome') await checkChrome();
   else {
     console.error('[GATE] unknown check: ' + check);
     process.exit(2);

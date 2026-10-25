@@ -37,6 +37,7 @@ import { PerfOverlay } from './ui/PerfOverlay';
 import { usePlacementStore, seedStarterPatchIfFresh } from './render/placementStore';
 import { maybeSeedDemoWorld } from './engine/testHook';
 import { SEASON_INFO } from './data/seasons';
+import { CHROME_TUNING } from './data/chrome';
 import { LIGHT_WARMTH, LONG_SHADOWS } from './data/polish';
 import { theme } from './ui/theme';
 
@@ -189,7 +190,7 @@ body[data-magnifier-hit='1'] canvas { cursor: url("data:image/svg+xml,%3Csvg xml
       {loaded && <SeasonDial />}
       {loaded && <TimeControls />}
       {loaded && (
-        <div style={{ position: 'absolute', top: 108, right: 12 }}>
+        <div style={{ position: 'absolute', top: CHROME_TUNING.toastLaneTop, right: 12 }}>
           <ResetDialog />
         </div>
       )}
