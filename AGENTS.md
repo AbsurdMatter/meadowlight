@@ -39,7 +39,8 @@ what belongs in the current session. Never work ahead of the session scope.
 
 1. Voxel meadow with soft golden-hour lighting and gentle camera orbit.
 2. Freeform placement of 6+ flower species, hive, bee bath, bee hotel,
-   paths, and wild-corner patches — all voxel, all charming.
+   p
+aths, and wild-corner patches — all voxel, all charming.
 3. Pollinator appeal simulation: diversity + bloom succession + water +
    shelter drive bee population; bees visibly forage between flowers.
 4. Season dial: bloom succession visible; single-species meadows show gaps.
@@ -77,7 +78,8 @@ change, note the current visual state; after, compare and confirm nothing
 regressed. If instancing loses per-instance color/shape/shadows, fix the
 instancing — do not ship the regression.
 
-### Branch & commit process
+### Branch & commi
+t process
 Work on a `vibe/sessionN-*` branch. Main receives changes only via pull request
 after user verification. Commit in small, separately-describable units (core
 work, tests, atmosphere — separate commits) and push each.
@@ -113,7 +115,8 @@ anything added then abandoned.
 If a verification step requires installing system packages, native libraries,
 or chasing environment dependencies (e.g. X11, browsers for headless testing),
 stop and propose the simplest honest alternative (in-app harness, manual user
-check) instead of continuing to install.
+check) instead of
+ continuing to install.
 
 ### Commit granularity is mandatory
 Every session's work lands as multiple commits, each independently describable:
@@ -149,7 +152,8 @@ working.
 A UI feature is verified only when the harness checks what the user actually
 experiences. For panels, toasts, and overlays that means reading rendered
 geometry from the DOM: element present AND within the viewport AND visible —
-never string-presence in innerHTML, handler invocation, or absence of errors.
+nev
+er string-presence in innerHTML, handler invocation, or absence of errors.
 (The notebook hub shipped broken through two "verifications" that checked the
 DOM for the panel's text while it rendered 850px below the fold:
 position:absolute inside a small corner wrapper pushes children off-viewport —
@@ -163,6 +167,17 @@ Headings are load-bearing anchors (people link to them, agents navigate by
 them); an append must never silently leave a stale label above grown content.
 (A "Session 1 post-mortem" heading accumulated sessions 2 and 3 without anyone
 updating it — caught by the user, not the process.)
+
+### Comment authorship prefixes (session 9, user decision)
+Every PR/issue comment starts with a role prefix on its FIRST line: the
+coding agent writes **[AGENT]**, the supervising/architect agent writes
+**[ARCHITECT]**. Both post under the same GitHub identity, so the prefix is
+the only durable record of who said what — keep it on the first line so it
+survives collapsed comment previews. Applies to all session comments from
+session 9 round 2 onward; commits and issues keep their existing
+conventions. The purpose is review forensics: when reading a session thread
+later, the reader can tell implementation reports from verdict relays,
+diagnoses, and process directives at a glance.
 
 ## Session 1 decisions (context for later sessions)
 - Rendering: one InstancedMesh per species-part; instance colors are written
@@ -180,7 +195,8 @@ updating it — caught by the user, not the process.)
 ## Session 2 decisions (context for later sessions)
 - Input handling is DOM-level on the canvas, with a deselect-first right
   click: left = place (tool selected) / inspect (no tool); right = deselect
-  the active tool first, and only with no tool selected does right-click
+  the active tool first, and only with no tool selected doe
+s right-click
   remove. preventDefault on contextmenu so the browser menu never appears.
   Ghost preview and click placement both resolve through the single
   resolvePlacement() (terrain ray-marched, so the ghost sits on the actual
@@ -211,7 +227,8 @@ updating it — caught by the user, not the process.)
   sim-frozen-but-animating state (user decision, PR #37). Implementation:
   ONE shared scaled dt (engine/scaledTime.ts) ticked from Sky.tsx's single
   time site, `dt * timeMultiplier()`, exactly 0 when paused. Every animation
-  system (bees, visitors, fireflies, sway, rain, clouds, glow) consumes
+  system (bees, visitors, fireflies, sway, rain, clouds, glow) c
+onsumes
   `scaledDelta()`/`scaledElapsed()` from it — never R3F's raw delta or
   `clock.elapsedTime` for world motion. Perf/frame-time measurement is the
   one exception and stays RAW (a device's real frame cost must be observable
