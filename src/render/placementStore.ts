@@ -27,6 +27,7 @@ import { flowerBlocked } from '../engine/collision';
 import { groundAt } from '../engine/ground';
 import type { MilestoneId } from '../data/milestones';
 import { starterPatchFor } from '../engine/starterPatch';
+import { recordForInspection, appendRecord, type JournalRecord } from '../engine/sightingJournal';
 
 export interface Toast {
   id: number;
@@ -118,6 +119,14 @@ export interface PlacementState {
   nudgesShown: string[];
   /** O1: mark a nudge shown (idempotent; persists) */
   markNudgeShown: (id: string) => void;
+  /**
+   * O2 (v4, #40): the first-sighting journal — a permanent record of what
+   * the glass has shown (persisted v9 additive). One record per
+   * (kind, subject, season); the journal adds no new facts, only a record.
+   */
+  journal: JournalRecord[];
+  /** O2: record a glass inspection (idempotent per kind+subject+season) */
+  recordSighting: (entry: MagnifierEntry) => void;
   /** #10: harvest a ready hive — jar + ceremony state + warm fact toast */
   harvestHoney: (hiveId: string) => boolean;
   /** #10: hive ids currently mid-harvest-dip (the render reads this) */
@@ -303,6 +312,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   worldSeed: initial.worldSeed ?? 12345,
   seedingEpoch: initial.seedingEpoch ?? 0,
   visitorWindows: initial.visitorWindows ?? [],
+  journal: initial.journal ?? [],
   nudgesShown: initial.nudgesShown ?? [],
   harvestDips: {},
   hivePopup: null,
@@ -327,6 +337,16 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   },
   magnifierEntry: null,
   setMagnifierEntry: (e) => set({ magnifierEntry: e }),
+  recordSighting: (entry) => {
+    // O2: the journal records what the glass SHOWS. One write path, keyed
+    // per (kind, subject, season) — inspecting gains purpose, seasons gain
+    // a goal. Pure record; no facts, no new state shapes.
+    const s = get();
+    const record = recordForInspection(entry, s.season);
+    if (!record) return;
+    const next = appendRecord(s.journal, record);
+    if (next !== s.journal) set({ journal: next });
+  },
   markNudgeShown: (id) => {
     // O1: idempotent; the nudge list persists so a nudge never re-fires
     const s = get();
@@ -378,6 +398,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       worldSeed: Math.floor(Math.random() * 2147483647),
       seedingEpoch: 0,
       visitorWindows: [],
+      journal: [],
       nudgesShown: [],
       // #11: reset returns the calendar to a fresh summer start, unheld
       toasts: [],
@@ -428,6 +449,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       worldSeed: w.worldSeed ?? 12345,
       seedingEpoch: w.seedingEpoch ?? 0,
       visitorWindows: w.visitorWindows ?? [],
+      journal: w.journal ?? [],
       nudgesShown: w.nudgesShown ?? [],
     });
     // #11: the reload must re-derive the calendar position from the blob —
@@ -454,6 +476,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       worldSeed: s.worldSeed,
       seedingEpoch: s.seedingEpoch,
       visitorWindows: s.visitorWindows,
+      journal: s.journal,
       nudgesShown: s.nudgesShown,
     });
   },

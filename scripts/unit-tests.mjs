@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts', 'visits.ts', 'magnifierHit.ts', 'starterPatch.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts', 'visits.ts', 'magnifierHit.ts', 'starterPatch.ts', 'sightingJournal.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -107,6 +107,7 @@ const { resolveWildlifeHit, nextWildlifeEntry } = require(OUT + '/engine/magnifi
 const { MAGNIFIER_WILDLIFE } = require(OUT + '/data/magnifierWildlife.js');
 const { MAGNIFIER_KINDS } = require(OUT + '/data/magnifierKinds.js');
 const { starterPatchFor } = require(OUT + '/engine/starterPatch.js');
+const { recordForInspection, appendRecord, journalKey } = require(OUT + '/engine/sightingJournal.js');
 const { ONBOARDING_TUNING } = require(OUT + '/data/onboarding.js');
 
 const mkItem = (plantId, x = 0, z = 0) => ({ id: plantId + ':' + x + ':' + z, plantId, position: [x, 0, z], rotationY: 0, phase: 0 });
@@ -1293,6 +1294,7 @@ test('N2 save v8 load path: a v7 blob loads losslessly; visitedSeasons round-tri
   assert.strictEqual(loaded.visitorWindows[0], 'queenbumble:spring', 'visitor windows preserved');
   assert.strictEqual(loaded.worldSeed, 777, 'seed preserved');
   assert.strictEqual(loaded.seedingEpoch, 3, 'epoch preserved');
+  assert.deepStrictEqual(loaded.journal, [], 'pre-v9 save = empty journal (additive)');
   assert.deepStrictEqual(loaded.nudgesShown, [], 'pre-v9 save = no nudges shown (additive)');
   // round-trip a v8 save with a visit ledger
   loaded.items[0].visitedSeasons = ['summer'];
@@ -1437,6 +1439,47 @@ test('O1: the starter patch species bloom in the boot season (alive on frame one
     assert.ok(def, 'known species: ' + it.plantId);
     assert.ok(def.bloom.includes('summer'), it.plantId + ' blooms in the boot season');
   }
+});
+
+test('O2: the journal records exactly one entry per (kind, subject, season)', () => {
+  // a flower inspection
+  const flower = recordForInspection({ kind: 'flower', itemId: 'f1' }, 'summer');
+  assert.deepStrictEqual(flower, { kind: 'flower', subject: 'f1', season: 'summer' });
+  let list = appendRecord([], flower);
+  list = appendRecord(list, flower);
+  assert.strictEqual(list.length, 1, 're-inspecting the same flower in one season writes nothing new');
+  // a new season is a new sighting ("seen in every season")
+  const nextSeason = recordForInspection({ kind: 'flower', itemId: 'f1' }, 'autumn');
+  list = appendRecord(list, nextSeason);
+  assert.strictEqual(list.length, 2, 'the same flower in a later season is a new record');
+  // wildlife + structures key by their kind-enum subject
+  const visitor = recordForInspection({ kind: 'visitor', visitorId: 'queenbumble' }, 'spring');
+  assert.deepStrictEqual(visitor, { kind: 'visitor', subject: 'queenbumble', season: 'spring' });
+  const structure = recordForInspection({ kind: 'structure', structureId: 'hive' }, 'summer');
+  assert.deepStrictEqual(structure, { kind: 'structure', subject: 'hive', season: 'summer' });
+  list = appendRecord(list, visitor);
+  list = appendRecord(list, structure);
+  assert.strictEqual(list.length, 4, 'per-kind records coexist');
+  // distinct subjects never collide
+  const other = recordForInspection({ kind: 'flower', itemId: 'f2' }, 'summer');
+  list = appendRecord(list, other);
+  assert.strictEqual(list.length, 5, 'a different flower is a different record');
+  // a null entry writes nothing
+  assert.strictEqual(recordForInspection(null, 'summer'), null, 'no entry = no record');
+  // keys are exact and stable
+  assert.strictEqual(journalKey(flower), 'flower:f1:summer');
+});
+
+test('O2: the journal round-trips through the save (v9 additive)', () => {
+  clearSavedWorld();
+  const world = loadWorld();
+  const rec = { kind: 'visitor', subject: 'butterfly', season: 'summer' };
+  saveWorld({ ...world, journal: [rec, rec, { kind: 'flower', subject: 'x', season: 'summer' }] });
+  const back = loadWorld();
+  assert.strictEqual(back.journal.length, 2, 'journal dedupes + round-trips');
+  assert.deepStrictEqual(back.journal[0], rec);
+  assert.deepStrictEqual(back.nudgesShown, [], 'nudges absent = none shown');
+  clearSavedWorld();
 });
 
 

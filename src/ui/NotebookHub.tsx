@@ -1,6 +1,10 @@
 import { Component, useEffect, useState, type ReactNode } from 'react';
 import { PLANTS } from '../data/plants';
 import { STRUCTURES } from '../data/structures';
+import { MAGNIFIER_WILDLIFE } from '../data/magnifierWildlife';
+import { PLANT_BY_ID } from '../data/plants';
+import { STRUCTURE_BY_ID } from '../data/structures';
+import type { JournalRecord } from '../engine/sightingJournal';
 import {
   PLANT_FACTS,
   STRUCTURE_FACTS,
@@ -45,6 +49,23 @@ const factText = (id: string): string | null => {
   return all.find((f) => f.id === id)?.text ?? null;
 };
 
+/** O2: the journal row's display label — flowers/structures by name,
+ *  wildlife by the glass's own name (one source: the same tables the card
+ *  reads; the journal adds no new facts). */
+function journalLabel(r: JournalRecord): string {
+  if (r.kind === 'flower') {
+    // the subject is the placed id — resolve the species name from the
+    // live world (display only; the record itself is the saved ground truth)
+    const item = usePlacementStore.getState().items.find((i) => i.id === r.subject);
+    const def = item ? PLANT_BY_ID[item.plantId] : undefined;
+    return def ? def.name : 'A flower';
+  }
+  if (r.kind === 'structure') {
+    return STRUCTURE_BY_ID[r.subject as keyof typeof STRUCTURE_BY_ID]?.name ?? r.subject;
+  }
+  return MAGNIFIER_WILDLIFE[r.subject]?.name ?? r.subject;
+}
+
 const hubPanelStyle: React.CSSProperties = {
   // fixed to the viewport, not the hub button's corner wrapper — an absolute
   // panel inside that wrapper resolves top/left against the tiny corner box
@@ -72,6 +93,7 @@ function HubInner() {
   const milestones = usePlacementStore((s) => s.milestones);
   const foundRecipes = usePlacementStore((s) => s.foundRecipes);
   const visitorWindows = usePlacementStore((s) => s.visitorWindows);
+  const journal = usePlacementStore((s) => s.journal);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -162,6 +184,22 @@ function HubInner() {
               </div>
             ) : null;
           })}
+
+          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>FIRST SIGHTINGS</h4>
+          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
+            What your glass has shown you — the meadow keeps the list.
+          </div>
+          {journal.length === 0 ? (
+            <div style={{ fontSize: 13, opacity: 0.6, marginBottom: 6 }}>
+              🔒 Nothing yet — arm the glass and hover anything living.
+            </div>
+          ) : (
+            journal.map((r) => (
+              <div key={`${r.kind}:${r.subject}:${r.season}`} data-journal-record={`${r.kind}:${r.subject}:${r.season}`} style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 6 }}>
+                ✨ <strong>{journalLabel(r)}</strong> — first seen in {r.season}
+              </div>
+            ))
+          )}
 
           <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>WILD VISITORS</h4>
           <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>

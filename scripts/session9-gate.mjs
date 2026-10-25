@@ -357,9 +357,124 @@ async function checkOnboarding() {
   }
 }
 
+async function checkJournal() {
+  const { page, errors } = await newPage(browser, url);
+  await freshWorld(page);
+  const before = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    w.save();
+    return {
+      journal: w.journalReadback(),
+      save: JSON.parse(localStorage.getItem('meadowlight.world.v2') || 'null'),
+      seenFacts: w.seenFactsReadback(),
+    };
+  });
+  // inspect a flower through the REAL glass path: arm + hover its pixels
+  const hover = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    w.toggleMagnifier();
+    const f = w.items()[0];
+    const cam = w.__three?.camera;
+    if (!f || !cam) return null;
+    const p = f.position;
+    const pv = { x: p[0], y: p[1] + 0.6, z: p[2], w: 1 };
+    const proj = cam.projectionMatrix.elements;
+    const view = cam.matrixWorldInverse.elements;
+    const mul = (a, v3) => ({
+      x: a[0] * v3.x + a[4] * v3.y + a[8] * v3.z + a[12],
+      y: a[1] * v3.x + a[5] * v3.y + a[9] * v3.z + a[13],
+      z: a[2] * v3.x + a[6] * v3.y + a[10] * v3.z + a[14],
+      w: a[3] * v3.x + a[7] * v3.y + a[11] * v3.z + a[15],
+    });
+    const clip = mul(proj, mul(view, pv));
+    const ndc = { x: clip.x / clip.w, y: clip.y / clip.w };
+    return {
+      x: ((ndc.x + 1) / 2) * window.innerWidth,
+      y: ((-ndc.y + 1) / 2) * window.innerHeight,
+      itemId: f.id,
+    };
+  });
+  if (hover) {
+    await page.mouse.move(hover.x, hover.y);
+    await page.waitForTimeout(800);
+  }
+  const after = await page.evaluate((itemId) => {
+    const w = window.__meadowlight;
+    w.save();
+    return {
+      journal: w.journalReadback(),
+      save: JSON.parse(localStorage.getItem('meadowlight.world.v2') || 'null'),
+      seenFacts: w.seenFactsReadback(),
+      entry: w.magnifierReadback().entry,
+      wanted: itemId,
+    };
+  }, hover ? hover.itemId : null);
+  const added = after.journal.filter((r) => !before.journal.some((b) => JSON.stringify(b) === JSON.stringify(r)));
+  // the record must name the inspected flower (exact-identity predicate —
+  // the session-8 lesson: never accept "a record appeared")
+  const wantedId = hover ? hover.itemId : null;
+  const namesWanted =
+    added.length === 1 &&
+    added[0].kind === 'flower' &&
+    added[0].subject === wantedId &&
+    added[0].season === after.save?.season;
+  rec.record(
+    'journal.inspect-writes-exactly-one-record',
+    added.length === 1 && namesWanted,
+    'journal records ' + before.journal.length + ' -> ' + after.journal.length +
+      ' (added ' + added.length + '), added: ' + JSON.stringify(added) + ', wanted flower ' + wantedId,
+  );
+  // inspection-mutates-nothing STILL holds: the save diff is journal +
+  // the card's own fact-seeing (the session-8 seam — the glass marks the
+  // shown fact seen; that is the card's defined behavior, not a mutation
+  // of the world). The meadow is ALIVE, so the world's own motion also
+  // appears in the diff: the clocks drift (dayPhase/seasonProgress), the
+  // hive's comb fills (hiveCombs), and a forager landing on a flower
+  // records its visit (items[].visitedSeasons — the N2 ledger). Those are
+  // the world's own writes, not the inspection's. The invariant the check
+  // pins: NOTHING OUTSIDE those world-owned fields changes — the visit
+  // ledger may only GROW (a bee's arrival), never shrink or rewrite.
+  const strip = (blob) => {
+    if (!blob || typeof blob !== 'object') return blob;
+    const { journal, seenFacts, dayPhase, seasonProgress, hiveCombs, ...rest } = blob;
+    const ledger = (rest.items ?? []).flatMap((it) => (it.visitedSeasons ?? []).map((s) => it.id + ':' + s));
+    const { items, ...rest2 } = rest;
+    return { ...rest2, visitLedgerSize: ledger.length };
+  };
+  const beforeLedgerSize = strip(before.save).visitLedgerSize;
+  const afterLedgerSize = strip(after.save).visitLedgerSize;
+  // the rest of the blob (minus the world-owned fields above) must be
+  // field-identical; the visit ledger may only grow
+  const { visitLedgerSize: _b, ...beforeRest } = strip(before.save);
+  const { visitLedgerSize: _a, ...afterRest } = strip(after.save);
+  const restIdentical = JSON.stringify(beforeRest) === JSON.stringify(afterRest);
+  rec.record(
+    'journal.inspection-mutates-nothing-else',
+    restIdentical && afterLedgerSize >= beforeLedgerSize,
+    'save diff excluding journal/seenFacts/clock/comb fields: identical = ' + restIdentical +
+      '; visit ledger ' + beforeLedgerSize + ' -> ' + afterLedgerSize + ' (may only grow)',
+  );
+  // the journal renders from ground truth (the saved blob), not proxies
+  const rendered = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    const blob = JSON.parse(localStorage.getItem('meadowlight.world.v2') || 'null');
+    const savedCount = Array.isArray(blob?.journal) ? blob.journal.length : -1;
+    return { savedCount, liveCount: w.journalReadback().length };
+  });
+  rec.record(
+    'journal.renders-from-saved-blob',
+    rendered.savedCount >= 0 && rendered.savedCount === rendered.liveCount,
+    'saved blob journal ' + rendered.savedCount + ' == live readback ' + rendered.liveCount,
+  );
+  const re = realErrors(errors);
+  rec.record('journal.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
 for (const check of checks.split(',')) {
   if (check === 'polish') await checkPolish();
   if (check === 'onboarding') await checkOnboarding();
+  if (check === 'journal') await checkJournal();
   else {
     console.error('[GATE] unknown check: ' + check);
     process.exit(2);

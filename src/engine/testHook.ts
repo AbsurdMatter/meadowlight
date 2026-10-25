@@ -140,6 +140,9 @@ declare global {
     freshBootForTest: () => void;
     /** O1 tests: pin the world seed (same-seed determinism check) */
     __setWorldSeedForTest: (seed: number) => void;
+    /** O2 (v4, #40): the journal readback (the store reads the saved blob) */
+    journalReadback: () => unknown[];
+    seenFactsReadback: () => string[];
     /** #45 (v4): the precip burst spread readback */
     rainSpreadReadback: () => { x: number; z: number };
       ghostPosition: () => { pos: [number, number, number] | null; valid: boolean };
@@ -321,6 +324,8 @@ export function installTestHook() {
     /** O1 (v4, #39): the full first-time boot — reset + starter patch */
     freshBootForTest: () => freshBootForTest(),
     __setWorldSeedForTest: (seed) => usePlacementStore.setState({ worldSeed: seed }),
+    journalReadback: () => usePlacementStore.getState().journal,
+    seenFactsReadback: () => usePlacementStore.getState().seenFacts,
     rainSpreadReadback: () => ({ ...rainSpreadDebug }),
     ghostPosition: () => ({ pos: ghostDebug.pos, valid: ghostDebug.valid }),
     ghostVariation: () => ghostDebug.variation,
