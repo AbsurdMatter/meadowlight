@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { FOG, HILLS, shapedHeight } from '../data/environment';
 import { skyPaletteAt, dayPhase, advanceDay } from '../engine/dayCycle';
-import { advanceSeasons, seasonClockOverridden } from '../engine/seasonClock';
+import { advanceSeasons } from '../engine/seasonClock';
 import { timeMultiplier } from '../engine/timeControl';
 import { tickScaledTime, scaledDelta } from '../engine/scaledTime';
 import { tickPrecipSchedule, setPrecipDeltaSource } from '../engine/rainSchedule';
@@ -75,8 +75,10 @@ export function Sky() {
     // (day cycle + #11 season calendar). Nothing else may tick either —
     // a second advance site is how two clocks drift apart. The speed
     // control (#36 item 2) multiplies ONCE, here, for both clocks — never
-    // two separate scalings; paused = multiplier 0. Overrides (forced
-    // phase/season) still hold their clocks exactly as before.
+    // two separate scalings; paused = multiplier 0. A forced day phase
+    // holds the day clock (setDayPhase's own override); the season clock
+    // has no hold — a dial selection starts the season and this site
+    // keeps drifting it (round-1 finding 3).
     const scaled = delta * timeMultiplier();
     advanceDay(scaled);
     // N1 (session 8): natural precipitation advances at the SAME single time
@@ -85,15 +87,13 @@ export function Sky() {
     // the ONE season-advance site) so the weather calendar never repeats
     // box-fresh each year. Pause fully freezes it (scaled = 0); 1x-8x scales
     // the weather with everything else. No input path exists.
-    {
-      const store = usePlacementStore.getState();
-      tickPrecipSchedule(store.worldSeed, store.seedingEpoch, store.season);
-    }
-    if (!seasonClockOverridden()) {
-      const store = usePlacementStore.getState();
-      const crossed = advanceSeasons(scaled, store.season);
-      if (crossed.length > 0) store.arriveAtSeason(crossed[crossed.length - 1], true);
-    }
+    const store = usePlacementStore.getState();
+    tickPrecipSchedule(store.worldSeed, store.seedingEpoch, store.season);
+    // Round-1 finding 3: the season calendar ALWAYS advances here — a dial
+    // selection starts the season (progress 0) and this site keeps drifting
+    // it; the seasonClock has no hold state. Pause freezes it via scaled = 0.
+    const crossed = advanceSeasons(scaled, store.season);
+    if (crossed.length > 0) store.arriveAtSeason(crossed[crossed.length - 1], true);
     const phase = dayPhase();
     const palette = skyPaletteAt(phase);
     const key = paletteKey(palette);

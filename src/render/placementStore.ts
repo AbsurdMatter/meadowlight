@@ -10,8 +10,7 @@ import { variationFor, type PlacementVariation } from '../engine/variation';
 import type { Season } from '../data/seasons';
 import { setDayPhase, dayPhase } from '../engine/dayCycle';
 import {
-  forceSeason,
-  resumeSeasonClock,
+  startSeasonAt,
   seasonProgress,
   setSeasonProgressForTest,
 } from '../engine/seasonClock';
@@ -86,8 +85,6 @@ export interface PlacementState {
   setSeason: (season: Season) => void;
   /** #11: natural season rollover — store label + gentle toast, one path */
   arriveAtSeason: (season: Season, announce: boolean) => void;
-  /** #11: P panel / tests — release the manual override, calendar drifts */
-  resumeSeasonClock: () => void;
   /** #11: readback for the P panel / test hook */
   seasonProgress: () => number;
   /** #11: tests only — drive the calendar boundary directly */
@@ -250,9 +247,11 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       return { placementVariation: next };
     }),
   setSeason: (season) => {
-    // #11: the manual dial is the SAME override path the P panel uses —
-    // one trigger pattern (forceSeason holds the calendar; resume releases)
-    forceSeason(season);
+    // #11: the manual dial is the SAME start path the P panel uses — one
+    // trigger pattern. Round-1 finding 3: a selection STARTS the season
+    // (clock at its start, auto-advance continues); it never holds the
+    // calendar — the TimeControls pause button is the only pause.
+    startSeasonAt(season);
     // U1: crossing into a different season is a rollover for the flora —
     // the dial seeds exactly like the natural calendar (one shared site)
     if (get().season !== season) seedVolunteers(season, false);
@@ -280,10 +279,6 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
     // state + epoch. The dial (setSeason) crosses a season boundary too and
     // shares this helper; nothing else may seed.
     seedVolunteers(season, false);
-    get().save();
-  },
-  resumeSeasonClock: () => {
-    resumeSeasonClock();
     get().save();
   },
   seasonProgress: () => seasonProgress(),
@@ -408,7 +403,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       visitorWindows: [],
       journal: [],
       nudgesShown: [],
-      // #11: reset returns the calendar to a fresh summer start, unheld
+      // #11: reset returns the calendar to a fresh summer start
       toasts: [],
       modalOpen: false,
       seenFacts: [],
@@ -420,8 +415,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
       harvestDips: {},
       hivePopup: null,
     });
-    forceSeason('summer');
-    resumeSeasonClock();
+    startSeasonAt('summer');
     setSeasonProgressForTest(0);
     get().save();
   },

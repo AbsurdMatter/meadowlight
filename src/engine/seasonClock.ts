@@ -21,13 +21,17 @@ import { SEASONS, SEASON_SECONDS, type Season } from '../data/seasons';
  * module exposes seasonFor(progress, baseSeason) for the rollover check
  * so the ONE definition of "which season is next" lives here.
  *
- * Override semantics mirror setDayPhase exactly: forceSeason (the manual
- * dial AND the P-panel trigger — one path) holds the calendar still so
- * the forced season holds; resume releases it. A save written during an
- * override stores the held position and resumes held, like dayPhase.
+ * Jump semantics (round-1 finding 3): selecting a season STARTS it — the
+ * clock is set to that season's start and auto-advance continues from
+ * there (the session-7 snap-vs-ease precedent: a jump moves the calendar,
+ * never freezes it). Pausing is the TimeControls' pause button's job
+ * alone: this module has no pause state, so nothing a player does can
+ * silently stop the year. (The day clock keeps its setDayPhase hold —
+ * that override is the P panel's, a dev-only surface; the player-facing
+ * dial never touches it.)
  */
 
-const clock = { progress: 0, paused: false };
+const clock = { progress: 0 };
 
 /** progress through the current season, 0..1 (0 = season just began) */
 export function seasonProgress(): number {
@@ -50,7 +54,6 @@ export function nextSeason(s: Season): Season {
  * use this to drive fast-forward deterministically).
  */
 export function advanceSeasons(deltaSeconds: number, currentSeason: Season): Season[] {
-  if (clock.paused) return [];
   if (deltaSeconds <= 0) return [];
   clock.progress += deltaSeconds / SEASON_SECONDS;
   const crossed: Season[] = [];
@@ -64,25 +67,15 @@ export function advanceSeasons(deltaSeconds: number, currentSeason: Season): Sea
 }
 
 /**
- * Manual dial / P panel: jump to a season and hold it there. This is the
- * OVERRIDE — the calendar pauses at the new season's start so the forced
- * season holds; resumeSeasonClock() releases it. The saved seasonProgress
- * always reflects the live position (0 under an override), so a save
- * written mid-override resumes exactly there — never corrupts.
+ * Manual dial / P panel: START the given season — the calendar jumps to
+ * that season's beginning (progress 0) and keeps drifting from there
+ * (round-1 finding 3: a season jump never stops progression; the only
+ * pause is the TimeControls button). The saved seasonProgress always
+ * reflects the live position, so a save written after a jump resumes
+ * exactly there — never corrupts.
  */
-export function forceSeason(_season: Season): void {
+export function startSeasonAt(_season: Season): void {
   clock.progress = 0;
-  clock.paused = true;
-}
-
-/** P panel / tests: release the override, the calendar drifts again */
-export function resumeSeasonClock(): void {
-  clock.paused = false;
-}
-
-/** true while an override holds the calendar still */
-export function seasonClockOverridden(): boolean {
-  return clock.paused;
 }
 
 /** tests: set the raw progress directly (boundary cases; never ships to UI) */

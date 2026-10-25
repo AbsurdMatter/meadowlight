@@ -79,7 +79,7 @@ const { MEADOW_SIZE, terrainHeight } = require(OUT + '/engine/terrain.js');
 const { isRaining, setPrecipitatingForTest } = require(OUT + '/engine/weather.js');
 const { skyPaletteAt, GOLDEN_HOUR, sunElevation, isDaylight, isDusk, DUSK_START, DUSK_END, DAY_CYCLE_SECONDS, dayPhase, setDayPhase, advanceDay, resumeDayCycle, dayCycleOverridden } = require(OUT + '/engine/dayCycle.js');
 const { SEASONS, SEASON_SECONDS } = require(OUT + '/data/seasons.js');
-const { seasonProgress, advanceSeasons, forceSeason, resumeSeasonClock, seasonClockOverridden, setSeasonProgressForTest, nextSeason } = require(OUT + '/engine/seasonClock.js');
+const { seasonProgress, advanceSeasons, startSeasonAt, setSeasonProgressForTest, nextSeason } = require(OUT + '/engine/seasonClock.js');
 const { companionSet, newlyFormed, recipeBetween } = require(OUT + '/engine/companions.js');
 const { RECIPES, RECIPE_TUNING, recipeFor } = require(OUT + '/data/recipes.js');
 const { advanceComb, combReady, fillAfterHarvest } = require(OUT + '/engine/honey.js');
@@ -447,7 +447,6 @@ test('#45: the precipitation spawn distribution spreads the burst across the ful
 // ---------- session 6 U1 (#11): auto-advancing season calendar ----------
 test('season clock: 9-minute season (25% shorter, #6384616654), rollover reports the crossed season', () => {
   assert.strictEqual(SEASON_SECONDS, 540, 'season length 25% shorter per the close-round pacing call');
-  resumeSeasonClock();
   setSeasonProgressForTest(0);
   // half a season, DERIVED from the constant (never the old 360 literal —
   // the 25% shorten would silently break a hardcoded half)
@@ -461,28 +460,28 @@ test('season clock: 9-minute season (25% shorter, #6384616654), rollover reports
 });
 
 test('season clock: winter wraps to spring; huge deltas cross several seasons', () => {
-  resumeSeasonClock();
   setSeasonProgressForTest(0.9);
   const crossed = advanceSeasons(SEASON_SECONDS * 2.5, 'winter');
   assert.deepStrictEqual(crossed, ['spring', 'summer', 'autumn'], 'wrap + multi-cross in order');
   assert.ok(Math.abs(seasonProgress() - 0.4) < 1e-9, 'fractional remainder preserved');
 });
 
-test('season clock: forceSeason holds (manual dial = P panel = one override path)', () => {
-  forceSeason('spring');
-  assert.ok(seasonClockOverridden(), 'the dial/panel override must hold the calendar');
-  assert.strictEqual(seasonProgress(), 0, 'an override starts the forced season at its beginning');
-  assert.deepStrictEqual(advanceSeasons(9999, 'spring'), [], 'held clock never advances');
-  assert.strictEqual(seasonProgress(), 0, 'held clock position is stable');
-  resumeSeasonClock();
-  assert.ok(!seasonClockOverridden(), 'resume releases the override');
+test('season clock: startSeasonAt STARTS the season and never holds (round-1 finding 3)', () => {
+  // the manual dial = the P panel = ONE start path: a selection sets the
+  // clock to the season's start and auto-advance CONTINUES — the calendar
+  // has no hold state; only the TimeControls pause freezes it
+  setSeasonProgressForTest(0.7);
+  startSeasonAt('spring');
+  assert.strictEqual(seasonProgress(), 0, 'a selection starts the chosen season at its beginning');
+  const crossed = advanceSeasons(9999, 'spring');
+  assert.ok(crossed.length > 0, 'a started season keeps drifting — advanceSeasons never holds');
+  assert.ok(seasonProgress() < 1, 'advance left the clock mid-season, not frozen');
 });
 
 test('season clock: boundary interpretation — 0.999 saves resume the SAME season, never pre-roll', () => {
   // the save->reload->resume path: a position < 1 is mid-season by
   // definition; only advanceSeasons may cross a boundary, so a reload
   // can never re-interpret a near-boundary save as the next season
-  resumeSeasonClock();
   setSeasonProgressForTest(0.999);
   assert.ok(seasonProgress() < 1, 'a saved 0.999 loads as the same season');
   const crossed = advanceSeasons(10, 'summer');
@@ -1212,9 +1211,9 @@ test('N1 windows live mid-season: a boundary crossing never resets or silences w
   }
   assert.ok(sawMidSeason, 'windows start/end mid-season, not only at boundaries');
   assert.ok(sawSpill, 'some windows spill past the boundary (weather survives rollover)');
-  // and the resolver keeps evaluating: a forced season holds progress 0,
-  // so the verdict comes from the season OPENING windows, never a stale carry
-  resumeSeasonClock();
+  // and the resolver keeps evaluating at a stable world point: the same
+  // (seed, epoch, season) tuple always yields the same live verdict,
+  // never a stale carry from a previous tick
   setSeasonProgressForTest(0.5);
   tickPrecipScheduleForTest(5, 2, 'autumn');
   const held = precipReadback().current;

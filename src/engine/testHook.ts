@@ -14,7 +14,7 @@ import { precipitationVisual } from './weather';
 import { precipReadback, tickPrecipScheduleForTest } from './rainSchedule';
 import { allWildlife } from '../render/magnifierProbes';
 import { dayPhase } from './dayCycle';
-import { seasonProgress, seasonClockOverridden } from './seasonClock';
+import { seasonProgress } from './seasonClock';
 import { honeyDebug } from '../render/BeeSwarm';
 import { setSpeedStep, setPaused, isPaused, currentSpeedStep, timeMultiplier, type SpeedStep } from './timeControl';
 import { scaledElapsed } from './scaledTime';
@@ -48,14 +48,12 @@ declare global {
       structures: () => PlacedStructure[];
       clear: () => void;
       setSeason: (season: 'spring' | 'summer' | 'autumn' | 'winter') => void;
-      /** #11: release the manual/P-panel season override */
-      resumeSeasonClock: () => void;
+      /** #11: the current season label (readback) */
+      seasonReadback: () => 'spring' | 'summer' | 'autumn' | 'winter';
       /** #11: 0..1 progress through the current season (readback) */
       seasonProgressReadback: () => number;
       /** #11: tests only — drive the calendar position directly */
       setSeasonProgressForTest: (p: number) => void;
-      /** #11: true while the calendar is held by an override */
-      seasonClockOverridden: () => boolean;
       /** U1 (session 7): the world's named seed state + epoch (readback) */
       worldSeedReadback: () => number;
       seedingEpochReadback: () => number;
@@ -245,10 +243,9 @@ export function installTestHook() {
     structures: () => usePlacementStore.getState().structures,
     clear: () => usePlacementStore.setState({ items: [], structures: [] }),
     setSeason: (season) => usePlacementStore.getState().setSeason(season),
-    resumeSeasonClock: () => usePlacementStore.getState().resumeSeasonClock(),
+    seasonReadback: () => usePlacementStore.getState().season,
     seasonProgressReadback: () => seasonProgress(),
     setSeasonProgressForTest: (p) => usePlacementStore.getState().setSeasonProgressForTest(p),
-    seasonClockOverridden: () => seasonClockOverridden(),
     worldSeedReadback: () => usePlacementStore.getState().worldSeed,
     seedingEpochReadback: () => usePlacementStore.getState().seedingEpoch,
     /** N2: per-flower visit ledger readback (persisted v8) */
