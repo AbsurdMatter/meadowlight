@@ -287,12 +287,46 @@ export function KeyboardShortcuts() {
             zIndex: 6,
           }}
         >
-          <div style={{ fontSize: theme.font.smallSize - 1, letterSpacing: 0.6, textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 6 }}>
+          <div style={{ fontSize: theme.font.smallSize - 1, letterSpacing: 0.6, textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 8 }}>
             {SHORTCUT_HINT.title}
           </div>
-          {SHORTCUT_HINT.lines.map((line) => (
-            <div key={line} style={{ fontSize: theme.font.smallSize + 1, lineHeight: theme.font.lineHeight }}>
-              {line}
+          {/* Round-1 finding 4: the content is a GROUPED LIST, not one
+              joined block — groups by area (Camera / Tools / Cancel), one
+              key + action pair per row. The key column is fixed-width so
+              the actions align; the layout is measured (the panel's own
+              placement was finding 2), not assumed. */}
+          {SHORTCUT_HINT.groups.map((group, gi) => (
+            <div key={group.heading} data-shortcut-group={group.heading} style={{ marginBottom: gi < SHORTCUT_HINT.groups.length - 1 ? 10 : 0 }}>
+              <div style={{ fontSize: theme.font.smallSize - 1, letterSpacing: 0.6, textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 3 }}>
+                {group.heading}
+              </div>
+              {group.rows.map((row) => (
+                <div
+                  key={row.key}
+                  data-shortcut-row
+                  style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontSize: theme.font.smallSize + 1, lineHeight: theme.font.lineHeight }}
+                >
+                  <span
+                    data-shortcut-key
+                    style={{
+                      flex: '0 0 64px',
+                      fontWeight: 600,
+                      color: theme.color.text,
+                      background: theme.color.parchment,
+                      border: `${theme.border.chunk}px solid ${theme.color.honeyDark}`,
+                      borderRadius: theme.border.radius,
+                      padding: '0 6px',
+                      textAlign: 'center',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {row.key}
+                  </span>
+                  <span data-shortcut-action style={{ color: theme.color.textSoft }}>
+                    {row.action}
+                  </span>
+                </div>
+              ))}
             </div>
           ))}
         </div>

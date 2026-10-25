@@ -103,13 +103,33 @@ export function escActionFor(s: EscSurfaces): EscAction | null {
   return null;
 }
 
-/** the "?" discoverability hint copy (composes with O1's nudge system) */
+/** the "?" hint panel's content — a grouped list, one key + action pair
+ *  per row (round-1 finding 4: the panel used to render three joined
+ *  lines — one block, not a list). Groups are by area: Camera (the held
+ *  movement/rotation keys), Tools (the single-fire toggles), Cancel
+ *  (ESC). Composes with O1's nudge system. */
 export const SHORTCUT_HINT = {
   title: 'Keyboard',
-  lines: [
-    'WASD — move the camera · Q E — turn the view',
-    'R — start over (asks first) · I — magnifying glass · J — journal',
-    'Esc — close whatever is open',
+  groups: [
+    {
+      heading: 'Camera',
+      rows: [
+        { key: 'W A S D', action: 'move the camera' },
+        { key: 'Q E', action: 'turn the view' },
+      ],
+    },
+    {
+      heading: 'Tools',
+      rows: [
+        { key: 'I', action: 'magnifying glass' },
+        { key: 'J', action: 'journal' },
+        { key: 'R', action: 'start over (asks first)' },
+      ],
+    },
+    {
+      heading: 'Cancel',
+      rows: [{ key: 'Esc', action: 'close whatever is open' }],
+    },
   ],
 } as const;
 

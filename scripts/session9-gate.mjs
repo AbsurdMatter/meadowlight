@@ -758,6 +758,127 @@ async function checkKeys() {
   await page.close();
 }
 
+/** round-1 finding 4: the "?" hint panel renders a GROUPED LIST — groups by
+ *  area (Camera / Tools / Cancel), one key + action pair per row — not one
+ *  joined block. Asserts structure (group headings + row count + key/action
+ *  pairing) AND measured layout (every row in-viewport, key chips aligned
+ *  to one column, no row overlapping another). Measure-don't-assume. */
+async function checkHintPanel() {
+  const { page, errors } = await newPage(browser, url);
+  await freshWorld(page);
+  await page.keyboard.press('?');
+  await page.waitForTimeout(300);
+  const layout = await page.evaluate(() => {
+    const panel = document.querySelector('[data-shortcut-hint-panel]');
+    if (!panel) return { error: 'panel missing' };
+    const groups = [...document.querySelectorAll('[data-shortcut-group]')];
+    const rows = [...document.querySelectorAll('[data-shortcut-row]')];
+    const keys = [...document.querySelectorAll('[data-shortcut-key]')];
+    const actions = [...document.querySelectorAll('[data-shortcut-action]')];
+    const box = (el) => el.getBoundingClientRect();
+    const pb = box(panel);
+    const inVp = (b) => b.top >= 0 && b.bottom <= innerHeight && b.left >= 0 && b.right <= innerWidth;
+    // every row's key chip + action must be in the viewport
+    const rowsInVp = rows.every((r) => inVp(box(r)));
+    // key chips share one left column: their lefts align within 1px
+    const keyLefts = keys.map((k) => box(k).left);
+    const keyAlign = keyLefts.length > 0 && Math.max(...keyLefts) - Math.min(...keyLefts) <= 1;
+    // no row overlaps another (vertical stack, real boxes)
+    let rowsOverlap = false;
+    for (let i = 0; i < rows.length; i++) {
+      for (let j = i + 1; j < rows.length; j++) {
+        const a = box(rows[i]), b = box(rows[j]);
+        if (!(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top)) {
+          rowsOverlap = true;
+        }
+      }
+    }
+    // group headings present + in order
+    const headings = groups.map((g) => g.getAttribute('data-shortcut-group'));
+    // expected content: key + action pairs (spot-check the pairing is real,
+    // not just structure — the first row of each group)
+    const pairs = rows.map((r) => {
+      const k = r.querySelector('[data-shortcut-key]')?.textContent?.trim() ?? '';
+      const a = r.querySelector('[data-shortcut-action]')?.textContent?.trim() ?? '';
+      return k + ' -> ' + a;
+    });
+    return {
+      panelInViewport: inVp(pb),
+      groupCount: groups.length,
+      headings,
+      rowCount: rows.length,
+      keyCount: keys.length,
+      actionCount: actions.length,
+      rowsInViewport: rowsInVp,
+      keyColumnAligned: keyAlign,
+      rowsDoNotOverlap: !rowsOverlap,
+      pairs,
+      panelSize: { w: +pb.width.toFixed(1), h: +pb.height.toFixed(1) },
+    };
+  });
+  const expectedGroups = ['Camera', 'Tools', 'Cancel'];
+  const expectedRows = 6; // 2 camera + 3 tools + 1 cancel
+  const ok =
+    !layout.error &&
+    layout.panelInViewport &&
+    layout.groupCount === 3 &&
+    JSON.stringify(layout.headings) === JSON.stringify(expectedGroups) &&
+    layout.rowCount === expectedRows &&
+    layout.keyCount === expectedRows &&
+    layout.actionCount === expectedRows &&
+    layout.rowsInViewport &&
+    layout.keyColumnAligned &&
+    layout.rowsDoNotOverlap &&
+    // pairing spot-check: every pair has a non-empty key AND action
+    layout.pairs.every((p) => p.includes(' -> ') && p.split(' -> ')[0].length > 0 && p.split(' -> ')[1].length > 0);
+  rec.record(
+    'keys.hint-panel-grouped-list',
+    ok,
+    layout.error
+      ? layout.error
+      : 'groups=' + JSON.stringify(layout.headings) +
+        ' rows=' + layout.rowCount +
+        ' keyColumnAligned=' + layout.keyColumnAligned +
+        ' rowsInViewport=' + layout.rowsInViewport +
+        ' rowsOverlap=' + !layout.rowsDoNotOverlap +
+        ' pairs=' + JSON.stringify(layout.pairs),
+  );
+  // also assert at a narrow viewport (the panel shrinks — finding 2 — the
+  // list must still be structured and in-viewport)
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.waitForTimeout(400); // let the panel re-measure
+  const narrow = await page.evaluate(() => {
+    const panel = document.querySelector('[data-shortcut-hint-panel]');
+    if (!panel) return { error: 'panel missing' };
+    const pb = panel.getBoundingClientRect();
+    const rows = [...document.querySelectorAll('[data-shortcut-row]')];
+    const inVp = (b) => b.top >= 0 && b.bottom <= innerHeight && b.left >= 0 && b.right <= innerWidth;
+    return {
+      panelInViewport: inVp(pb),
+      rowCount: rows.length,
+      rowsInViewport: rows.every((r) => inVp(r.getBoundingClientRect())),
+      // when the panel scrolls (maxHeight clamped), the panel itself is in
+      // viewport and every row is REACHABLE — scrollHeight <= clientHeight
+      // OR the panel scrolls internally (overflowY auto)
+      scrollable: panel.scrollHeight > panel.clientHeight + 1,
+      panelSize: { w: +pb.width.toFixed(1), h: +pb.height.toFixed(1) },
+    };
+  });
+  const narrowOk =
+    !narrow.error && narrow.panelInViewport && narrow.rowCount === expectedRows && narrow.rowsInViewport;
+  rec.record(
+    'keys.hint-panel-grouped-list@narrow',
+    narrowOk,
+    narrow.error
+      ? narrow.error
+      : 'rows=' + narrow.rowCount + ' rowsInViewport=' + narrow.rowsInViewport +
+        ' scrollable=' + narrow.scrollable + ' panel=' + JSON.stringify(narrow.panelSize),
+  );
+  const re2 = realErrors(errors);
+  rec.record('keys.hint-panel-no-console-errors', re2.length === 0, re2.slice(0, 3).join(' | '));
+  await page.close();
+}
+
 async function checkAudio() {
   const { page, errors } = await newPage(browser, url);
   await freshWorld(page);
@@ -855,7 +976,7 @@ for (const check of checks.split(',')) {
   if (check === 'polish') await checkPolish();
   else if (check === 'onboarding') await checkOnboarding();
   else if (check === 'journal') await checkJournal();
-  else if (check === 'keys') await checkKeys();
+  else if (check === 'keys') { await checkKeys(); await checkHintPanel(); }
   else if (check === 'audio') await checkAudio();
   else if (check === 'touch') await checkTouch();
   else if (check === 'chrome') await checkChrome();
