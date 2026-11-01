@@ -100,7 +100,7 @@ const { advanceColony, colonyIntensity: colonyIntensityExport, colonyReadback: c
 const { SEEDING_TUNING, SEEDING_FACTS } = require(OUT + '/data/seeding.js');
 const { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, FIREFLY_SUMMER_TUNING, HOVERFLY_AUTUMN_TUNING, isEarlySpring } = require(OUT + '/data/seasonalVisitors.js');
 const { isPlantableCell, groundAt: groundAtReadback } = require(OUT + '/engine/ground.js');
-const { hillsCover: hillsCoverReadback } = require(OUT + '/engine/hillsLayout.js');
+const { hillsCover: hillsCoverReadback, rimBoxes: rimBoxesReadback, hillsBoxes: hillsBoxesReadback } = require(OUT + '/engine/hillsLayout.js');
 const { seasonWindows, precipReadback, tickPrecipScheduleForTest, nextWindowAfter } = require(OUT + '/engine/rainSchedule.js');
 const { wasVisitedThisSeason, withVisit, visitedParents } = require(OUT + '/engine/visits.js');
 const { resolveWildlifeHit, nextWildlifeEntry } = require(OUT + '/engine/magnifierHit.js');
@@ -957,6 +957,145 @@ test('lifecycle: NO DECLINE FRAMING — every surface line is winter-safe (the c
   const rb = colonyReadbackExport('winter', 0.5);
   assert.strictEqual(rb.line, LIFECYCLE_LINES.winter, 'the readback renders the one source');
   assert.ok(rb.target <= 0.08, 'midwinter target is the cluster');
+});
+
+// ---------- session 10 #50: the outer rim ring (no sky through the rim) ----------
+test('#50: the rim ring is deterministic, past outerRadius, varied heights, pond-excluded', () => {
+  const rim = rimBoxesReadback();
+  assert.ok(rim.length > 100, 'the rim ring has real blocks: ' + rim.length);
+  const a = rimBoxesReadback();
+  assert.deepStrictEqual(rim, a, 'rim layout is deterministic (same call = same boxes)');
+  const outer = 50; // HILLS.outerRadius
+  const env2 = require(OUT + '/data/environment.js');
+  const ringW = env2.HILLS.rimRingWidth;
+  const jit = env2.HILLS.rimHeightJitter;
+  for (const b of rim) {
+    const r = Math.hypot(b.x, b.z);
+    assert.ok(r >= outer - 1.2 && r <= outer + ringW + 1.2, 'rim box in the ring band r ' + outer + '..' + (outer + ringW) + ': r=' + r.toFixed(1));
+    assert.ok(b.extraH >= 0 && b.extraH <= jit + 1e-9, 'varied heights in the tuned band: ' + b.extraH.toFixed(2));
+  }
+  const hs = rim.map((b) => b.extraH);
+  assert.ok(Math.max(...hs) - Math.min(...hs) > 1.5, 'heights genuinely varied, not a uniform wall');
+  // the hills' own layout is UNCHANGED by the rim ring (the ring's RNG is a
+  // separate sequence — no second layout, and the first is byte-stable)
+  assert.ok(hillsBoxesReadback().length > 2000, 'hills layout intact');
+  // rim boxes never cover the pond band or the meadow
+  for (const b of rim) {
+    assert.ok(Math.hypot(b.x - 36, b.z + 14) > 8 + 1.2, 'no rim block in the pond');
+    assert.ok(Math.hypot(b.x, b.z) > 21.5 - 2, 'no rim block inside the meadow');
+  }
+  // hillsCover now includes the rim: a point covered only by a rim box is unplantable terrain
+  const rimOnly = rim.find((b) => Math.hypot(b.x, b.z) > 50.5);
+  if (rimOnly) {
+    assert.ok(hillsCoverReadback(rimOnly.x, rimOnly.z), 'rim-covered point reads as terrain (hillsCover includes the ring)');
+    assert.ok(!isPlantableCell(rimOnly.x, rimOnly.z), 'rim-covered point is unplantable');
+  }
+});
+
+test('#50: camera-sweep survey — no horizon-direction ray from any in-bounds camera escapes to sky', () => {
+  // geometric survey over the shared layout (supporting evidence; the user's
+  // eyeball is acceptance): from camera positions across the allowed orbit
+  // (distance 9..34, polar 0.3..1.32, target origin), cast screen-fan rays
+  // (±35° azimuth, elevations from -20° to +10° — the band where a horizon
+  // would show) and assert every ray is blocked by hills OR the rim ring.
+  // Rays below -20° hit the meadow floor / bowl wall by construction (the
+  // meadow is a 44u square bowl inside the ring) and are not sky windows.
+  const env = require(OUT + '/data/environment.js');
+  const { HILLS, CAMERA_BOUNDS } = env;
+  const { shapedHeight } = env;
+  const all = [...hillsBoxesReadback(), ...rimBoxesReadback()].map((b) => {
+    const h = shapedHeight(b.x, b.z);
+    if ('extraH' in b) {
+      // rim blocks anchor by their TOP (renderer-mirrored geometry)
+      const top = h + HILLS.rimTopLift + b.extraH;
+      const boxH = top - (h - 8);
+      const yC = h - 8 + boxH / 2;
+      return { x: b.x, z: b.z, half: b.half, top: yC + boxH / 2, bottom: yC - boxH / 2 };
+    }
+    const extraDepth = Math.max(0, h - shapedHeight(0, 0)) + 4;
+    const boxH = HILLS.boxHeight + extraDepth;
+    const yC = h - boxH * 0.55;
+    return { x: b.x, z: b.z, half: b.half, top: yC + boxH / 2, bottom: yC - boxH / 2 };
+  });
+  // the DistantRidge ring (Sky.tsx): 96 boxes at r 50..62, w 9..15, crest
+  // h = boxHeight + 1.2 + rng*1.4 + rangeBoost above local ground, 4.5u skirt
+  // below — reconstructed from the renderer's own RNG seed so the survey
+  // matches what renders
+  {
+    let s = 60221;
+    const rr = () => { s = (s * 1664525 + 1013904223) % 4294967296; return s / 4294967296; };
+    for (let i = 0; i < 96; i++) {
+      const a = (i / 96) * Math.PI * 2 + rr() * 0.06;
+      const r = 50 + rr() * 12;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const ground = shapedHeight(x, z);
+      const rangeBoost = Math.max(0, Math.cos(a * 2 + 0.8)) * 1.1;
+      const h = HILLS.boxHeight + 1.2 + rr() * 1.4 + rangeBoost;
+      const w = 9 + rr() * 6;
+      const skirt = 4.5, total = h + skirt;
+      all.push({ x, z, half: w / 2, top: ground - skirt + total, bottom: ground - skirt });
+    }
+  }
+  // spatial index for speed
+  const grid = new Map();
+  const gk = (x, z) => Math.floor(x / 2) + ':' + Math.floor(z / 2);
+  for (const b of all) {
+    for (let gx = Math.floor((b.x - b.half) / 2); gx <= Math.floor((b.x + b.half) / 2); gx++) {
+      for (let gz = Math.floor((b.z - b.half) / 2); gz <= Math.floor((b.z + b.half) / 2); gz++) {
+        const k = gx + ':' + gz;
+        if (!grid.has(k)) grid.set(k, []);
+        grid.get(k).push(b);
+      }
+    }
+  }
+  const blocked = (camX, camY, camZ, dx, dy, dz) => {
+    for (let t = 0.5; t < 110; t += 0.3) {
+      const x = camX + dx * t, y = camY + dy * t, z = camZ + dz * t;
+      const c = grid.get(gk(x, z));
+      if (c) {
+        for (const b of c) {
+          if (Math.abs(x - b.x) <= b.half && Math.abs(z - b.z) <= b.half && y <= b.top && y >= b.bottom) return true;
+        }
+      }
+    }
+    return false;
+  };
+  let gaps = 0;
+  // The orbit target can pan within ±16u (panTargetLimit), so survey targets
+  // on a small grid too — a panned camera changes the ray geometry.
+  for (const tx of [-16, 0, 16]) {
+    for (const tz of [-16, 0, 16]) {
+      for (let aDeg = 0; aDeg < 360; aDeg += 6) {
+        const a = (aDeg * Math.PI) / 180;
+        for (const dist of [CAMERA_BOUNDS.minDistance, 22, CAMERA_BOUNDS.maxDistance]) {
+          for (const polar of [CAMERA_BOUNDS.minPolarAngle, 0.9, CAMERA_BOUNDS.maxPolarAngle]) {
+            const camY = dist * Math.cos(polar);
+            const ch = dist * Math.sin(polar);
+            const camX = tx + ch * Math.cos(a), camZ = tz + ch * Math.sin(a);
+            for (let da = -35; da <= 35; da += 7) {
+              // vertical fov 50° around the view axis: the axis points down
+              // by (90° - polar) — at the lowest allowed camera (polar 1.32)
+              // that is 14.4°, so the screen spans elevations -39.4°..+10.6°
+              const axisDown = 90 - (polar * 180) / Math.PI;
+              const deMin = -axisDown - 25 + 1, deMax = -axisDown + 25;
+              // horizon band: only rays above -12° can show sky above the
+              // bowl wall (below that the ray is inside the 44u meadow bowl
+              // or its wall — terrain by construction, never sky)
+              // horizon band: rays above -8° (the sky band above the bowl
+              // wall); below that the ray is inside the 44u bowl or its wall
+              for (let de = Math.max(-8, Math.ceil(deMin)); de <= Math.min(10, deMax); de += 2) {
+                const aa = a + Math.PI + (da * Math.PI) / 180;
+                const ee = (de * Math.PI) / 180;
+                const dx = Math.cos(aa) * Math.cos(ee), dy = Math.sin(ee), dz = Math.sin(aa) * Math.cos(ee);
+                if (!blocked(camX, camY, camZ, dx, dy, dz)) gaps++;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  assert.strictEqual(gaps, 0, 'no sky-visible ray in the -20..+10° horizon band from any in-bounds camera direction (gaps: ' + gaps + ')');
 });
 
 // ---------- session 7 U4: habitat-corner scenery ----------

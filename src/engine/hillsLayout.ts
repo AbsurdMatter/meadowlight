@@ -29,6 +29,50 @@ export interface HillsBox {
   half: number;
 }
 
+/**
+ * Session 10 #50: EXTRA outer-rim blocks (varied heights) layered past
+ * HILLS.outerRadius so no horizontal direction shows sky through the rim.
+ * Same lattice discipline as the hills themselves: deterministic LCG (its
+ * own seed, appended AFTER the hills' draw sequence so the existing layout
+ * is byte-unchanged), step spacing, jitter, size in the same band, pond-band
+ * exclusion, and terrain-anchored heights (the renderer gives them the same
+ * treatment as hills boxes). hillsLayout stays the ONE shared source: the
+ * renderer draws exactly these boxes and isPlantableCell's footprint check
+ * reads them too — no second layout.
+ */
+export interface RimBox extends HillsBox {
+  /** extra height above the hills' own boxHeight (varied, 0..rimHeightJitter) */
+  extraH: number;
+}
+
+/** the extra rim ring's lattice parameters (tuning in data/environment.ts) */
+export function rimBoxes(): RimBox[] {
+  if (rimCache) return rimCache;
+  const rng = makeRng(20261050);
+  const step = HILLS.step;
+  const inner = HILLS.outerRadius;
+  const outer = HILLS.outerRadius + HILLS.rimRingWidth;
+  const boxes: RimBox[] = [];
+  for (let x = -outer; x <= outer; x += step) {
+    for (let z = -outer; z <= outer; z += step) {
+      const r = Math.hypot(x, z);
+      if (r < inner || r > outer) continue;
+      if (isPondBandCell(x, z)) continue;
+      const jx = x + (rng() - 0.5) * step * HILLS.jitter;
+      const jz = z + (rng() - 0.5) * step * HILLS.jitter;
+      const size = step * (HILLS.minSize + rng() * (HILLS.maxSize - HILLS.minSize));
+      const extraH = rng() * HILLS.rimHeightJitter;
+      rng(); // color pick parity with the renderer's draw
+      boxes.push({ x: jx, z: jz, half: size / 2, extraH });
+    }
+  }
+  rimCache = boxes;
+  return boxes;
+}
+
+let rimCache: RimBox[] | null = null;
+
+
 /** #29 pass 2's exact band boundary — the hills loop skips these cells */
 function isPondBandCell(x: number, z: number): boolean {
   const half = (HILLS.step * HILLS.maxSize) / 2 + HILLS.step * HILLS.jitter * 0.5;
@@ -88,6 +132,15 @@ export function hillsCover(x: number, z: number): boolean {
     HILLS.innerRadius - halfMax * Math.SQRT2 - HILLS.step * HILLS.jitter * 0.5;
   if (r < reach) return false;
   for (const b of hillsBoxes()) {
+    if (Math.abs(x - b.x) <= b.half && Math.abs(z - b.z) <= b.half) return true;
+  }
+  // #50: the extra outer rim ring is part of the rendered rim — a cell
+  // covered only by a rim box is not plantable either (the rim is terrain,
+  // not meadow). Same exact containment test against the same shared source.
+  const rimReach =
+    HILLS.outerRadius + HILLS.rimRingWidth + halfMax + HILLS.step * HILLS.jitter * 0.5;
+  if (r > rimReach) return false;
+  for (const b of rimBoxes()) {
     if (Math.abs(x - b.x) <= b.half && Math.abs(z - b.z) <= b.half) return true;
   }
   return false;

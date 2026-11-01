@@ -14,7 +14,7 @@ import {
   backgroundHeight,
 } from '../data/environment';
 import { groundAt } from '../engine/ground';
-import { hillsBoxes } from '../engine/hillsLayout';
+import { hillsBoxes, rimBoxes } from '../engine/hillsLayout';
 
 function makeRng(seed: number) {
   let s = seed;
@@ -65,7 +65,7 @@ function Hills() {
 
   const count = useMemo(() => {
     const inner = HILLS.innerRadius;
-    const outer = HILLS.outerRadius;
+    const outer = HILLS.outerRadius + HILLS.rimRingWidth;
     const step = HILLS.step;
     const area = Math.PI * (outer * outer - inner * inner);
     return Math.floor(area / (step * step));
@@ -103,6 +103,37 @@ function Hills() {
         const base = nearMeadow
           ? meadow[Math.floor(rng() * meadow.length)]
           : hills[Math.floor(rng() * hills.length)];
+        const t = THREE.MathUtils.clamp(
+          (local - HILLS.fogBlendStart) / (HILLS.fogBlendEnd - HILLS.fogBlendStart),
+          0,
+          1,
+        );
+        color.copy(base).lerp(fogColor, t * HILLS.fogBlendStrength);
+        mesh.setColorAt(i, color);
+        i++;
+    }
+    // #50 (session 10): the extra outer rim ring — rim blocks of VARIED
+    // heights past outerRadius, from the same shared layout source
+    // (rimBoxes()), same palette + fog logic, terrain-anchored. No horizontal
+    // direction shows sky through the rim.
+    const rngRim = makeRng(20261050);
+    for (const box of rimBoxes()) {
+        rngRim(); rngRim(); rngRim(); rngRim(); // layout consumed: jx, jz, size, extraH
+        const jx = box.x;
+        const jz = box.z;
+        const size = box.half * 2;
+        const h = backgroundHeight(jx, jz);
+        // #50: rim blocks anchor by their TOP (h + rimTopLift + extraH), not
+        // the hills' 0.55-crest rule — the ring must clear the horizon rays
+        // from the lowest allowed camera. The box still extends deep below
+        // ground so no bottom edge can show.
+        const top = h + HILLS.rimTopLift + box.extraH;
+        const boxH = top - (h - 8);
+        mat.makeScale(size, boxH, size);
+        mat.setPosition(jx, h - 8 + boxH / 2, jz);
+        mesh.setMatrixAt(i, mat);
+        const local = Math.hypot(jx, jz);
+        const base = hills[Math.floor(rngRim() * hills.length)];
         const t = THREE.MathUtils.clamp(
           (local - HILLS.fogBlendStart) / (HILLS.fogBlendEnd - HILLS.fogBlendStart),
           0,

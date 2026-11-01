@@ -25,7 +25,7 @@ import { starsDebug } from '../render/NightSky';
 import { starVisibility } from './nightSky';
 import { NIGHT_SKY_TUNING } from '../data/nightSky';
 import { isPlantableCell } from './ground';
-import { hillsBoxes } from './hillsLayout';
+import { hillsBoxes, rimBoxes } from './hillsLayout';
 import { setFireflyForce } from '../render/Fireflies';
 import { rainDebug } from '../render/Rain';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
@@ -130,6 +130,8 @@ declare global {
       /** #36 hive popup: open/close via the store path the click uses */
       openHivePopup: (hiveId: string) => void;
       hillsBoxesReadback: () => { x: number; z: number; half: number }[];
+      /** #50: the extra outer rim ring (shared source readback) */
+      rimBoxesReadback: () => { x: number; z: number; half: number; extraH: number }[];
       milestones: () => string[];
       beeCount: () => number;
       beeDebug: () => unknown;
@@ -353,6 +355,7 @@ export function installTestHook() {
     isPlantableCellReadback: (x, z) => isPlantableCell(x, z),
     openHivePopup: (hiveId) => usePlacementStore.getState().openHivePopup(hiveId),
     hillsBoxesReadback: () => hillsBoxes().map((b) => ({ x: b.x, z: b.z, half: b.half })),
+    rimBoxesReadback: () => rimBoxes().map((b) => ({ x: b.x, z: b.z, half: b.half, extraH: b.extraH })),
     milestones: () => usePlacementStore.getState().milestones,
     beeCount: () => beeDebug.count,
     beeDebug: () => ({ ...beeDebug }),

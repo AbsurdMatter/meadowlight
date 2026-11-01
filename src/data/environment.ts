@@ -99,6 +99,28 @@ export const HILLS = {
   fogBlendStart: 24,
   fogBlendEnd: 50,
   fogBlendStrength: 0.55,
+  /**
+   * #50 (session 10): the EXTRA outer rim ring — rim blocks of varied
+   * heights layered just past outerRadius so no horizontal direction shows
+   * sky through the rim (the rim reads as enclosing hills in every
+   * direction, never a fence with holes). Rendered from the SAME shared
+   * hillsLayout source (rimBoxes()), same palette/fog logic, terrain-anchored.
+   */
+  /** how far past outerRadius the extra rim ring extends (world units) */
+  rimRingWidth: 14,
+  /**
+   * Rim block heights are anchored differently from the hills': the renderer
+   * places a rim box so its TOP sits at shapedHeight + rimTopLift (instead of
+   * the hills' 0.45*boxH crest), giving the ring a tall silhouette that
+   * clears the horizon rays from the lowest allowed camera (y=8.4 at
+   * polar 1.32 / dist 34 — rays up to ~+11° elevation at the screen top must
+   * hit the ring). rimTopLift is the total height above local ground;
+   * per-block variation rimHeightJitter (0..this) keeps the rim reading as
+   * hills of varied heights, not a uniform wall.
+   */
+  rimTopLift: 24.0,
+  /** extra height variation of rim blocks (0..this), on top of rimTopLift */
+  rimHeightJitter: 3.0,
 };
 
 /**
