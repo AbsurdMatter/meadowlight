@@ -94,6 +94,11 @@ async function checkChrome() {
     await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
     await page.waitForFunction(() => window.__meadowlight, null, { timeout: 20000 }).catch(() => {});
     await page.waitForTimeout(2500);
+    // round-8 font race: await fonts.ready + settle before measuring anything
+    await page.evaluate(async () => {
+      try { await document.fonts.ready; } catch { /* ignore */ }
+    });
+    await page.waitForTimeout(300);
     // dismiss onboarding (the full-viewport overlay would intersect everything)
     await page.evaluate(() => {
       const btns = [...document.querySelectorAll('button')].filter((b) => /next|begin/i.test(b.textContent || ''));
@@ -834,6 +839,13 @@ async function checkHintPanel() {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 8000 });
   await page.waitForFunction(() => window.__meadowlight, null, { timeout: 20000 }).catch(() => {});
   await page.waitForTimeout(2000);
+  // round-8 font race (PR #49 comment #6562533719): the Windows dump showed
+  // fontsReady:"loading" at measure time — the check measured mid-font-load.
+  // Await document.fonts.ready + a settle beat BEFORE any measurement.
+  await page.evaluate(async () => {
+    try { await document.fonts.ready; } catch { /* fonts API absent */ }
+  });
+  await page.waitForTimeout(300);
   await page.evaluate(() => {
     const btns = [...document.querySelectorAll('button')].filter((b) => /next|begin/i.test(b.textContent || ''));
     btns[btns.length - 1]?.click();
@@ -842,6 +854,12 @@ async function checkHintPanel() {
   await freshWorld(page);
   await page.keyboard.press('?');
   await page.waitForTimeout(300);
+  // round-8: settle again after opening (font swap/reflow) so the panel
+  // measurement also runs with fonts fully loaded
+  await page.evaluate(async () => {
+    try { await document.fonts.ready; } catch { /* ignore */ }
+  });
+  await page.waitForTimeout(200);
   const layout = await page.evaluate(() => {
     const panel = document.querySelector('[data-shortcut-hint-panel]');
     if (!panel) return { error: 'panel missing' };
@@ -938,10 +956,58 @@ async function checkHintPanel() {
       pairs,
       panelSize: { w: +pb.width.toFixed(1), h: +pb.height.toFixed(1) },
       evidence,
+      // round-8 derivation-based solver-decision inputs, measured live on
+      // THIS platform: content (border-box) vs lane band. The assertion is
+      // on the SOLVER'S DECISION matching these inputs — passable on every
+      // rasterizer — not on any absolute pixel count.
+      solver: (() => {
+        const cs = getComputedStyle(panelEl);
+        const padT = parseFloat(cs.paddingTop) || 0;
+        const padB = parseFloat(cs.paddingBottom) || 0;
+        const bY = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+        const lc = panelEl.lastElementChild;
+        const contentTop = pb.top + (parseFloat(cs.borderTopWidth) || 0) + padT;
+        const contentBorderBox = lc
+          ? Math.ceil((lc.getBoundingClientRect().bottom - contentTop) + padT + padB + bY)
+          : Math.ceil(panelEl.scrollHeight + bY);
+        const laneBand = layout_lane_band();
+        return {
+          contentBorderBox,
+          laneBand,
+          maxHeightApplied: cs.maxHeight !== 'none',
+          // the solver's decision, recomputed from the measured inputs:
+          // lane >= content -> no clamp (sizes to content); lane < content
+          // -> clamped to lane + scrolls inside
+          expectNoScroll: laneBand >= contentBorderBox,
+        };
+        function layout_lane_band() {
+          const corner = document.querySelector('[data-corner-controls]') ?? document.querySelector('[data-corner-row]');
+          const floorY = (corner ? corner.getBoundingClientRect().top : innerHeight) - 8;
+          return Math.ceil(floorY - pb.top);
+        }
+      })(),
     };
   });
   const expectedGroups = ['Camera', 'Tools', 'Cancel'];
   const expectedRows = 6; // 2 camera + 3 tools + 1 cancel
+  // round-8 (PR #49 comment #6562533719): the assertion is DERIVATION-BASED
+  // and platform-proof — assert the solver's DECISION matches the measured
+  // inputs, never an absolute pixel count (toast/panel font metrics differ
+  // ~42-60px between Linux FreeType and Windows ClearType, which moved the
+  // rasterizer class from the panel to the toast fixture):
+  //   lane >= content -> needsScroll=false AND panel height ~= content
+  //   lane <  content -> maxHeight applied AND capped at lane AND scrolls
+  const sv = layout.solver ?? { contentBorderBox: 0, laneBand: 0, expectNoScroll: true, maxHeightApplied: false };
+  const noScrollBranchOk =
+    sv.expectNoScroll &&
+    !layout.needsScroll &&
+    Math.abs(layout.panelSize.h - sv.contentBorderBox) <= 2;
+  const cappedBranchOk =
+    !sv.expectNoScroll &&
+    layout.needsScroll &&
+    sv.maxHeightApplied &&
+    layout.panelSize.h <= sv.laneBand + 1.5;
+  const solverDecisionOk = sv.expectNoScroll ? noScrollBranchOk : cappedBranchOk;
   const ok =
     !layout.error &&
     layout.panelInViewport &&
@@ -951,10 +1017,7 @@ async function checkHintPanel() {
     layout.keyCount === expectedRows &&
     layout.actionCount === expectedRows &&
     layout.rowsInViewport &&
-    // round-2: at an ample viewport (1280x800, lane ~379px) the panel must
-    // NOT need internal scroll — a panel needing scroll where the lane is
-    // ample is a layout bug (the round-2 failure on real hardware)
-    !layout.needsScroll &&
+    solverDecisionOk &&
     layout.keyColumnAligned &&
     layout.rowsDoNotOverlap &&
     // pairing spot-check: every pair has a non-empty key AND action
@@ -971,6 +1034,8 @@ async function checkHintPanel() {
         ' needsScroll=' + layout.needsScroll +
         ' rowsOverlap=' + !layout.rowsDoNotOverlap +
         ' panel=' + JSON.stringify(layout.panelSize) +
+        ' branch=' + (sv.expectNoScroll ? 'no-scroll' : 'capped+scroll') +
+        ' solver={content:' + sv.contentBorderBox + ',lane:' + sv.laneBand + ',maxH:' + sv.maxHeightApplied + '}' +
         ' pairs=' + JSON.stringify(layout.pairs) +
         // round-7: ALWAYS dump the evidence (pass or fail) — on a fail this
         // is ground truth from the failing platform
@@ -990,6 +1055,16 @@ async function checkHintPanel() {
     const borderY = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
     const lastChild = panel.lastElementChild;
     const corner = document.querySelector('[data-corner-controls]') ?? document.querySelector('[data-corner-row]');
+    // round-8: solver-decision inputs measured live at this viewport too
+    const padT = parseFloat(cs.paddingTop) || 0;
+    const padB = parseFloat(cs.paddingBottom) || 0;
+    const bY = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+    const contentTop = pb.top + (parseFloat(cs.borderTopWidth) || 0) + padT;
+    const contentBorderBox = lastChild
+      ? Math.ceil((lastChild.getBoundingClientRect().bottom - contentTop) + padT + padB + bY)
+      : Math.ceil(panel.scrollHeight + bY);
+    const floorY = (corner ? corner.getBoundingClientRect().top : innerHeight) - 8;
+    const laneBand = Math.ceil(floorY - pb.top);
     return {
       panelInViewport: inVp(pb),
       rowCount: rows.length,
@@ -999,6 +1074,17 @@ async function checkHintPanel() {
       // OR the panel scrolls internally (overflowY auto)
       scrollable: panel.scrollHeight > panel.clientHeight + 1,
       panelSize: { w: +pb.width.toFixed(1), h: +pb.height.toFixed(1) },
+      solver: {
+        contentBorderBox,
+        laneBand,
+        maxHeightApplied: cs.maxHeight !== 'none',
+        expectNoScroll: laneBand >= contentBorderBox,
+      },
+      toastCards: [...document.querySelectorAll('[data-toast]')].map((t) => {
+        const b = t.getBoundingClientRect();
+        const csT = getComputedStyle(t);
+        return { w: +b.width.toFixed(1), h: +b.height.toFixed(1), maxWidth: csT.maxWidth, padding: csT.padding };
+      }),
       // round-7 permanent instrumentation (also dumped on narrow/short)
       evidence: {
         clientHeight: panel.clientHeight,
@@ -1020,13 +1106,14 @@ async function checkHintPanel() {
       },
     };
   });
-  // round-6 (PR #49 comment #6561476001): at 360x800 the lane is ample
-  // (~335px vs ~204-246px content across rasterizers), so by construction
-  // (height = min(content, lane), both live-measured) the panel sizes to
-  // content and must NOT need scroll — on EVERY platform, not just
-  // headless. The exact no-scroll assertion now holds at narrow too.
+  // round-8: derivation-based at narrow too — the solver's decision must
+  // match the measured inputs on THIS platform (no absolute pixel counts)
+  const nsv = narrow.solver ?? { contentBorderBox: 0, laneBand: 0, expectNoScroll: true, maxHeightApplied: false };
+  const narrowNoScrollBranch = nsv.expectNoScroll && !narrow.scrollable && Math.abs(narrow.panelSize.h - nsv.contentBorderBox) <= 2;
+  const narrowCappedBranch = !nsv.expectNoScroll && narrow.scrollable && nsv.maxHeightApplied && narrow.panelSize.h <= nsv.laneBand + 1.5;
   const narrowOk =
-    !narrow.error && narrow.panelInViewport && narrow.rowCount === expectedRows && narrow.rowsInViewport && !narrow.scrollable;
+    !narrow.error && narrow.panelInViewport && narrow.rowCount === expectedRows && narrow.rowsInViewport &&
+    (nsv.expectNoScroll ? narrowNoScrollBranch : narrowCappedBranch);
   rec.record(
     'keys.hint-panel-grouped-list@narrow',
     narrowOk,
@@ -1034,6 +1121,9 @@ async function checkHintPanel() {
       ? narrow.error
       : 'rows=' + narrow.rowCount + ' rowsInViewport=' + narrow.rowsInViewport +
         ' needsScroll=' + narrow.scrollable + ' panel=' + JSON.stringify(narrow.panelSize) +
+        ' branch=' + (nsv.expectNoScroll ? 'no-scroll' : 'capped+scroll') +
+        ' solver={content:' + nsv.contentBorderBox + ',lane:' + nsv.laneBand + ',maxH:' + nsv.maxHeightApplied + '}' +
+        ' toastCards=' + JSON.stringify(narrow.toastCards) +
         '\n  [hint-evidence@narrow] ' + JSON.stringify(narrow.evidence),
   );
   // round-6: a genuinely SHORT viewport (360x360 — corner row wraps to
