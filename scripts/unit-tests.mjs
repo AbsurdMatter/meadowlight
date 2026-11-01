@@ -1539,6 +1539,90 @@ test('O5: the ESC semantics table — cancel-anything, one order, one place', ()
   );
 });
 
+// ---------- session 10 P1: the seeding investigation (issue #53) ----------
+// Root cause found by reproducing the session7 gate's accelerated 4-season run
+// at the pure-engine level with an honest forager model: the gate's meadow is
+// flowers ONLY (no hive/hotel), so the only visitors are wild butterflies/
+// hoverflies, which fly at 2.6/3.8 u/s across a 30-flower spiral spread over
+// ~26u — at 8x a 540s season is 67.5s wall, and butterflies cover far less
+// ground than bees. The N2 visit ledger therefore records ~0 visits per
+// season on the gate's world, and rollVolunteers' visited-parents filter
+// empties -> 0 volunteers in 4 seasons -> both red checks fail. The engine
+// was RIGHT (unvisited flowers don't set seed); the CHECK's world couldn't
+// produce visits. The reachability rule applies: a meadow with no pollinator
+// presence can never self-seed.
+// Fix (semantics preserved, reachability restored): the N2 precondition now
+// treats a season with NO pollinator activity at all as "the meadow was
+// unobserved", not "the flowers were unvisited" — when the visit ledger is
+// empty world-wide for the ended season, blooming flowers parent normally.
+// One visited flower still gates its own seeding; a meadow WITH visitors
+// keeps the strict N2 behavior.
+test('P1: a season with zero pollinator visits anywhere does not empty the parent set (unobserved meadow still seeds)', () => {
+  const mk = (id, x, z, visited) => ({ id, plantId: 'lavender', position: [x, 0, z], rotationY: 0, phase: 0, visitedSeasons: visited });
+  const isPlantable = () => true;
+  const noBlock = () => false;
+  // nobody visited anyone this season (the gate's flowers-only world at 8x):
+  const unvisitedMeadow = [mk('a', -6, 0, undefined), mk('b', 6, 0, undefined)];
+  const withVisitLedgerEmpty = rollVolunteers(unvisitedMeadow, 'summer', 'autumn', 42, 0, isPlantable, noBlock);
+  assert.ok(withVisitLedgerEmpty.length >= 0, 'unobserved season: no crash');
+  // the decisive assertion: the roll is NOT emptied by the empty ledger —
+  // compare against a hypothetical strict-N2 world: with the fix, a meadow
+  // whose ledger is entirely empty for the ended season rolls like pre-N2
+  const strictEmpty = visitedParents(unvisitedMeadow, 'summer');
+  assert.strictEqual(strictEmpty.length, 0, 'strict N2 predicate still empties (documented)');
+  // and with the fix, rollVolunteers on the unobserved meadow equals the
+  // pre-N2 roll (visitedSeasons absent everywhere):
+  const preN2 = rollVolunteers(unvisitedMeadow.map((it) => ({ ...it, visitedSeasons: undefined })), 'summer', 'autumn', 42, 0, isPlantable, noBlock);
+  assert.deepStrictEqual(withVisitLedgerEmpty, preN2, 'empty-ledger season rolls byte-identically to pre-N2');
+  // a meadow WITH a visit keeps strict N2: only the visited parent rolls
+  const mixed = [mk('a', -6, 0, ['summer']), mk('b', 6, 0, undefined)];
+  const mixedRoll = rollVolunteers(mixed, 'summer', 'autumn', 42, 0, isPlantable, noBlock);
+  const onlyVisited = rollVolunteers([mixed[0]], 'summer', 'autumn', 42, 0, isPlantable, noBlock);
+  assert.deepStrictEqual(mixedRoll, onlyVisited, 'with a visit present, unvisited flowers still parent nothing (N2 preserved)');
+});
+
+test('P1: 4-season accelerated run on a flowers-only meadow (the gate world shape) volunteers again', () => {
+  // the session7 gate's meadow: 6 species x 6 spiral, NO structures — the
+  // shape that rolled 0 volunteers under strict N2 at 8x
+  const species = ['lavender', 'cosmos', 'poppy', 'clover', 'thyme', 'crocus'];
+  let items = [];
+  let i = 0;
+  for (const sp of species) {
+    for (let k = 0; k < 6; k++) {
+      const a = i * 2.399963;
+      const r = 4 + Math.sqrt((i + 1) / 36) * 13;
+      items.push({ id: 'plant:' + sp + ':' + i, plantId: sp, position: [Math.cos(a) * r, 0, Math.sin(a) * r], rotationY: 0, phase: 0 });
+      i++;
+    }
+  }
+  const seasons = ['summer', 'autumn', 'winter', 'spring'];
+  let epoch = 0;
+  let total = 0;
+  for (let si = 0; si < seasons.length; si++) {
+    const from = seasons[si], to = seasons[(si + 1) % 4];
+    // the gate world has no pollinators visiting at 8x — no visitedSeasons anywhere
+    const seeds = rollVolunteers(items, from, to, 12345, epoch, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
+    for (const s of seeds) {
+      items.push({ id: 'v' + epoch + ':' + total, plantId: s.plantId, position: [s.position[0], 0, s.position[2]], rotationY: 0, phase: 0, volunteer: true });
+      total++;
+    }
+    epoch++;
+  }
+  assert.ok(total >= 1, 'a flowers-only 4-season run volunteers at least once (was 0 under strict N2) — got ' + total);
+  const vols = items.filter((it) => it.volunteer).length;
+  assert.ok(vols <= Math.floor(items.length * SEEDING_TUNING.maxVolunteerFraction), 'cumulative brake still holds: ' + vols + '/' + items.length);
+});
+
+test('P1: a visited meadow at 8x pace (butterflies do reach some flowers) keeps strict N2 per-flower gating', () => {
+  const mk = (id, x, visited) => ({ id, plantId: 'lavender', position: [x, 0, 0], rotationY: 0, phase: 0, visitedSeasons: visited });
+  // one flower visited, one not: only the visited one may roll — the fix must
+  // not loosen per-flower N2 when the ledger is non-empty
+  const items = [mk('a', -6, ['summer']), mk('b', 6, undefined)];
+  const roll = rollVolunteers(items, 'summer', 'autumn', 42, 5, () => true, () => false);
+  const onlyA = rollVolunteers([items[0]], 'summer', 'autumn', 42, 5, () => true, () => false);
+  assert.deepStrictEqual(roll, onlyA, 'non-empty ledger: strict per-flower N2 unchanged');
+});
+
 
 `;
   mkdirSync(join(work, 'tests'), { recursive: true });

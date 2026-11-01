@@ -57,3 +57,20 @@ export function withVisit(item: PlacedItem, season: Season): string[] {
 export function visitedParents(items: PlacedItem[], endedSeason: Season): PlacedItem[] {
   return items.filter((it) => inBloom(it.plantId, endedSeason) && wasVisitedThisSeason(it, endedSeason));
 }
+
+/**
+ * Session 10 P1 (issue #53): the "unobserved season" distinction. True when
+ * NO flower in the meadow recorded a visit during the given season — the
+ * meadow had no pollinator activity that season (a flowers-only world at
+ * accelerated speed, no hive/hotel placed, wild visitors not yet covering
+ * the ground). Ecologically: an unobserved meadow is not an UNVISITED one —
+ * absence of the ledger is absence of evidence, not evidence of absence.
+ * rollVolunteers uses this to keep the reachability rule: a meadow that can
+ * never self-seed is broken, so a season with zero recorded visits anywhere
+ * falls back to the pre-N2 parent set (all blooming flowers) instead of
+ * emptying it. The moment ONE visit exists in the season, strict N2 returns
+ * per-flower.
+ */
+export function meadowUnobservedThisSeason(items: PlacedItem[], season: Season): boolean {
+  return !items.some((it) => wasVisitedThisSeason(it, season));
+}

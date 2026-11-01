@@ -88,18 +88,25 @@ async function checkSeeding() {
       let lastEpoch = w.seedingEpochReadback();
       const perSeason = [];
       let lastCount = 0;
+      // session 10 P1 (#53): log the visit ledger per sample — the chain
+      // visit-visit -> bloom -> seed-eligible -> roll must be visible in the
+      // check's own output, so a 0-volunteer run says WHY (unobserved
+      // season falls back to pre-N2 parents; a non-empty ledger keeps
+      // strict N2)
+      const visitCounts = [];
       for (let s = 0; s < 4; s++) {
         // ~90s per season at 8x
         await new Promise((r) => setTimeout(r, 92000));
         const volunteers = w.volunteersReadback().filter((v) => v.volunteer);
         const epoch = w.seedingEpochReadback();
         samples.push({ seasonIdx: s, epoch, volunteers: volunteers.length, total: w.items().length });
+        visitCounts.push(w.visitsReadback().filter((f) => f.visitedSeasons.length > 0).length);
         perSeason.push(volunteers.length - lastCount);
         lastCount = volunteers.length;
         lastEpoch = epoch;
       }
       w.timeSetSpeed(1);
-      return { before, before0, samples, perSeason, startSeason };
+      return { before, before0, samples, perSeason, startSeason, visitCounts };
     });
     // the samples are CUMULATIVE volunteer counts; the per-season cap
     // governs the DELTA between samples (the first run asserted cumulative
@@ -120,7 +127,7 @@ async function checkSeeding() {
     rec.record(
       'seeding.accelerated-4season-caps-hold',
       capsHold && !invasive && totalVolunteers >= 1,
-      JSON.stringify(run.samples) + ` (volunteers ${totalVolunteers}/${final} = ${(fraction * 100).toFixed(0)}%, cumulative brake target 15%)`,
+      JSON.stringify(run.samples) + ` (volunteers ${totalVolunteers}/${final} = ${(fraction * 100).toFixed(0)}%, cumulative brake target 15%, visitedFlowersPerSample=${JSON.stringify(run.visitCounts)})`,
     );
   }
 
