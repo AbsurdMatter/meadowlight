@@ -868,6 +868,40 @@ async function checkHintPanel() {
     const needsScroll = panelEl
       ? panelEl.scrollHeight + borderY0 > panelEl.getBoundingClientRect().height + 1
       : true;
+    // round-7 permanent instrumentation: on ANY panel check, dump the
+    // evidence so a FAIL line is ground truth from the failing platform
+    // (clientHeight/scrollHeight, computed max-height+padding+border, the
+    // content readback, last-child bottom, one row's height, the lane)
+    const row0 = rows[0] ? box(rows[0]) : null;
+    const lastChild = panelEl ? panelEl.lastElementChild : null;
+    const cornerEl = document.querySelector('[data-corner-controls]') ?? document.querySelector('[data-corner-row]');
+    const cardsEls = [...document.querySelectorAll('[data-toast]')];
+    const cardsBottom0 = cardsEls.reduce((m, c) => Math.max(m, c.getBoundingClientRect().bottom), 0);
+    const evidence = panelEl ? {
+      clientHeight: panelEl.clientHeight,
+      scrollHeight: panelEl.scrollHeight,
+      rectH: +pb.height.toFixed(2),
+      computedMaxHeight: cs0?.maxHeight ?? 'none',
+      computedOverflowY: cs0?.overflowY ?? 'n/a',
+      boxSizing: cs0?.boxSizing ?? 'n/a',
+      padding: cs0 ? cs0.paddingTop + '/' + cs0.paddingBottom : 'n/a',
+      borderY: +borderY0.toFixed(2),
+      scrollClientDiff: panelEl.scrollHeight - panelEl.clientHeight,
+      contentReadback: lastChild
+        ? +(lastChild.getBoundingClientRect().bottom - (pb.top + (parseFloat(cs0.borderTopWidth) || 0) + (parseFloat(cs0.paddingTop) || 0))).toFixed(2)
+        : null,
+      lastChildBottom: lastChild ? +lastChild.getBoundingClientRect().bottom.toFixed(2) : null,
+      row0Height: row0 ? +row0.height.toFixed(2) : null,
+      row0Rect: row0 ? { top: +row0.top.toFixed(1), bottom: +row0.bottom.toFixed(1) } : null,
+      lane: {
+        top: +pb.top.toFixed(1),
+        ceiling: +(cardsBottom0 > 0 ? cardsBottom0 + 6 : 102 + 28 + 6).toFixed(1),
+        floor: +((cornerEl ? cornerEl.getBoundingClientRect().top : innerHeight) - 8).toFixed(1),
+        band: +(((cornerEl ? cornerEl.getBoundingClientRect().top : innerHeight) - 8) - pb.top).toFixed(1),
+      },
+      viewport: { w: innerWidth, h: innerHeight },
+      fontsReady: document.fonts ? document.fonts.status : 'n/a',
+    } : null;
     // key chips share one left column: their lefts align within 1px
     const keyLefts = keys.map((k) => box(k).left);
     const keyAlign = keyLefts.length > 0 && Math.max(...keyLefts) - Math.min(...keyLefts) <= 1;
@@ -903,6 +937,7 @@ async function checkHintPanel() {
       rowsDoNotOverlap: !rowsOverlap,
       pairs,
       panelSize: { w: +pb.width.toFixed(1), h: +pb.height.toFixed(1) },
+      evidence,
     };
   });
   const expectedGroups = ['Camera', 'Tools', 'Cancel'];
@@ -936,7 +971,10 @@ async function checkHintPanel() {
         ' needsScroll=' + layout.needsScroll +
         ' rowsOverlap=' + !layout.rowsDoNotOverlap +
         ' panel=' + JSON.stringify(layout.panelSize) +
-        ' pairs=' + JSON.stringify(layout.pairs),
+        ' pairs=' + JSON.stringify(layout.pairs) +
+        // round-7: ALWAYS dump the evidence (pass or fail) — on a fail this
+        // is ground truth from the failing platform
+        '\n  [hint-evidence] ' + JSON.stringify(layout.evidence),
   );
   // also assert at a narrow viewport (the panel shrinks — finding 2 — the
   // list must still be structured and in-viewport)
@@ -948,6 +986,10 @@ async function checkHintPanel() {
     const pb = panel.getBoundingClientRect();
     const rows = [...document.querySelectorAll('[data-shortcut-row]')];
     const inVp = (b) => b.top >= 0 && b.bottom <= innerHeight && b.left >= 0 && b.right <= innerWidth;
+    const cs = getComputedStyle(panel);
+    const borderY = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+    const lastChild = panel.lastElementChild;
+    const corner = document.querySelector('[data-corner-controls]') ?? document.querySelector('[data-corner-row]');
     return {
       panelInViewport: inVp(pb),
       rowCount: rows.length,
@@ -957,6 +999,25 @@ async function checkHintPanel() {
       // OR the panel scrolls internally (overflowY auto)
       scrollable: panel.scrollHeight > panel.clientHeight + 1,
       panelSize: { w: +pb.width.toFixed(1), h: +pb.height.toFixed(1) },
+      // round-7 permanent instrumentation (also dumped on narrow/short)
+      evidence: {
+        clientHeight: panel.clientHeight,
+        scrollHeight: panel.scrollHeight,
+        rectH: +pb.height.toFixed(2),
+        computedMaxHeight: cs.maxHeight,
+        boxSizing: cs.boxSizing,
+        overflowY: cs.overflowY,
+        padding: cs.paddingTop + '/' + cs.paddingBottom,
+        borderY: +borderY.toFixed(2),
+        scrollClientDiff: panel.scrollHeight - panel.clientHeight,
+        contentReadback: lastChild
+          ? +(lastChild.getBoundingClientRect().bottom - (pb.top + (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.paddingTop) || 0))).toFixed(2)
+          : null,
+        row0Height: rows[0] ? +rows[0].getBoundingClientRect().height.toFixed(2) : null,
+        lane: { top: +pb.top.toFixed(1), floor: +((corner ? corner.getBoundingClientRect().top : innerHeight) - 8).toFixed(1) },
+        viewport: { w: innerWidth, h: innerHeight },
+        fontsStatus: document.fonts ? document.fonts.status : 'n/a',
+      },
     };
   });
   // round-6 (PR #49 comment #6561476001): at 360x800 the lane is ample
@@ -972,7 +1033,8 @@ async function checkHintPanel() {
     narrow.error
       ? narrow.error
       : 'rows=' + narrow.rowCount + ' rowsInViewport=' + narrow.rowsInViewport +
-        ' needsScroll=' + narrow.scrollable + ' panel=' + JSON.stringify(narrow.panelSize),
+        ' needsScroll=' + narrow.scrollable + ' panel=' + JSON.stringify(narrow.panelSize) +
+        '\n  [hint-evidence@narrow] ' + JSON.stringify(narrow.evidence),
   );
   // round-6: a genuinely SHORT viewport (360x360 — corner row wraps to
   // three rows at <480 wide, so the live lane floor is high and the band

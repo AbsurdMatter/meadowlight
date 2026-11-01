@@ -171,6 +171,10 @@ export function KeyboardShortcuts() {
   // stack changes (cards are ephemeral and arrive after the panel opens),
   // so a growing stack can never collide with it.
   const panelRef = useRef<HTMLDivElement | null>(null);
+  // round 7: the panel's horizontal chrome (padding+border) in border-box px,
+  // mirrored from the solver's live measurement so the style's maxWidth
+  // (border-box) and the solver's content-box maxWidth share one conversion
+  const chromeXRef = useRef(36);
   const [panelTop, setPanelTop] = useState<number | null>(null);
   const [panelMaxWidth, setPanelMaxWidth] = useState<number | null>(null);
   const [panelMaxHeight, setPanelMaxHeight] = useState<number | null>(null);
@@ -190,14 +194,39 @@ export function KeyboardShortcuts() {
       if (!panel) return;
       const panelRight = window.innerWidth - 12;
       // horizontal: shrink until the left edge clears the dock's right
-      // edge (narrow frames: the dock is left-anchored, the panel
-      // right-anchored). Computed from the UNSHRUNK layout (the CSS width
-      // excludes padding 2x16 + border 2x2 = 36px) so the value is stable
-      // across re-measures.
+      // edge. Two cases, both live-measured:
+      //   wide frames: the dock is bottom-anchored and does NOT reach the
+      //     help lane at all — no horizontal constraint (the old code
+      //     compared against the dock's right edge unconditionally, which
+      //     shrank the panel to 164px at 360 wide because the narrow dock
+      //     spans nearly the full width at the BOTTOM while the panel lives
+      //     at the TOP — different lanes, no real conflict).
+      //   genuinely narrow+short frames where the dock's box could reach
+      //     the panel's vertical band: shrink so the panel's left edge
+      //     clears the dock's right edge + gap.
+      // border-box (round 7): width includes the panel's padding+border.
+      const panelCs = getComputedStyle(panel);
+      const chromeX = (parseFloat(panelCs.paddingLeft) || 0) +
+        (parseFloat(panelCs.paddingRight) || 0) +
+        (parseFloat(panelCs.borderLeftWidth) || 0) +
+        (parseFloat(panelCs.borderRightWidth) || 0);
       const dock = document.querySelector('[data-palette-dock]');
-      const dockRight = dock ? dock.getBoundingClientRect().right : 0;
-      const naturalLeft = panelRight - (CHROME_TUNING.helpPanelWidth + 36);
-      const cssMaxWidth = naturalLeft < dockRight + 8 ? panelRight - dockRight - 8 - 36 : null;
+      const dockBox = dock ? dock.getBoundingClientRect() : null;
+      // does the dock's box HORIZONTALLY overlap the panel's natural box?
+      // That is the only conflict that exists — the panel is top-right,
+      // the dock bottom-anchored; at narrow widths both can share the
+      // right side only when the dock's box actually reaches the panel's
+      // horizontal span. (The old code compared against the dock's right
+      // edge unconditionally, which shrank the panel to 164px at 360 wide
+      // even though the dock at 360x800 spans 408-644 vertically while the
+      // panel sits at 136-440 — different vertical lanes, no real overlap.)
+      const naturalLeft = panelRight - (CHROME_TUNING.helpPanelWidth + chromeX);
+      // horizontal overlap = the panel's natural left edge would sit LEFT
+      // of the dock's right edge (both measured live). Only then shrink.
+      const dockRight = dockBox ? dockBox.right : 0;
+      const horizontallyOverlaps = naturalLeft < dockRight;
+      const cssMaxWidth = horizontallyOverlaps ? panelRight - dockRight - 8 - chromeX : null;
+      chromeXRef.current = chromeX;
       if (cssMaxWidth !== panelMaxWidth) {
         setPanelMaxWidth(cssMaxWidth);
         return; // re-measure after the width applies (it changes the height)
@@ -236,49 +265,78 @@ export function KeyboardShortcuts() {
       // the panel's getBoundingClientRect().height is border-box, so the
       // band the panel may occupy is floorY - top (both viewport coords).
       const band = Math.max(0, floorY - top);
-      // Round-6 (PR #49 comment #6561476001): NO pixel derivation survives
-      // cross-platform fonts (headless FreeType vs Windows ClearType render
-      // the same woff2 ~42px apart at this panel's height), so the height
-      // rule is purely: height = min(content, lane), BOTH live-measured
-      // from the DOM on THIS platform at open/re-measure.
-      //   content = the panel's own unclamped rendered extent — measured
-      //     via the last child's bottom edge relative to the content box
-      //     (stable even while a clamp is applied, unlike scrollHeight,
-      //     which reports the clamped height). Ceiled so fractional
-      //     rasterizer rows never cause a sub-pixel scrollbar.
+      // Round-6/7 (PR #49 comments #6561476001, #6562013898): NO pixel
+      // derivation survives cross-platform fonts (headless FreeType vs
+      // Windows ClearType render the same woff2 ~42px apart at this
+      // panel's height), so the height rule is purely:
+      //     height = min(content, lane), BOTH live-measured on THIS
+      //     platform at open/re-measure.
+      //   content = the panel's own unclamped rendered BORDER-box extent,
+      //     measured via the last child's bottom edge relative to the
+      //     panel's border-box top (stable even while a clamp is applied,
+      //     unlike scrollHeight, which reports the clamped height).
+      //     Round-7 fix: the panel is now box-sizing: border-box (see the
+      //     style below), so maxHeight IS the border-box height and the
+      //     content readback adds the FULL border-box chrome (padding +
+      //     border) — the old content-box math let scrollHeight exceed
+      //     clientHeight by paddingBottom + borderBottom on platforms
+      //     with fractional text heights (the Windows 246px sub-pixel
+      //     class). Ceiled so fractional rasterizer rows never cause a
+      //     sub-pixel scrollbar.
       //   lane = floorY - top (toast ceiling -> cornerControls/cornerRow
-      //     top, or viewport bottom), also ceiled.
+      //     top, or viewport bottom), also ceiled — border-box px on both
+      //     sides now.
       // Ample lane -> panel sizes to content, needsScroll=false on every
       // platform. Short lane -> cap at the lane, scroll inside
       // (shrink+scroll unchanged). No fixed max, no derived constant, no
       // assumed row heights — only numbers the DOM just gave us.
-      // The clamp is expressed as maxHeight in CONTENT-box px (this
-      // element has no box-sizing reset): content max = lane - padding -
-      // border.
       const rect = panel.getBoundingClientRect();
       const cs = getComputedStyle(panel);
       const padTop = parseFloat(cs.paddingTop) || 0;
       const padBottom = parseFloat(cs.paddingBottom) || 0;
       const borderY = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
       const lastChild = panel.lastElementChild as HTMLElement | null;
-      const unclampedScroll = lastChild
-        ? Math.max(panel.scrollHeight, lastChild.getBoundingClientRect().bottom - (rect.top + padTop + (parseFloat(cs.borderTopWidth) || 0)))
+      // unclamped content extent in CONTENT-box px (what scrollHeight
+      // would report with no clamp): last child's bottom minus the
+      // content-box top
+      const contentTop = rect.top + (parseFloat(cs.borderTopWidth) || 0) + padTop;
+      const unclampedContent = lastChild
+        ? Math.max(panel.scrollHeight, lastChild.getBoundingClientRect().bottom - contentTop)
         : panel.scrollHeight;
-      const naturalHeight = Math.ceil(unclampedScroll + padTop + padBottom + borderY);
+      // border-box natural height = unclamped content + all chrome
+      const naturalHeight = Math.ceil(unclampedContent + padTop + padBottom + borderY);
       const laneCeil = Math.ceil(band);
-      const cssMaxHeight =
-        naturalHeight > laneCeil ? laneCeil - padTop - padBottom - borderY : null;
+      // border-box element: css maxHeight == border-box max, no subtraction
+      const cssMaxHeight = naturalHeight > laneCeil ? laneCeil : null;
       if (top !== panelTop || cssMaxHeight !== panelMaxHeight) {
         setPanelTop(top);
         setPanelMaxHeight(cssMaxHeight);
       }
     };
-    // measure after paint, on every toast-stack change, and on resize
+    // measure after paint, on every toast-stack change, on resize, on
+    // font load (document.fonts.ready — a late-arriving woff2 reflows the
+    // content and the readback must track it, the round-7 stale-readback
+    // suspect), and on any content resize (ResizeObserver on the panel —
+    // covers row wraps at width changes the rAF pass can miss)
     const raf = requestAnimationFrame(place);
     window.addEventListener('resize', place);
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => place());
+      const panel = panelRef.current;
+      if (panel) ro.observe(panel);
+    }
+    let fontsHooked = false;
+    const hookFonts = () => {
+      if (fontsHooked) return;
+      fontsHooked = true;
+      document.fonts?.ready.then(() => place()).catch(() => {});
+    };
+    hookFonts();
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', place);
+      ro?.disconnect();
     };
   }, [hintOpen, toastCount, panelMaxWidth, panelMaxHeight, panelTop]);
 
@@ -323,7 +381,15 @@ export function KeyboardShortcuts() {
             top: panelTop ?? CHROME_TUNING.helpLaneTop + 28 + 6,
             right: 12,
             width: CHROME_TUNING.helpPanelWidth,
-            maxWidth: panelMaxWidth ?? undefined,
+            // round 7: border-box so maxHeight is the BORDER-box height and
+            // the content readback + clamp share one unit system — kills the
+            // scrollHeight-vs-clientHeight padding/border sub-pixel class
+            // on fractional-text platforms (Windows ClearType)
+            boxSizing: 'border-box',
+            // round 7: max-width in border-box px too (width is border-box
+            // now), so the dock-clearance shrink and the measured rect share
+            // one unit system
+            maxWidth: panelMaxWidth !== null ? panelMaxWidth + chromeXRef.current : undefined,
             maxHeight: panelMaxHeight ?? undefined,
             overflowY: panelMaxHeight !== null ? 'auto' : undefined,
             padding: theme.spacing.panelPadding,
