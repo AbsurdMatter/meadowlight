@@ -67,16 +67,20 @@ export interface PlacedStructure {
  *         (session 8 N2: the pollinator-visit seeding precondition —
  *         per-flower visit ledger, additive; absent = unvisited = eligible
  *         on next visit, never a seeding reset)
+ *   v9: { version: 9, ... journal, nudgesShown }
+ *         (session 9 v4: O2 first-sighting journal — a record of what the
+ *         glass has shown, one per (kind, subject, season); O1 onboarding
+ *         nudge show-once list. Both additive; absent = empty)
  */
 const STORAGE_KEY = 'meadowlight.world.v2';
 const LEGACY_KEY = 'meadowlight.world.v1';
 /** corrupt/unknown-version saves are preserved here before booting fresh */
 const BACKUP_KEY = 'meadowlight.world._backup';
 /** versions this build understands (anything else = unknown, backed up) */
-const KNOWN_VERSIONS = new Set([1, 2, 3, 4, 5, 6, 7, 8]);
+const KNOWN_VERSIONS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
 export interface WorldData {
-  version: 4 | 5 | 6 | 7 | 8;
+  version: 4 | 5 | 6 | 7 | 8 | 9;
   items: PlacedItem[];
   structures: PlacedStructure[];
   milestones: MilestoneId[];
@@ -134,6 +138,16 @@ export interface WorldData {
    * The notebook's "who visited, when" reads this; absent = none yet.
    */
   visitorWindows?: string[];
+  /**
+   * O2 (v9 additive): the first-sighting journal — records of what the
+   * glass has shown, one per (kind, subject, season). Absent = empty.
+   */
+  journal?: import('./sightingJournal').JournalRecord[];
+  /**
+   * O1 (v9 additive): which onboarding nudges have already fired
+   * (show-once). Absent = none shown.
+   */
+  nudgesShown?: string[];
 }
 
 function parseItems(parsed: unknown): PlacedItem[] {
@@ -255,9 +269,37 @@ function parseVisitorWindows(parsed: unknown): string[] {
   return [...new Set(parsed.filter((v): v is string => typeof v === 'string'))];
 }
 
+/** v9 additive (O2): journal records — sanitized to the record shape */
+function parseJournal(parsed: unknown): import('./sightingJournal').JournalRecord[] {
+  if (!Array.isArray(parsed)) return [];
+  const out: import('./sightingJournal').JournalRecord[] = [];
+  const seen = new Set<string>();
+  for (const r of parsed) {
+    if (!r || typeof r !== 'object') continue;
+    const rec = r as import('./sightingJournal').JournalRecord;
+    if (
+      (rec.kind === 'flower' || rec.kind === 'visitor' || rec.kind === 'structure') &&
+      typeof rec.subject === 'string' &&
+      (rec.season === 'spring' || rec.season === 'summer' || rec.season === 'autumn' || rec.season === 'winter')
+    ) {
+      const key = `${rec.kind}:${rec.subject}:${rec.season}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ kind: rec.kind, subject: rec.subject, season: rec.season });
+    }
+  }
+  return out;
+}
+
+/** v9 additive (O1): nudge ids already shown, deduped strings */
+function parseNudgesShown(parsed: unknown): string[] {
+  if (!Array.isArray(parsed)) return [];
+  return [...new Set(parsed.filter((v): v is string => typeof v === 'string'))];
+}
+
 function freshWorld(): WorldData {
   return {
-    version: 8,
+    version: 9,
     items: [],
     structures: [],
     milestones: [],
@@ -268,6 +310,8 @@ function freshWorld(): WorldData {
     wildSeasons: [],
     onboardingDismissed: false,
     visitorWindows: [],
+    journal: [],
+    nudgesShown: [],
   };
 }
 
@@ -314,7 +358,7 @@ export function loadWorld(): WorldData {
             ? data.randomRotation
             : DEFAULT_PLACEMENT_VARIATION;
       return {
-        version: 8,
+        version: 9,
         items: parseItems(data.items),
         structures: parseStructures(data.structures),
         milestones: parseMilestones(data.milestones),
@@ -332,6 +376,8 @@ export function loadWorld(): WorldData {
         worldSeed: parseWorldSeed(data.worldSeed, data.items),
         seedingEpoch: parseSeedingEpoch(data.seedingEpoch),
         visitorWindows: parseVisitorWindows(data.visitorWindows),
+        journal: parseJournal(data.journal),
+        nudgesShown: parseNudgesShown(data.nudgesShown),
       };
     }
     // v1 shape: bare array of items
@@ -361,7 +407,7 @@ export function clearSavedWorld(): void {
 
 export function saveWorld(data: Omit<WorldData, 'version'>): void {
   try {
-    const payload: WorldData = { version: 8, ...data };
+    const payload: WorldData = { version: 9, ...data };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     localStorage.removeItem(LEGACY_KEY);
   } catch {

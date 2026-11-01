@@ -114,6 +114,13 @@ export function MagnifierCard() {
   useEffect(() => {
     if (shownFactId) markFactSeen(shownFactId);
   }, [shownFactId, markFactSeen]);
+  // O2 (v4, #40): the journal records what the glass SHOWS — the card is
+  // the one inspection surface, so the sighting rides the card render (the
+  // same single write path the store exposes; idempotent per season).
+  const recordSighting = usePlacementStore((s) => s.recordSighting);
+  useEffect(() => {
+    if (entry) recordSighting(entry);
+  }, [entry, recordSighting]);
   if (!magnifierOn || !entry || !content) return null;
   return (
     <div

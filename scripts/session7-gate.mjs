@@ -79,8 +79,8 @@ async function checkSeeding() {
       }
       const before = w.items().length;
       const before0 = w.volunteersReadback().filter((v) => v.volunteer).length;
-      // release overrides, 8x, natural calendar across ~4 seasons
-      w.resumeSeasonClock();
+      // 8x, natural calendar across ~4 seasons (a dial selection STARTS
+      // its season and keeps drifting — round-1 finding 3)
       w.timeSetPaused(false);
       w.timeSetSpeed(8);
       const samples = [];
@@ -282,7 +282,6 @@ async function checkVisitors() {
       w.clear();
       w.setSeason('spring');
       w.setSeasonProgressForTest(0.05);
-      w.resumeSeasonClock();
       w.setDayPhase(0.3); // day: butterflies/queen active
       for (let k = 0; k < 6; k++) w.plant('crocus', 2 + k * 1.2, 2);
       for (let k = 0; k < 6; k++) w.plant('forget-me-not', -2 - k, -4);
@@ -517,7 +516,6 @@ async function checkColony() {
       w.plant('clover', 6, 2);
       w.setSeason('spring');
       w.setSeasonProgressForTest(0.0);
-      w.resumeSeasonClock();
       w.timeSetPaused(false);
       w.timeSetSpeed(8);
       const samples = [];

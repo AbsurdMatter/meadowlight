@@ -14,7 +14,7 @@ import { precipitationVisual } from './weather';
 import { precipReadback, tickPrecipScheduleForTest } from './rainSchedule';
 import { allWildlife } from '../render/magnifierProbes';
 import { dayPhase } from './dayCycle';
-import { seasonProgress, seasonClockOverridden } from './seasonClock';
+import { seasonProgress } from './seasonClock';
 import { honeyDebug } from '../render/BeeSwarm';
 import { setSpeedStep, setPaused, isPaused, currentSpeedStep, timeMultiplier, type SpeedStep } from './timeControl';
 import { scaledElapsed } from './scaledTime';
@@ -30,8 +30,12 @@ import { setFireflyForce } from '../render/Fireflies';
 import { rainDebug } from '../render/Rain';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
 import { capturePostcardPng } from './postcard';
-import { audioDebugInfo, audioRunning } from './audio';
+import { audioDebugInfo, audioRunning, audioEnabled, buzzLevelForBeeCount } from './audio';
 import { ghostDebug } from '../render/PlacementSystem';
+import { DAY_CYCLE_SECONDS, resumeDayCycle } from './dayCycle';
+import { rainSpreadDebug } from '../render/Rain';
+import { setCameraDistanceForTestImpl, cameraDistanceForTestReadback } from '../render/DebugBridge';
+import { freshBootForTest } from '../render/placementStore';
 
 declare global {
   interface Window {
@@ -44,14 +48,12 @@ declare global {
       structures: () => PlacedStructure[];
       clear: () => void;
       setSeason: (season: 'spring' | 'summer' | 'autumn' | 'winter') => void;
-      /** #11: release the manual/P-panel season override */
-      resumeSeasonClock: () => void;
+      /** #11: the current season label (readback) */
+      seasonReadback: () => 'spring' | 'summer' | 'autumn' | 'winter';
       /** #11: 0..1 progress through the current season (readback) */
       seasonProgressReadback: () => number;
       /** #11: tests only — drive the calendar position directly */
       setSeasonProgressForTest: (p: number) => void;
-      /** #11: true while the calendar is held by an override */
-      seasonClockOverridden: () => boolean;
       /** U1 (session 7): the world's named seed state + epoch (readback) */
       worldSeedReadback: () => number;
       seedingEpochReadback: () => number;
@@ -61,6 +63,23 @@ declare global {
       visitsReadback: () => { id: string; plantId: string; visitedSeasons: string[] }[];
       /** N3: the magnifying-glass inspect tool (pure inspection, zero mutation) */
       magnifierReadback: () => { on: boolean; entry: unknown };
+      /** round 5: which palette tool is selected (null when none) — readback
+       *  for the grammar-rule gate (select-tool-disarms-glass) */
+      selectedToolReadback: () => { plant: string | null; structure: string | null };
+      /** round 5 (PR #49 comment #6560170382): DEV-ONLY claim probe — hover
+       *  anything with the glass armed in a real browser and paste
+       *  `__meadowlight.claimProbe()` from DevTools to see the full claim
+       *  state: live pointer (client + NDC), hovered mesh kind, claim
+       *  owner/distance, the store entry, and whether the card is visible.
+       *  Read-only: writes nothing to the world. */
+      claimProbe: () => {
+        on: boolean;
+        entry: unknown;
+        pointer: { clientX: number; clientY: number; ndcX: number; ndcY: number; insideCanvas: boolean };
+        claim: { distance: number } | null;
+        cardVisible: boolean;
+        cardText: string;
+      };
       toggleMagnifier: () => void;
       setMagnifierOnForTest: (on: boolean) => void;
       setMagnifierEntryForTest: (e: unknown) => void;
@@ -129,6 +148,29 @@ declare global {
     audioDebug: () => unknown;
     terrainHeightAt: (x: number, z: number) => number;
     audioIsRunning: () => boolean;
+    /** O5 (v4, #43): readbacks for the keyboard gate */
+    hubOpenReadback: () => boolean;
+    modalOpenReadback: () => boolean;
+    toastsReadback: () => { id: number; title: string; body: string }[];
+    dismissAllToastsForTest: () => void;
+    /** O2 (v4, #40): the journal readback (the store reads the saved blob) */
+    journalReadback: () => unknown[];
+    seenFactsReadback: () => string[];
+    /** O3 (v4, #41): the audio toggle's persisted state + the pure buzz level */
+    audioEnabledReadback: () => boolean;
+    buzzLevelForBees: (count: number) => number;
+    /** #44/#45 (v4): the day-cycle length + the precip burst spread */
+    dayCycleSecondsReadback: () => number;
+    rainSpreadReadback: () => { x: number; z: number };
+    /** release the day-phase override so the natural clock drifts */
+    resumeDayCycleForTest: () => void;
+    /** O1: the full first-time boot (reset + starter patch) */
+    freshBootForTest: () => void;
+    /** O1 tests: pin the world seed (same-seed determinism check) */
+    __setWorldSeedForTest: (seed: number) => void;
+    /** O5-era: set/read the camera distance directly (the zoom-refusal gate) */
+    setCameraDistanceForTest: (d: number) => void;
+    cameraDistanceReadback: () => number;
       ghostPosition: () => { pos: [number, number, number] | null; valid: boolean };
       ghostVariation: () => { rotationY: number; heightJitter: number; tiltX: number; tiltZ: number } | null;
       resetWorld: () => void;
@@ -218,10 +260,9 @@ export function installTestHook() {
     structures: () => usePlacementStore.getState().structures,
     clear: () => usePlacementStore.setState({ items: [], structures: [] }),
     setSeason: (season) => usePlacementStore.getState().setSeason(season),
-    resumeSeasonClock: () => usePlacementStore.getState().resumeSeasonClock(),
+    seasonReadback: () => usePlacementStore.getState().season,
     seasonProgressReadback: () => seasonProgress(),
     setSeasonProgressForTest: (p) => usePlacementStore.getState().setSeasonProgressForTest(p),
-    seasonClockOverridden: () => seasonClockOverridden(),
     worldSeedReadback: () => usePlacementStore.getState().worldSeed,
     seedingEpochReadback: () => usePlacementStore.getState().seedingEpoch,
     /** N2: per-flower visit ledger readback (persisted v8) */
@@ -235,6 +276,33 @@ export function installTestHook() {
     magnifierReadback: () => {
       const s = usePlacementStore.getState();
       return { on: s.magnifierOn, entry: s.magnifierEntry };
+    },
+    selectedToolReadback: () => {
+      const s = usePlacementStore.getState();
+      return { plant: s.selectedPlantId, structure: s.selectedStructureId };
+    },
+    // round 5: DEV-ONLY claim probe (see the interface comment). Reads the
+    // live pointer position from the resolver's own listener state (kept on
+    // window by MagnifierInspector under __meadowlightClaimPointer), the
+    // claim distance from magnifierKinds, and the card's DOM state — one
+    // paste answers "what does the claim path see right now?" in a real
+    // browser. Read-only.
+    claimProbe: () => {
+      const s = usePlacementStore.getState();
+      const ptr = (window as unknown as { __meadowlightClaimPointer?: { x: number; y: number; ndcX: number; ndcY: number; inside: boolean } }).__meadowlightClaimPointer;
+      const claim = (window as unknown as { __meadowlightClaimDistance?: number | null }).__meadowlightClaimDistance;
+      const card = document.querySelector('[data-magnifier-card="true"]');
+      const r = card?.getBoundingClientRect();
+      return {
+        on: s.magnifierOn,
+        entry: s.magnifierEntry,
+        pointer: ptr
+          ? { clientX: ptr.x, clientY: ptr.y, ndcX: ptr.ndcX, ndcY: ptr.ndcY, insideCanvas: ptr.inside }
+          : { clientX: 0, clientY: 0, ndcX: 0, ndcY: 0, insideCanvas: false },
+        claim: typeof claim === 'number' ? { distance: claim } : null,
+        cardVisible: !!r && r.width > 0 && r.height > 0,
+        cardText: card?.textContent ?? '',
+      };
     },
     toggleMagnifier: () => usePlacementStore.getState().toggleMagnifier(),
     wildlifeSightings: () => allWildlife().map((w) => ({ ...w })),
@@ -303,9 +371,25 @@ export function installTestHook() {
     audioDebug: () => audioDebugInfo(),
     terrainHeightAt: (x, z) => groundAt(x, z).height,
     audioIsRunning: () => audioRunning(),
+    hubOpenReadback: () => usePlacementStore.getState().hubOpen,
+    modalOpenReadback: () => usePlacementStore.getState().modalOpen,
+    toastsReadback: () => usePlacementStore.getState().toasts,
+    dismissAllToastsForTest: () => usePlacementStore.getState().dismissAllToastsForTest(),
+    journalReadback: () => usePlacementStore.getState().journal,
+    seenFactsReadback: () => usePlacementStore.getState().seenFacts,
+    audioEnabledReadback: () => audioEnabled(),
+    buzzLevelForBees: (count) => buzzLevelForBeeCount(count),
+    dayCycleSecondsReadback: () => DAY_CYCLE_SECONDS,
+    rainSpreadReadback: () => ({ ...rainSpreadDebug }),
+    resumeDayCycleForTest: () => resumeDayCycle(),
+    setCameraDistanceForTest: (d) => setCameraDistanceForTestImpl(d),
+    cameraDistanceReadback: () => cameraDistanceForTestReadback(),
     ghostPosition: () => ({ pos: ghostDebug.pos, valid: ghostDebug.valid }),
     ghostVariation: () => ghostDebug.variation,
     resetWorld: () => usePlacementStore.getState().resetWorld(),
+    /** O1 (v4, #39): the full first-time boot — reset + starter patch */
+    freshBootForTest: () => freshBootForTest(),
+    __setWorldSeedForTest: (seed) => usePlacementStore.setState({ worldSeed: seed }),
     reloadFromSave: () => usePlacementStore.getState().reloadFromSave(),
     openNotebookPlant: (itemId) =>
       usePlacementStore.getState().openNotebook({ kind: 'plant', id: itemId }),

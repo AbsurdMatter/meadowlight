@@ -5,6 +5,7 @@ import { usePlacementStore } from '../render/placementStore';
 import { renderVoxelThumb, renderVoxelCloseUp } from '../engine/thumbnails';
 import { plantingsBySeason, bloomSeasonsLabel, seasonBadge } from '../data/bloomWindows';
 import { theme, headingStyle } from './theme';
+import { CHROME_TUNING } from '../data/chrome';
 
 const chipStyle = (active: boolean, enabled: boolean): React.CSSProperties => ({
   border: `${theme.border.chunk}px solid ${active ? theme.color.clay : 'transparent'}`,
@@ -114,6 +115,18 @@ export function Palette() {
       t['structure:' + st.id] = renderVoxelThumb(st.parts, h);
     }
     setThumbs(t);
+  }, []);
+  // O4 (v4, #42): narrow-frame rule — below CHROME_TUNING.narrowDockBelow
+  // the dock collapses to its tab column only; the tab body scrolls
+  // horizontally INSIDE the dock's own bounded box. One unwrapped row,
+  // reserved lanes, never overlapping the corner controls at any width.
+  const [narrow, setNarrow] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < CHROME_TUNING.narrowDockBelow : false,
+  );
+  useEffect(() => {
+    const onResize = () => setNarrow(window.innerWidth < CHROME_TUNING.narrowDockBelow);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
   // season-grouped planting tab: derived from the engine's bloom windows
   // (one source — plantingsBySeason reads PLANTS[].bloom directly)
@@ -226,7 +239,16 @@ export function Palette() {
         // fully visible; the bar scrolls horizontally only if the tab
         // outgrows the viewport.
         position: 'absolute',
-        bottom: 16,
+        // O4: the narrow dock is bottom-anchored ABOVE the wrapped corner
+        // rows (the corner lane at narrow widths is the wrapped row's
+        // height — the dock stacks on top of it, never beside it). Below
+        // cornerWrap3Below the corner row wraps to three rows, so the
+        // dock lifts by the three-row lane height instead.
+        bottom: narrow
+          ? window.innerWidth < CHROME_TUNING.cornerWrap3Below
+            ? CHROME_TUNING.cornerWrap3Height + CHROME_TUNING.dockInset
+            : CHROME_TUNING.narrowDockBottom
+          : 16,
         // UI round 3 (#6383867199): the dock sits in the space BETWEEN the
         // onboarding panel (bottom-left) and the corner controls
         // (bottom-right, ~420px of lane incl. the journal row below the
@@ -238,14 +260,35 @@ export function Palette() {
         // switches (the old margin:auto re-centered per content width); only
         // the content width varies. The right edge still yields to the
         // corner controls' lane.
-        left: 16,
-        right: 460,
-        width: 'fit-content',
-        maxWidth: 'calc(100vw - 492px)',
+        left: CHROME_TUNING.dockInset,
+        // O4: the dock's reserved right lane — the corner lane at wide
+        // frames; at narrow frames the corner row WRAPS (two rows), so the
+        // reserved lane is the wrapped row's HEIGHT and the dock bounds
+        // itself to the tab column + scrollable body
+        right: narrow ? 'auto' : CHROME_TUNING.cornerLane,
+        width: narrow ? CHROME_TUNING.narrowDockWidth : 'fit-content',
+        maxWidth: narrow
+          ? `calc(100vw - ${CHROME_TUNING.dockInset * 2}px)`
+          : `calc(100vw - ${CHROME_TUNING.cornerLane + CHROME_TUNING.dockInset + CHROME_TUNING.dockMaxWidthExtra}px)`,
         display: 'flex',
+        flexWrap: narrow ? 'wrap' : 'nowrap',
         alignItems: 'stretch',
         gap: 10,
         padding: '8px 12px',
+        overflow: 'hidden',
+        // O4: the narrow dock is bottom-anchored and grows UPWARD; its
+        // height is bounded so it never reaches the wrapped corner rows
+        // (the corner lane at narrow widths is the wrapped row's height —
+        // three rows below cornerWrap3Below). The bound is measured from
+        // the dock's own bottom offset, so the dock's TOP edge always sits
+        // below the corner rows' top.
+        maxHeight: narrow
+          ? `calc(100vh - ${
+              (window.innerWidth < CHROME_TUNING.cornerWrap3Below
+                ? CHROME_TUNING.cornerWrap3Height + CHROME_TUNING.dockInset
+                : CHROME_TUNING.narrowDockBottom) + CHROME_TUNING.dockInset
+            }px)`
+          : undefined,
         borderRadius: theme.border.radiusPanel,
         background: theme.color.panel,
         border: `${theme.border.chunk}px solid ${theme.color.honey}`,
@@ -274,8 +317,12 @@ export function Palette() {
           🐝 Equipment
         </button>
       </div>
-      {/* the tab body */}
+      {/* the tab body — O4: at narrow frames the tab body wraps INSIDE the
+          dock's bounded box and scrolls vertically (the dock never wraps
+          onto a second line of the VIEWPORT; the palette scrolls within its
+          own box) */}
       <div
+        data-palette-body
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -283,6 +330,9 @@ export function Palette() {
           overflowX: 'auto',
           paddingTop: 2,
           paddingBottom: 2,
+          ...(narrow
+            ? { flexBasis: '100%', flexWrap: 'wrap', maxHeight: CHROME_TUNING.narrowBodyHeight, overflowY: 'auto' as const, overflowX: 'hidden' as const }
+            : {}),
         }}
       >
         {tab === 'planting' ? (
@@ -321,26 +371,29 @@ export function Palette() {
         )}
       </div>
       {/* the placement-mode toggle: separated at the far right (a mode,
-          not an item) */}
-      <div
-        data-palette-section="mode"
-        style={{
-          borderLeft: `1px solid ${theme.color.honeyDark}44`,
-          paddingLeft: 10,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          fontSize: theme.font.smallSize,
-          color: theme.color.textSoft,
-          whiteSpace: 'nowrap',
-        }}
-      >
-        <span>Natural placement</span>
-        <button onClick={toggleVariation} style={buttonStyle(placementVariation)}>
-          {placementVariation ? 'ON' : 'OFF'}
-        </button>
-        <span style={{ opacity: 0.65 }}>(F)</span>
-      </div>
+          not an item) — O4: at narrow frames it drops out of the dock row
+          (the F key still toggles it; one input path, two surfaces) */}
+      {!narrow && (
+        <div
+          data-palette-section="mode"
+          style={{
+            borderLeft: `1px solid ${theme.color.honeyDark}44`,
+            paddingLeft: 10,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: theme.font.smallSize,
+            color: theme.color.textSoft,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <span>Natural placement</span>
+          <button onClick={toggleVariation} style={buttonStyle(placementVariation)}>
+            {placementVariation ? 'ON' : 'OFF'}
+          </button>
+          <span style={{ opacity: 0.65 }}>(F)</span>
+        </div>
+      )}
     </div>
   );
 }

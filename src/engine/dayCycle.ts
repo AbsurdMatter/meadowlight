@@ -1,7 +1,9 @@
 /**
  * Time-of-day model (session 5, #6/#13 groundwork). Pure module: the day
  * cycle is a single 0..1 phase the whole scene can read. U4's sky/fog/light
- * grade with it now (fixed at GOLDEN_HOUR until U6 drives it live).
+ * grade with it now. #44 (v4): DAY_CYCLE_SECONDS halved 720 -> 360, so the
+ * day turns twice as fast; every window (dusk, daylight, the palette
+ * keyframes) is a PHASE fraction and derives automatically.
  *
  * Phase convention (one full day = 1.0):
  *   0.00 = midnight        0.25 = dawn
@@ -12,8 +14,12 @@
 /** default phase until the day/night cycle unit drives it: golden hour */
 export const GOLDEN_HOUR = 0.82;
 
-/** full cycle length in seconds (U6: 12-minute day, per approved plan) */
-export const DAY_CYCLE_SECONDS = 720;
+/** full cycle length in seconds (U6: 12-minute day, per approved plan;
+ *  #44 v4: halved to a 6-minute day so the within-day rhythm moves with
+ *  the shortened seasons \u2014 dusk and night no longer linger. ONE source:
+ *  every day-phase window (dusk, daylight, palette keyframes) derives
+ *  from the phase fraction, never from a copied duration) */
+export const DAY_CYCLE_SECONDS = 360;
 
 /**
  * U6: the live cycle clock. Kept here (engine, pure-ish) so renderers read

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CAMERA_BOUNDS } from '../data/environment';
+import { cameraSpherical } from '../ui/KeyboardShortcuts';
 
 export function OrbitControlsLite() {
   const { camera, gl } = useThree();
@@ -11,6 +12,10 @@ export function OrbitControlsLite() {
   });
 
   useEffect(() => {
+    // O5 (v4, #43): publish the live spherical so the keyboard translation
+    // rides the SAME orbit state the pointer drives — one camera, two
+    // input paths, never two cameras.
+    cameraSpherical.current = state.current.spherical;
     const dom = gl.domElement;
     const s = state.current;
     s.spherical.setFromVector3(camera.position.clone().sub(s.target));

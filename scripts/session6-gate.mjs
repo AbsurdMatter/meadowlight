@@ -14,9 +14,11 @@
  *   recipes — #9: adjacency forms a recipe, discovery toast fires, notebook
  *             section present + in viewport, non-recipes stay neutral (no
  *             punishment by test), save round-trips foundRecipes.
- *   seasons — #11: calendar drifts when natural, dial/P-panel override
- *             holds it, rollover fires the gentle toast + updates the
- *             season label, save v6 round-trips seasonProgress (incl. the
+ *   seasons — #11: calendar drifts when natural, a dial selection STARTS
+ *             the season (clock at its start) and never stops progression
+ *             (round-1 finding 3: only the TimeControls pause freezes),
+ *             rollover fires the gentle toast + advances the season
+ *             label, save v6 round-trips seasonProgress (incl. the
  *             boundary interpretation), no console errors.
  */
 import { chromium } from 'playwright-core';
@@ -34,8 +36,6 @@ async function checkSeasons() {
     await page.evaluate(() => {
       const w = window.__meadowlight;
       w.clear();
-      // release any override a save left behind
-      w.resumeSeasonClock();
       w.setSeasonProgressForTest(0);
     });
     const before = await page.evaluate(() => window.__meadowlight.seasonProgressReadback());
@@ -46,32 +46,27 @@ async function checkSeasons() {
       after > before && after < 0.05,
       `before=${before.toFixed(4)} after=${after.toFixed(4)} (monotonic advance, not exact-zero start)`,
     );
-    // 2. override holds: the manual dial (= P panel path) freezes progress
-    const held = await page.evaluate(async () => {
+    // 2. a dial selection STARTS the season, never stops progression
+    //    (round-1 finding 3): select winter -> the clock sits at winter's
+    //    start (label winter, progress ~0), then 8x advance -> the
+    //    calendar drifts. The TimeControls pause is the only freeze.
+    const started = await page.evaluate(async () => {
       const w = window.__meadowlight;
+      w.timeSetPaused(false);
+      w.timeSetSpeed(8);
       w.setSeason('winter');
-      w.setSeasonProgressForTest(0.4);
-      const p1 = w.seasonProgressReadback();
-      await new Promise((r) => setTimeout(r, 2000));
-      const p2 = w.seasonProgressReadback();
-      return { p1, p2, overridden: w.seasonClockOverridden(), season: w.items ? w.seasonClockOverridden() : null };
+      const atStart = { season: w.seasonReadback(), progress: w.seasonProgressReadback() };
+      await new Promise((r) => setTimeout(r, 4000)); // 32s of world time at 8x
+      const after = { season: w.seasonReadback(), progress: w.seasonProgressReadback() };
+      w.timeSetSpeed(1);
+      return { atStart, after };
     });
     rec.record(
-      'seasons.override-holds-calendar',
-      held.overridden && Math.abs(held.p2 - held.p1) < 1e-6,
-      JSON.stringify(held),
-    );
-    // 3. resume releases: progress moves again
-    const resumed = await page.evaluate(async () => {
-      const w = window.__meadowlight;
-      w.resumeSeasonClock();
-      await new Promise((r) => setTimeout(r, 2000));
-      return { p: w.seasonProgressReadback(), overridden: w.seasonClockOverridden() };
-    });
-    rec.record(
-      'seasons.resume-drifts-again',
-      !resumed.overridden && resumed.p > 0.4,
-      JSON.stringify(resumed),
+      'seasons.selection-starts-season-and-drifts',
+      started.atStart.season === 'winter' &&
+        started.atStart.progress < 0.02 &&
+        started.after.progress > started.atStart.progress + 0.03,
+      JSON.stringify(started),
     );
     const re = realErrors(errors);
     rec.record('seasons.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
@@ -84,11 +79,9 @@ async function checkSeasons() {
     await page.evaluate(() => {
       const w = window.__meadowlight;
       w.clear();
-      w.resumeSeasonClock();
       w.placeStructure('wildcorner', -4, 4);
-      w.setSeason('summer'); // dial sets label + holds...
-      w.resumeSeasonClock(); // ...then release so the rollover is natural
-      w.setSeasonProgressForTest(0.999);
+      w.setSeason('summer'); // the dial STARTS summer (progress 0, drifting)
+      w.setSeasonProgressForTest(0.999); // near the boundary so the rollover lands inside the wait
     });
     await page.waitForTimeout(2500);
     const after = await page.evaluate(() => {
@@ -97,15 +90,15 @@ async function checkSeasons() {
         d.textContent.includes('A season drifts in'),
       );
       return {
-        season: w.seasonClockOverridden(),
+        season: w.seasonReadback(),
         progress: w.seasonProgressReadback(),
         toastShown: toasts,
       };
     });
     rec.record(
       'seasons.rollover-fires-gentle-toast',
-      after.toastShown,
-      JSON.stringify(after),
+      after.toastShown && after.season === 'autumn',
+      JSON.stringify(after) + ' (selected summer -> advanced -> the ordinal progressed to autumn)',
     );
     // the store's season label + wildSeasons via a reload-from-save round-trip
     const label = await page.evaluate(() => {
@@ -113,8 +106,8 @@ async function checkSeasons() {
       return { progress: w.seasonProgressReadback(), raw: JSON.parse(localStorage.getItem('meadowlight.world.v2')) };
     });
     rec.record(
-      'seasons.save-v6-persists-season-progress',
-      typeof label.raw.seasonProgress === 'number' && label.raw.version === 6,
+      'seasons.save-persists-season-progress',
+      typeof label.raw.seasonProgress === 'number' && label.raw.version >= 6,
       `version=${label.raw.version} seasonProgress=${label.raw.seasonProgress} season=${label.raw.season} wildSeasons=${JSON.stringify(label.raw.wildSeasons ?? [])}`,
     );
     const re = realErrors(errors);
@@ -123,8 +116,9 @@ async function checkSeasons() {
   }
 
   // 5. save -> reload -> resume: the boundary interpretation round-trip.
-  // Write a v6 blob at 0.999 BEFORE app scripts run; the loaded position
-  // must be the SAME season (autumn at 0.999 stays autumn, not winter).
+  // Write a versioned blob at 0.999 BEFORE app scripts run; the loaded
+  // position must be the SAME season (autumn at 0.999 stays autumn,
+  // not winter).
   {
     const page = await browser.newPage();
     const errors = [];
@@ -497,7 +491,6 @@ async function checkTimeControls() {
   await page.evaluate(() => {
     const w = window.__meadowlight;
     w.clear();
-    w.resumeSeasonClock();
     w.timeSetPaused(false);
     w.timeSetSpeed(1);
     w.setSeasonProgressForTest(0.2);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { usePlacementStore } from '../render/placementStore';
 import { theme, headingStyle } from './theme';
+import { CHROME_TUNING } from '../data/chrome';
 
 /**
  * Gentle 3-step onboarding: "plant a flower" -> "click it to learn" ->
@@ -20,8 +21,8 @@ const STEPS: { title: string; body: string }[] = [
     body: 'Pick any flower from the palette below and click the meadow to plant it. There is no wrong spot — winding drifts look best.',
   },
   {
-    title: '🐝 Click it to learn',
-    body: 'Click any flower, hive, or bath with an empty hand (no tool selected) and your field notebook shares a real bee fact.',
+    title: '🔍 Hover it to learn',
+    body: 'Arm the magnifying glass in the corner and hover any flower, hive, or bee for a close read — your field notebook shares a real fact.',
   },
   {
     title: '🌇 Come back tomorrow',
@@ -41,9 +42,12 @@ export function Onboarding() {
       style={{
         // #6384003544: renders ABOVE the palette dock — anchored to the
         // dock's top edge (the dock is bottom:16 + its height), never
-        // overlapping the dock or the corner controls
+        // overlapping the dock or the corner controls. #v4 O1/O4: the dock
+        // grows a scrollable body at narrow frames, so the hint's bottom
+        // offset is the ONE chrome constant (data/chrome) — the gate reads
+        // the rendered rect at 1280/900/480px widths.
         position: 'absolute',
-        bottom: 120,
+        bottom: CHROME_TUNING.onboardingHintBottom,
         left: 16,
         maxWidth: 320,
         padding: theme.spacing.panelPadding,
@@ -57,7 +61,7 @@ export function Onboarding() {
         zIndex: 5,
       }}
     >
-      <div style={{ fontSize: theme.font.smallSize - 1, letterSpacing: 0.6, textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 4 }}>
+      <div style={{ ...headingStyle(theme.font.smallSize - 1), textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 4 }}>
         Welcome to your meadow · step {step + 1} of 3
       </div>
       <div style={{ ...headingStyle(theme.font.bodySize + 1), marginBottom: 6 }}>{STEPS[step].title}</div>
