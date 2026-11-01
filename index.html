@@ -25,6 +25,32 @@
          HEADINGS = Silkscreen 400/700 (pixel identity for titles/labels).
          The stacks themselves live in src/data/typography.ts; the families
          here are what those stacks reference. */
+      /* P4 (i18n): latin-ext faces carry the Slovenian diacritics (č š ž).
+         unicode-range keeps the latin subset primary for ASCII text. */
+      @font-face {
+        font-family: 'Nunito';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('./fonts/nunito-latin-ext-400-normal.woff2') format('woff2');
+        unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+      }
+      @font-face {
+        font-family: 'Nunito';
+        font-style: normal;
+        font-weight: 500;
+        font-display: swap;
+        src: url('./fonts/nunito-latin-ext-500-normal.woff2') format('woff2');
+        unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+      }
+      @font-face {
+        font-family: 'Nunito';
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url('./fonts/nunito-latin-ext-700-normal.woff2') format('woff2');
+        unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+      }
       @font-face {
         font-family: 'Nunito';
         font-style: normal;
@@ -45,6 +71,26 @@
         font-weight: 700;
         font-display: swap;
         src: url('./fonts/nunito-v32-latin-700.woff2') format('woff2');
+      }
+      /* P4: Silkscreen latin-ext LACKS č/ć (verified in the woff2 cmap) —
+         headings with those glyphs fall back to Nunito for the diacritic
+         only, which the heading stack already covers. Body copy (Nunito
+         latin-ext) has full coverage. */
+      @font-face {
+        font-family: 'Silkscreen';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('./fonts/silkscreen-latin-ext-400-normal.woff2') format('woff2');
+        unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+      }
+      @font-face {
+        font-family: 'Silkscreen';
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url('./fonts/silkscreen-latin-ext-700-normal.woff2') format('woff2');
+        unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
       }
       @font-face {
         font-family: 'Silkscreen';

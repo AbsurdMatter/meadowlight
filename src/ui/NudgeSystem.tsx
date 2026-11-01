@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { usePlacementStore } from '../render/placementStore';
+import { useLocale } from '../engine/locale';
 import { scaledElapsed } from '../engine/scaledTime';
 import { ONBOARDING_TUNING } from '../data/onboarding';
 import { theme } from './theme';
@@ -29,31 +30,35 @@ interface Nudge {
   body: string;
 }
 
-const NUDGES: Nudge[] = [
-  {
-    id: 'welcome-meadow',
-    afterSeconds: ONBOARDING_TUNING.nudges.firstAfterSeconds,
-    entry: { kind: 'meadow', id: 'welcome' },
-    title: 'Your meadow is already alive',
-    body: 'A hive hums and the flowers are open — the bees found them on their own. Plant more from the palette below whenever you like.',
-  },
-  {
-    id: 'meet-the-glass',
-    afterSeconds: ONBOARDING_TUNING.nudges.firstAfterSeconds + ONBOARDING_TUNING.nudges.gapSeconds,
-    entry: { kind: 'meadow', id: 'glass' },
-    title: 'Try the magnifying glass',
-    body: 'The glass in the corner zooms in on anything living — hover a flower or a bee with it armed for a close read.',
-  },
-  {
-    id: 'watch-the-seasons',
-    afterSeconds: ONBOARDING_TUNING.nudges.firstAfterSeconds + ONBOARDING_TUNING.nudges.gapSeconds * 2,
-    entry: { kind: 'meadow', id: 'seasons' },
-    title: 'The seasons turn on their own',
-    body: 'Turn the dial in the corner to visit another season — what blooms changes, and the meadow remembers what you have seen.',
-  },
-];
+function nudgesFor(t: import('../data/i18n').UiCopy): Nudge[] {
+  return [
+    {
+      id: 'welcome-meadow',
+      afterSeconds: ONBOARDING_TUNING.nudges.firstAfterSeconds,
+      entry: { kind: 'meadow', id: 'welcome' },
+      title: t.nudgeAliveTitle,
+      body: t.nudgeAliveBody,
+    },
+    {
+      id: 'meet-the-glass',
+      afterSeconds: ONBOARDING_TUNING.nudges.firstAfterSeconds + ONBOARDING_TUNING.nudges.gapSeconds,
+      entry: { kind: 'meadow', id: 'glass' },
+      title: t.nudgeGlassTitle,
+      body: t.nudgeGlassBody,
+    },
+    {
+      id: 'watch-the-seasons',
+      afterSeconds: ONBOARDING_TUNING.nudges.firstAfterSeconds + ONBOARDING_TUNING.nudges.gapSeconds * 2,
+      entry: { kind: 'meadow', id: 'seasons' },
+      title: t.nudgeSeasonsTitle,
+      body: t.nudgeSeasonsBody,
+    },
+  ];
+}
 
 export function NudgeSystem() {
+  const t = useLocale((s) => s.t());
+  const NUDGES = nudgesFor(t);
   const markNudgeShown = usePlacementStore((s) => s.markNudgeShown);
   const openNotebook = usePlacementStore((s) => s.openNotebook);
   const onboardingDismissed = usePlacementStore((s) => s.onboardingDismissed);

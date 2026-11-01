@@ -6,6 +6,7 @@ import { renderVoxelThumb, renderVoxelCloseUp } from '../engine/thumbnails';
 import { plantingsBySeason, bloomSeasonsLabel, seasonBadge } from '../data/bloomWindows';
 import { theme, headingStyle } from './theme';
 import { CHROME_TUNING } from '../data/chrome';
+import { useLocale } from '../engine/locale';
 
 const chipStyle = (active: boolean, enabled: boolean): React.CSSProperties => ({
   border: `${theme.border.chunk}px solid ${active ? theme.color.clay : 'transparent'}`,
@@ -82,6 +83,7 @@ const tabStyle = (active: boolean): React.CSSProperties => ({
  *  bloom season (derived from the engine's bloom data); EQUIPMENT is the
  *  bee-care structures + the nature structures that live with them. */
 export function Palette() {
+  const t = useLocale((s) => s.t());
   const [tab, setTab] = useState<'planting' | 'equipment'>('planting');
   const selectedPlantId = usePlacementStore((s) => s.selectedPlantId);
   const selectedStructureId = usePlacementStore((s) => s.selectedStructureId);
@@ -303,18 +305,18 @@ export function Palette() {
           onClick={() => setTab('planting')}
           style={tabStyle(tab === 'planting')}
           aria-pressed={tab === 'planting'}
-          title="Flowers & nature — grouped by bloom season"
+          title={t.palettePlantingTitle}
         >
-          🌿 Planting
+          {t.palettePlantingLabel}
         </button>
         <button
           data-palette-tab="equipment"
           onClick={() => setTab('equipment')}
           style={tabStyle(tab === 'equipment')}
           aria-pressed={tab === 'equipment'}
-          title="Bee housing & care"
+          title={t.paletteEquipmentTitle}
         >
-          🐝 Equipment
+          {t.paletteEquipmentLabel}
         </button>
       </div>
       {/* the tab body — O4: at narrow frames the tab body wraps INSIDE the
@@ -387,9 +389,9 @@ export function Palette() {
             whiteSpace: 'nowrap',
           }}
         >
-          <span>Natural placement</span>
+          <span>{t.naturalPlacement}</span>
           <button onClick={toggleVariation} style={buttonStyle(placementVariation)}>
-            {placementVariation ? 'ON' : 'OFF'}
+            {placementVariation ? t.on : t.off}
           </button>
           <span style={{ opacity: 0.65 }}>(F)</span>
         </div>

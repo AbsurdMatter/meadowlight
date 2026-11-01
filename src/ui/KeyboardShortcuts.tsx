@@ -9,11 +9,11 @@ import {
   toggleForKey,
   escActionFor,
   isTypingTarget,
-  SHORTCUT_HINT,
   type KeyState,
 } from '../engine/keyboardShortcuts';
 import { theme, headingStyle } from './theme';
 import { CHROME_TUNING } from '../data/chrome';
+import { useLocale } from '../engine/locale';
 
 /**
  * O5 (v4, #43): the keyboard grammar — PURE input translation onto the
@@ -85,7 +85,23 @@ export function SceneKeyboard() {
 
 /** the DOM-side key handlers + the "?" hint — OUTSIDE the Canvas (the
  *  resolver-inside-Canvas / card-outside split, session-8 lesson 8). */
+function hintGroups(t: import('../data/i18n').UiCopy): { heading: string; rows: { key: string; action: string }[] }[] {
+  return [
+    { heading: t.shortcutsGroupCamera, rows: [
+      { key: 'W A S D', action: t.shortcutsMoveCamera },
+      { key: 'Q E', action: t.shortcutsTurnView },
+    ] },
+    { heading: t.shortcutsGroupTools, rows: [
+      { key: 'I', action: t.shortcutsGlass },
+      { key: 'J', action: t.shortcutsJournal },
+      { key: 'R', action: t.shortcutsStartOver },
+    ] },
+    { heading: t.shortcutsGroupCancel, rows: [{ key: 'Esc', action: t.shortcutsCloseOpen }] },
+  ];
+}
+
 export function KeyboardShortcuts() {
+  const t = useLocale((s) => s.t());
   const keys = useRef<KeyState>(emptyKeyState());
   const [hintOpen, setHintOpen] = useState(false);
 
@@ -351,7 +367,7 @@ export function KeyboardShortcuts() {
       <button
         onClick={() => setHintOpen((o) => !o)}
         data-shortcut-hint
-        title="Keyboard shortcuts"
+        title={t.shortcutsPanelTitle}
         aria-pressed={hintOpen}
         style={{
           position: 'absolute',
@@ -403,15 +419,15 @@ export function KeyboardShortcuts() {
           }}
         >
           <div style={{ ...headingStyle(theme.font.smallSize - 1), textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 8 }}>
-            {SHORTCUT_HINT.title}
+            {t.shortcutsTitle}
           </div>
           {/* Round-1 finding 4: the content is a GROUPED LIST, not one
               joined block — groups by area (Camera / Tools / Cancel), one
               key + action pair per row. The key column is fixed-width so
               the actions align; the layout is measured (the panel's own
               placement was finding 2), not assumed. */}
-          {SHORTCUT_HINT.groups.map((group, gi) => (
-            <div key={group.heading} data-shortcut-group={group.heading} style={{ marginBottom: gi < SHORTCUT_HINT.groups.length - 1 ? 10 : 0 }}>
+          {hintGroups(t).map((group, gi) => (
+            <div key={group.heading} data-shortcut-group={group.heading} style={{ marginBottom: gi < hintGroups(t).length - 1 ? 10 : 0 }}>
               <div style={{ ...headingStyle(theme.font.smallSize - 1), textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 3 }}>
                 {group.heading}
               </div>

@@ -15,7 +15,8 @@ import {
   seasonProgress,
   setSeasonProgressForTest,
 } from '../engine/seasonClock';
-import { SEASON_ARRIVAL } from '../data/seasons';
+import { SEASON_COPY } from '../data/i18n';
+import { useLocale } from '../engine/locale';
 import { newlyFormed, companionSet } from '../engine/companions';
 import { combReady, fillAfterHarvest } from '../engine/honey';
 import { HONEY_FACTS } from '../data/honey';
@@ -296,7 +297,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
           ? [...s.wildSeasons, season]
           : s.wildSeasons;
       const toast = announce
-        ? { id: toastSeq++, title: 'A season drifts in', body: SEASON_ARRIVAL[season] }
+        ? { id: toastSeq++, title: useLocale.getState().t().toastSeasonDriftsIn, body: SEASON_COPY[useLocale.getState().locale][season].arrival }
         : null;
       return toast ? { season, wildSeasons, toasts: [...s.toasts, toast] } : { season, wildSeasons };
     });
@@ -322,7 +323,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
         ...s.toasts,
         ...fresh.map((r) => ({
           id: toastSeq++,
-          title: 'A garden recipe!',
+          title: useLocale.getState().t().toastGardenRecipe,
           body: `${r.label} — ${r.fact}`,
         })),
       ],
@@ -613,7 +614,7 @@ function seedVolunteers(season: Season, announce: boolean): void {
             ...cur.toasts,
             {
               id: toastSeq++,
-              title: 'The meadow seeds itself',
+              title: useLocale.getState().t().toastMeadowSeedsItself,
               body: SEEDING_FACTS.volunteer,
             },
           ]

@@ -17,6 +17,8 @@ import { advanceComb } from '../engine/honey';
 export const honeyDebug = { lastForagingBees: 0, lastAppeal: 0 };
 import { noVariation } from '../engine/variation';
 import type { PlacedStructure } from '../engine/persistence';
+import { MILESTONE_LABEL_COPY } from '../data/i18n';
+import { useLocale } from '../engine/locale';
 
 interface BeeState {
   pos: THREE.Vector3;
@@ -384,7 +386,7 @@ export function BeeSwarm() {
       if (!s2.milestones.includes('firstSwarm')) {
         s2.earnMilestone(
           'firstSwarm',
-          'Wings in the air',
+          MILESTONE_LABEL_COPY[useLocale.getState().locale].firstSwarm ?? 'Wings in the air',
           'Bees are foraging! A colony visits flowers at its own gentle rhythm.',
         );
       }

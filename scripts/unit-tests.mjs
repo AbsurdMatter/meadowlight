@@ -1810,6 +1810,62 @@ test('P3 seed code: unknown/corrupt codes are rejected (fresh world + backup pat
   assert.strictEqual(decodeSeedCode(waterCode), null, 'a code landing in water is rejected wholesale');
 });
 
+
+// ---------- session 10 P4: i18n key-set parity + diacritics ----------
+const { UI_COPY, LOCALES, SEASON_COPY, PLANT_NAME_COPY, STRUCTURE_NAME_COPY, MILESTONE_LABEL_COPY, RECIPE_LABEL_COPY, VISITOR_NAME_COPY, localeFromBrowser } = require(OUT + '/data/i18n.js');
+
+test('P4 i18n: key-set parity between locales — every en key exists in sl and vice versa (no missing-key fallbacks)', () => {
+  for (const loc of LOCALES) {
+    const keys = Object.keys(UI_COPY.en).sort();
+    assert.deepStrictEqual(Object.keys(UI_COPY[loc]).sort(), keys, 'UI_COPY.' + loc + ' has exactly the en key set');
+  }
+  for (const table of [SEASON_COPY, PLANT_NAME_COPY, STRUCTURE_NAME_COPY, MILESTONE_LABEL_COPY, RECIPE_LABEL_COPY, VISITOR_NAME_COPY]) {
+    for (const loc of LOCALES) {
+      assert.deepStrictEqual(Object.keys(table[loc]).sort(), Object.keys(table.en).sort(), 'copy table parity for ' + loc);
+    }
+  }
+  // season copy covers every season in both locales
+  const { SEASONS } = require(OUT + '/data/seasons.js');
+  for (const loc of LOCALES) for (const s of SEASONS) assert.ok(SEASON_COPY[loc][s]?.label, 'season ' + s + ' labeled in ' + loc);
+});
+
+test('P4 i18n: Slovenian copy actually contains the diacritics (č š ž) — the rendered glyphs exist in Nunito latin-ext', () => {
+  const sl = JSON.stringify(UI_COPY.sl) + JSON.stringify(SEASON_COPY.sl) + JSON.stringify(PLANT_NAME_COPY.sl);
+  for (const ch of ['č', 'š', 'ž', 'Č', 'Š', 'Ž']) {
+    assert.ok(sl.includes(ch), 'sl copy contains ' + ch);
+  }
+  // browser-locale default: sl for Slovenian browsers, en otherwise
+  assert.strictEqual(localeFromBrowser({ language: 'sl-SI', languages: ['sl-SI', 'en-US'] }), 'sl');
+  assert.strictEqual(localeFromBrowser({ language: 'en-US', languages: ['en-US'] }), 'en');
+  assert.strictEqual(localeFromBrowser({ language: 'de-DE' }), 'en');
+});
+
+test('P4 i18n: no hardcoded user-facing strings left in components (grep gate over src/ui + App.tsx)', () => {
+  const { readFileSync, readdirSync } = require('fs');
+  const { join: j } = require('path');
+  const rootDir = process.env.MEADOW_SRC_ROOT || j(process.cwd(), 'src');
+  const files = [...readdirSync(j(rootDir, 'ui')), 'App.tsx'].map((f) => j(rootDir, 'ui', f));
+  files.push(j(rootDir, 'App.tsx'));
+  const banned = [
+    /title="[A-Z][^"]*"/, /aria-label="[A-Z][^"]*"/,
+    />([^<{}]*[A-Z][a-z]+ [a-z]+[^<{}]*)</,
+  ];
+  const hits = [];
+  for (const f of files) {
+    let src;
+    try { src = readFileSync(f, 'utf8'); } catch { continue; }
+    // strip import lines and comments
+    const lines = src.split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('import ') && !l.trim().startsWith('//') && !l.trim().startsWith('*'));
+    for (const l of lines) {
+      for (const re of banned) {
+        const m = l.match(re);
+        if (m && !/data-|http|aria-hidden|fontFamily|color:|PerfOverlay/.test(f + m[0])) hits.push(f.split('/').pop() + ': ' + m[0].slice(0, 60));
+      }
+    }
+  }
+  assert.deepStrictEqual(hits, [], 'hardcoded strings in components: ' + hits.join(' | '));
+});
+
 test('P3 seed code: decoded layout is identical across two independent decodes (cross-machine shape)', () => {
   const items = [];
   for (let i = 0; i < 12; i++) {
@@ -1830,7 +1886,7 @@ test('P3 seed code: decoded layout is identical across two independent decodes (
   const run = spawnSync(
     process.execPath,
     ['--test', join(work, 'tests/engine.test.cjs')],
-    { cwd: work, encoding: 'utf8', env: { ...process.env, NODE_PATH: join(work) } },
+    { cwd: work, encoding: 'utf8', env: { ...process.env, NODE_PATH: join(work), MEADOW_SRC_ROOT: join(root, 'src') } },
   );
   // node --test resolves require('./out/...') relative to the test file; the
   // paths above already point into `work/out`. Print output and propagate status.

@@ -11,6 +11,7 @@ import { wildDebug } from '../render/WildPollinators';
 import { fireflyDebug } from '../render/Fireflies';
 import { setDayPhase } from './dayCycle';
 import { encodeSeedCode } from './seedCode';
+import { useLocale } from './locale';
 import { precipitationVisual } from './weather';
 import { precipReadback, tickPrecipScheduleForTest } from './rainSchedule';
 import { allWildlife } from '../render/magnifierProbes';
@@ -183,6 +184,9 @@ declare global {
       /** P3: seed codes — encode the live meadow / start from a code */
       seedCodeEncode: () => string;
       startFromSeedCode: (code: string) => boolean;
+    /** P4: locale readback + test setter (same store the toggle drives) */
+    localeReadback: () => string;
+    setLocaleForTest: (l: string) => void;
       openNotebookPlant: (itemId: string) => void;
       __three?: {
         camera: PerspectiveCamera;
@@ -406,6 +410,8 @@ export function installTestHook() {
       return encodeSeedCode(s.worldSeed, s.items);
     },
     startFromSeedCode: (code) => usePlacementStore.getState().startFromSeedCode(code),
+    localeReadback: () => useLocale.getState().locale,
+    setLocaleForTest: (l) => useLocale.getState().setLocale(l as 'en' | 'sl'),
     openNotebookPlant: (itemId) =>
       usePlacementStore.getState().openNotebook({ kind: 'plant', id: itemId }),
   };

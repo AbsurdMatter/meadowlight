@@ -7,6 +7,8 @@ import { combStateLine } from '../data/honey';
 import { colonyReadback } from '../engine/lifecycle';
 import { seasonProgress } from '../engine/seasonClock';
 import { theme, headingStyle } from './theme';
+import { useLocale } from '../engine/locale';
+import { STRUCTURE_NAME_COPY } from '../data/i18n';
 
 /**
  * #36 hive popup (user-approved design): a small popup anchored over the
@@ -22,6 +24,7 @@ import { theme, headingStyle } from './theme';
  * comb shows the gentle "the bees are still working" line.
  */
 export function HivePopup() {
+  const locale = useLocale((s) => s.locale);
   const hivePopup = usePlacementStore((s) => s.hivePopup);
   const structures = usePlacementStore((s) => s.structures);
   const hiveCombs = usePlacementStore((s) => s.hiveCombs);
@@ -89,7 +92,7 @@ export function HivePopup() {
   // ONE shared predicate: the same combReady the harvest path uses
   // (the isDaylight lesson — no second definition of full)
   const ready = combReady(fill);
-  const name = STRUCTURE_BY_ID.hive?.name ?? 'Hive';
+  const name = STRUCTURE_NAME_COPY[locale].hive ?? STRUCTURE_BY_ID.hive?.name ?? 'Hive';
   // the ONE shared state line (src/data/honey) — the info panel's hive
   // hint renders the same strings, so both surfaces always agree
   const fillLine = combStateLine(fill);

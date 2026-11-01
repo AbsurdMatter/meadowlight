@@ -9,6 +9,7 @@ import {
 import { beeDebug } from '../render/BeeSwarm';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
 import { theme } from './theme';
+import { useLocale } from '../engine/locale';
 
 /**
  * Single visible audio toggle: OFF by default (the preference persists —
@@ -17,6 +18,7 @@ import { theme } from './theme';
  * canvas pointer interception. Styled from the theme module only (#16).
  */
 export function AudioToggle() {
+  const t = useLocale((s) => s.t());
   // the persisted preference is the initial state; the graph itself still
   // starts only from a user gesture (autoplay policy) — a returning player
   // with sound on hears the meadow after their first click anywhere
@@ -50,7 +52,7 @@ export function AudioToggle() {
       onClick={toggle}
       data-audio-toggle
       aria-pressed={on}
-      title={on ? 'Mute the meadow' : 'Listen to the meadow'}
+      title={on ? t.audioMuteTitle : t.audioListenTitle}
       style={{
         // UI round 3 (#6383867199): shares the corner row's 36px baseline
         height: 36,
@@ -70,7 +72,7 @@ export function AudioToggle() {
         boxShadow: theme.border.shadow,
       }}
     >
-      {on ? '\u{1F507} Sound on' : '\u{1F50A} Sound off'}
+      {on ? t.audioOn : t.audioOff}
     </button>
   );
 }

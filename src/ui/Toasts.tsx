@@ -2,10 +2,12 @@ import { useEffect } from 'react';
 import { usePlacementStore } from '../render/placementStore';
 import { theme, headingStyle } from './theme';
 import { CHROME_TUNING } from '../data/chrome';
+import { useLocale } from '../engine/locale';
 
 const TOAST_MS = 7000;
 
 function Toast({ id, title, body }: { id: number; title: string; body: string }) {
+  const t = useLocale((s) => s.t());
   const dismiss = usePlacementStore((s) => s.dismissToast);
   useEffect(() => {
     const t = setTimeout(() => dismiss(id), TOAST_MS);
@@ -42,7 +44,7 @@ function Toast({ id, title, body }: { id: number; title: string; body: string })
           cursor: 'pointer',
         }}
       >
-        lovely
+        {t.toastLovely}
       </button>
     </div>
   );

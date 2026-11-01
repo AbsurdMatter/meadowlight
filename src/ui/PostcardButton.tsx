@@ -5,6 +5,7 @@ import { theme, headingStyle } from './theme';
 import { PostcardStats, postcardStatText } from './PostcardStats';
 import { usePlacementStore } from '../render/placementStore';
 import { encodeSeedCode } from '../engine/seedCode';
+import { useLocale } from '../engine/locale';
 
 /**
  * Postcard button: one click saves the meadow as a PNG.
@@ -18,6 +19,7 @@ import { encodeSeedCode } from '../engine/seedCode';
  * and notebook stay local.
  */
 export function PostcardButton() {
+  const t = useLocale((s) => s.t());
   const [saved, setSaved] = useState(false);
   const [stats, setStats] = useState(false);
   const [seedShown, setSeedShown] = useState(false);
@@ -46,7 +48,7 @@ export function PostcardButton() {
       <button
         onClick={onClick}
         data-postcard-button
-        title="Save a postcard of your meadow"
+        title={t.postcardTitle}
         style={{
         // UI round 3 (#6383867199): shares the corner row's 36px baseline
         // (align-self stretch from the row; no hand-positioned offsets)
@@ -67,7 +69,7 @@ export function PostcardButton() {
         boxShadow: theme.border.shadow,
       }}
     >
-        {saved ? 'saved ✓' : '📸 Postcard'}
+        {saved ? t.postcardSaved : t.postcardButton}
       </button>
       {stats && <PostcardStats />}
       <button
@@ -86,7 +88,7 @@ export function PostcardButton() {
           }
         }}
         data-seed-share-button
-        title="Share this meadow's seed — a friend grows the same layout from it"
+        title={t.seedShareTitle}
         style={{
           height: 36,
           boxSizing: 'border-box',
@@ -105,7 +107,7 @@ export function PostcardButton() {
           boxShadow: theme.border.shadow,
         }}
       >
-        {seedCopied ? 'copied ✓' : '🌱 Seed'}
+        {seedCopied ? t.seedCopiedButton : t.seedButton}
       </button>
       {seedShown && (
         <div
@@ -127,7 +129,7 @@ export function PostcardButton() {
             pointerEvents: 'auto',
           }}
         >
-          <div style={{ ...headingStyle(theme.font.bodySize), marginBottom: 6 }}>Share this meadow&rsquo;s seed</div>
+          <div style={{ ...headingStyle(theme.font.bodySize), marginBottom: 6 }}>{t.seedShareHeading}</div>
           <div
             data-seed-code
             style={{
@@ -141,7 +143,7 @@ export function PostcardButton() {
             {encodeSeedCode(usePlacementStore.getState().worldSeed, usePlacementStore.getState().items)}
           </div>
           <div style={{ marginTop: 6, opacity: 0.85 }}>
-            {seedCopied ? 'Copied — send it to a friend.' : 'Click the code to select it, then copy.'}
+            {seedCopied ? t.seedShareCopied : t.seedShareHint}
           </div>
         </div>
       )}

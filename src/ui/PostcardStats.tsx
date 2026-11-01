@@ -3,6 +3,7 @@ import { usePlacementStore } from '../render/placementStore';
 import { beeDebug } from '../render/BeeSwarm';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
 import { theme, headingStyle } from './theme';
+import { useLocale } from '../engine/locale';
 
 /**
  * #18 postcard stats strip: gentle nature facts, never scores.
@@ -20,13 +21,13 @@ interface StatLine {
   value: string;
 }
 
-function statLines(): StatLine[] {
+function statLines(t: import('../data/i18n').UiCopy): StatLine[] {
   const s = usePlacementStore.getState();
   const bees = beeDebug.count + solitaryBeeDebug.count + rareBeeDebug.count;
   return [
     {
       key: 'nature',
-      label: 'Nature planted',
+      label: t.statNaturePlanted,
       value:
         s.items.length === 1
           ? 'one flower — every meadow starts here'
@@ -34,7 +35,7 @@ function statLines(): StatLine[] {
     },
     {
       key: 'beecare',
-      label: 'Bee care put up',
+      label: t.statBeeCarePutUp,
       value:
         s.structures.length === 0
           ? 'none yet — the meadow manages on its own'
@@ -42,17 +43,17 @@ function statLines(): StatLine[] {
     },
     {
       key: 'bees',
-      label: 'Bees about',
+      label: t.statBeesAbout,
       value: bees === 0 ? 'quiet skies — bees come with blooms' : `${bees}`,
     },
     {
       key: 'seasons',
-      label: 'Seasons passed',
+      label: t.statSeasonsPassed,
       value: (s.wildSeasons?.length ?? 0) === 0 ? 'the dial has not turned yet' : `${s.wildSeasons.length}`,
     },
     {
       key: 'honey',
-      label: 'Jars of honey brought in',
+      label: t.statJarsOfHoney,
       value:
         (s.honeyJars ?? 0) === 0
           ? 'the comb is still filling'
@@ -68,11 +69,12 @@ const labelStyle: CSSProperties = {
 };
 
 export function PostcardStats() {
-  const [lines, setLines] = useState<StatLine[]>(statLines());
+  const t = useLocale((s) => s.t());
+  const [lines, setLines] = useState<StatLine[]>(() => statLines(t));
   useEffect(() => {
-    const t = setInterval(() => setLines(statLines()), 800);
-    return () => clearInterval(t);
-  }, []);
+    const timer = setInterval(() => setLines(statLines(t)), 800);
+    return () => clearInterval(timer);
+  }, [t]);
   return (
     <div
       data-postcard-stats
@@ -110,5 +112,6 @@ export function PostcardStats() {
 
 /** The same four facts, for the composed postcard image (canvas 2D). */
 export function postcardStatText(): StatLine[] {
-  return statLines();
+  const t = useLocale((s) => s.t());
+  return statLines(t);
 }

@@ -5,6 +5,7 @@ import { NotebookHub } from './NotebookHub';
 import { theme } from './theme';
 import { usePlacementStore } from '../render/placementStore';
 import { CHROME_TUNING } from '../data/chrome';
+import { useLocale } from '../engine/locale';
 
 /**
  * One shared bottom-right container: Sound, Postcard, the notebook hub, and
@@ -80,6 +81,7 @@ const controlButtonStyle = (armed: boolean): React.CSSProperties => ({
 });
 
 export function CornerControls() {
+  const t = useLocale((s) => s.t());
   const [helpOpen, setHelpOpen] = useState(false);
   // O4 (v4, #42): at narrow frames the corner row WRAPS to two rows
   // (right-anchored) instead of running under the dock — the reserved lane
@@ -97,6 +99,8 @@ export function CornerControls() {
   // and grouping it with placeable things was the confusion
   const magnifierOn = usePlacementStore((s) => s.magnifierOn);
   const toggleMagnifier = usePlacementStore((s) => s.toggleMagnifier);
+  const locale = useLocale((s) => s.locale);
+  const setLocale = useLocale((s) => s.setLocale);
   return (
     <div
       data-corner-controls
@@ -143,7 +147,7 @@ export function CornerControls() {
         <button
           onClick={toggleMagnifier}
           data-corner-tool="magnifier"
-          title="Magnifying glass — hover a flower or a visitor for a close read"
+          title={t.magnifierTitle}
           aria-pressed={magnifierOn}
           style={controlButtonStyle(magnifierOn)}
         >
@@ -154,10 +158,22 @@ export function CornerControls() {
         <button
           onClick={() => setHelpOpen((o) => !o)}
           data-controls-help
-          title="How to play"
+          title={t.helpTitle}
           style={controlButtonStyle(false)}
         >
           ?
+        </button>
+        {/* P4 (i18n): the manual language toggle — one button in the corner
+            row, cycles the locales, persisted, aria-pressed syncs both ways */}
+        <button
+          onClick={() => setLocale(locale === 'en' ? 'sl' : 'en')}
+          data-language-toggle
+          title={t.languageName[locale === 'en' ? 'sl' : 'en']}
+          aria-pressed={locale === 'sl'}
+          aria-label={`Language: ${t.languageName[locale]}`}
+          style={controlButtonStyle(false)}
+        >
+          {locale === 'en' ? 'SL' : 'EN'}
         </button>
       </div>
     </div>

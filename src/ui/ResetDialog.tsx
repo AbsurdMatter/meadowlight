@@ -1,6 +1,7 @@
 import { Component, type ReactNode, useState } from 'react';
 import { usePlacementStore } from '../render/placementStore';
 import { theme, headingStyle } from './theme';
+import { useLocale } from '../engine/locale';
 
 class DialogBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -17,6 +18,7 @@ class DialogBoundary extends Component<{ children: ReactNode }, { failed: boolea
 }
 
 function ResetDialogInner() {
+  const t = useLocale((s) => s.t());
   const resetWorld = usePlacementStore((s) => s.resetWorld);
   const startFromSeedCode = usePlacementStore((s) => s.startFromSeedCode);
   const setModalOpen = usePlacementStore((s) => s.setModalOpen);
@@ -61,7 +63,7 @@ function ResetDialogInner() {
           cursor: 'pointer',
           boxShadow: theme.border.shadow,
         }}
-        title="Start the meadow over"
+        title={t.resetButtonTitle}
       >
         Reset meadow
       </button>
@@ -97,14 +99,13 @@ function ResetDialogInner() {
               maxWidth: 380,
             }}
           >
-            <strong style={headingStyle(theme.font.titleSize)}>Reset your meadow?</strong>
+            <strong style={headingStyle(theme.font.titleSize)}>{t.resetDialogTitle}</strong>
             <p style={{ fontSize: theme.font.bodySize, lineHeight: theme.font.lineHeight, margin: '10px 0 18px' }}>
-              All placed flowers, structures, progress and milestones will be deleted.
-              This cannot be undone.
+              {t.resetDialogBody}
             </p>
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: theme.font.smallSize, marginBottom: 6, opacity: 0.85 }}>
-                Or start from a friend&rsquo;s seed:
+                {t.resetOrSeedHeading}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
@@ -112,8 +113,8 @@ function ResetDialogInner() {
                   value={seedInput}
                   onChange={(e) => { setSeedInput(e.target.value); setSeedError(false); }}
                   onKeyDown={(e) => { if (e.key === 'Enter') onSeedStart(); }}
-                  placeholder="ML1.……"
-                  aria-label="Seed code"
+                  placeholder={t.resetSeedPlaceholder}
+                  aria-label={t.resetOrSeedHeading}
                   style={{
                     flex: 1,
                     padding: '6px 10px',
@@ -139,12 +140,12 @@ function ResetDialogInner() {
                     boxShadow: theme.border.shadow,
                   }}
                 >
-                  Grow theirs
+                  {t.resetSeedStart}
                 </button>
               </div>
               {seedError && (
                 <div style={{ fontSize: theme.font.smallSize, color: theme.color.clayDark, marginTop: 6 }}>
-                  That seed doesn&rsquo;t read — nothing was changed, your meadow is safe.
+                  {t.resetSeedError}
                 </div>
               )}
             </div>
@@ -162,7 +163,7 @@ function ResetDialogInner() {
                   boxShadow: theme.border.shadow,
                 }}
               >
-                Cancel
+                {t.resetCancel}
               </button>
               <button
                 onClick={onReset}
@@ -177,7 +178,7 @@ function ResetDialogInner() {
                   boxShadow: theme.border.shadow,
                 }}
               >
-                Reset
+                {t.resetConfirm}
               </button>
             </div>
           </div>

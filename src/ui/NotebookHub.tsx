@@ -19,6 +19,8 @@ import { RECIPES } from '../data/recipes';
 import { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, type SeasonalVisitorTuning } from '../data/seasonalVisitors';
 import { usePlacementStore } from '../render/placementStore';
 import { theme, headingStyle } from './theme';
+import { useLocale } from '../engine/locale';
+import { RECIPE_LABEL_COPY, VISITOR_NAME_COPY, PLANT_NAME_COPY, STRUCTURE_NAME_COPY, MILESTONE_LABEL_COPY } from '../data/i18n';
 
 class HubBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -52,18 +54,18 @@ const factText = (id: string): string | null => {
 /** O2: the journal row's display label — flowers/structures by name,
  *  wildlife by the glass's own name (one source: the same tables the card
  *  reads; the journal adds no new facts). */
-function journalLabel(r: JournalRecord): string {
+function journalLabel(r: JournalRecord, locale: import('../data/i18n').Locale, t: import('../data/i18n').UiCopy): string {
   if (r.kind === 'flower') {
     // the subject is the placed id — resolve the species name from the
     // live world (display only; the record itself is the saved ground truth)
     const item = usePlacementStore.getState().items.find((i) => i.id === r.subject);
     const def = item ? PLANT_BY_ID[item.plantId] : undefined;
-    return def ? def.name : 'A flower';
+    return def ? (PLANT_NAME_COPY[locale][def.id] ?? def.name) : t.flowerFallback;
   }
   if (r.kind === 'structure') {
-    return STRUCTURE_BY_ID[r.subject as keyof typeof STRUCTURE_BY_ID]?.name ?? r.subject;
+    return (STRUCTURE_NAME_COPY[locale][r.subject] ?? STRUCTURE_BY_ID[r.subject as keyof typeof STRUCTURE_BY_ID]?.name) ?? r.subject;
   }
-  return MAGNIFIER_WILDLIFE[r.subject]?.name ?? r.subject;
+  return (VISITOR_NAME_COPY[locale][r.subject] ?? MAGNIFIER_WILDLIFE[r.subject]?.name) ?? r.subject;
 }
 
 const hubPanelStyle: React.CSSProperties = {
@@ -88,6 +90,8 @@ const hubPanelStyle: React.CSSProperties = {
 };
 
 function HubInner() {
+  const locale = useLocale((s) => s.locale);
+  const t = useLocale((s) => s.t());
   // O5 (v4, #43): the hub's open state lives in the store — the pointer
   // button and the J key write ONE source; aria-pressed syncs both ways.
   const open = usePlacementStore((s) => s.hubOpen);
@@ -124,7 +128,7 @@ function HubInner() {
       <button
         onClick={() => setOpen(!open)}
         data-notebook-hub
-        title="Field notebook (J)"
+        title={t.hubNotebookTitle}
         aria-pressed={open}
         style={{
           // #6384003544: shares the corner row's 36px baseline with the
@@ -151,7 +155,7 @@ function HubInner() {
       {open && (
         <div style={hubPanelStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <strong style={headingStyle(theme.font.titleSize)}>Field Notebook</strong>
+            <strong style={headingStyle(theme.font.titleSize)}>{t.hubTitle}</strong>
             <button
               onClick={() => setOpen(false)}
               style={{ border: 'none', background: 'transparent', color: theme.color.textSoft, fontSize: 16, cursor: 'pointer', fontFamily: theme.font.family }}
@@ -160,10 +164,10 @@ function HubInner() {
             </button>
           </div>
 
-          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '14px 0 6px', letterSpacing: 0.4 }}>LEARNED FACTS</h4>
+          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '14px 0 6px', letterSpacing: 0.4 }}>{t.hubLearnedFacts}</h4>
           {learnedByGroup.length === 0 && miscSeen.length === 0 && (
             <div style={{ fontSize: 13, opacity: 0.75 }}>
-              Nothing yet — arm the magnifying glass and hover a flower, hive, or bee; its fact lands here. 🔍
+              {t.hubFactsEmpty}
             </div>
           )}
           {learnedByGroup.map((g) => (
@@ -185,23 +189,23 @@ function HubInner() {
             ) : null;
           })}
 
-          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>FIRST SIGHTINGS</h4>
+          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>{t.hubFirstSightings}</h4>
           <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
             What your glass has shown you — the meadow keeps the list.
           </div>
           {journal.length === 0 ? (
             <div style={{ fontSize: 13, opacity: 0.6, marginBottom: 6 }}>
-              🔒 Nothing yet — arm the glass and hover anything living.
+              🔒 {t.hubSightingsEmpty}
             </div>
           ) : (
             journal.map((r) => (
               <div key={`${r.kind}:${r.subject}:${r.season}`} data-journal-record={`${r.kind}:${r.subject}:${r.season}`} style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 6 }}>
-                ✨ <strong>{journalLabel(r)}</strong> — first seen in {r.season}
+                ✨ <strong>{journalLabel(r, locale, t)}</strong> — first seen in {r.season}
               </div>
             ))
           )}
 
-          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>WILD VISITORS</h4>
+          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>{t.hubWildVisitors}</h4>
           <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
             Who stopped by, and when — the meadow keeps its own guest book.
           </div>
@@ -214,7 +218,7 @@ function HubInner() {
             }
             const fireflySeen = visitorWindows.filter((k) => k.startsWith('fireflies:')).map((k) => k.split(':')[1]);
             if (fireflySeen.length > 0)
-              rows.push({ label: `Fireflies — ${fireflySeen.join(', ')}`, fact: 'On summer evenings the meadow glows — fireflies drift over the wild corners while the hive sleeps.' });
+              rows.push({ label: `${t.hubFireflyLabel} — ${fireflySeen.join(', ')}`, fact: t.hubFireflyFact });
             if (rows.length === 0)
               return (
                 <div style={{ fontSize: 13, opacity: 0.6, marginBottom: 6 }}>
@@ -228,7 +232,7 @@ function HubInner() {
             ));
           })()}
 
-          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>GARDEN RECIPES</h4>
+          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>{t.hubRecipes}</h4>
           <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
             Some flowers love company — plant the right pair as neighbors and see.
           </div>
@@ -244,12 +248,12 @@ function HubInner() {
                   opacity: found ? 1 : 0.6,
                 }}
               >
-                {found ? '\u2728' : '\u{1F514}'} <strong>{found ? r.label : 'A recipe, still undiscovered'}</strong>
-                {found ? ` — ${r.fact}` : ' — two flowers that grow happily together…'}
+                {found ? '\u2728' : '\u{1F514}'} <strong>{found ? (RECIPE_LABEL_COPY[locale][r.id] ?? r.label) : t.hubRecipeUndiscovered}</strong>
+                {found ? ` — ${r.fact}` : t.hubRecipeHint}
               </div>
             );
           })}
-          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>MILESTONES</h4>
+          <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>{t.hubMilestones}</h4>
           {MILESTONES.map((m) => {
             const unlocked = milestones.includes(m.id);
             return (
@@ -262,8 +266,8 @@ function HubInner() {
                   opacity: unlocked ? 1 : 0.6,
                 }}
               >
-                {unlocked ? '🏅' : '🔒'} <strong>{m.label}</strong>
-                {unlocked ? ` — ${m.detail}` : ' — still waiting in the meadow…'}
+                {unlocked ? '🏅' : '🔒'} <strong>{MILESTONE_LABEL_COPY[locale][m.id] ?? m.label}</strong>
+                {unlocked ? ` — ${m.detail}` : ` — ${t.hubMilestoneWaiting}`}
               </div>
             );
           })}
