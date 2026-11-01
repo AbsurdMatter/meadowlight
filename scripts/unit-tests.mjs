@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts', 'visits.ts', 'magnifierHit.ts', 'starterPatch.ts', 'sightingJournal.ts', 'keyboardShortcuts.ts', 'interactionGrammar.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts', 'visits.ts', 'magnifierHit.ts', 'starterPatch.ts', 'sightingJournal.ts', 'keyboardShortcuts.ts', 'interactionGrammar.ts', 'seedCode.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -94,6 +94,7 @@ const { colonyIntensityTarget, LIFECYCLE_LINES } = require(OUT + '/data/lifecycl
 const { HABITAT_TUNING, cornerFoldCells, cornerKey, pondSegments, fringeCells, pondClusters } = require(OUT + '/data/habitatScenery.js');
 const { NIGHT_SKY_TUNING, CLOUDS_OPACITY_BEFORE } = require(OUT + '/data/nightSky.js');
 const { hash2 } = require(OUT + '/engine/seededHash.js');
+const { encodeSeedCode, decodeSeedCode, SEED_CODE_PREFIX } = require(OUT + '/engine/seedCode.js');
 const { starVisibility } = require(OUT + '/engine/nightSky.js');
 const { treePlacements, pondExclusionRadius } = require(OUT + '/engine/treeLayout.js');
 const { advanceColony, colonyIntensity: colonyIntensityExport, colonyReadback: colonyReadbackExport, setColonyIntensityForTest } = require(OUT + '/engine/lifecycle.js');
@@ -1760,6 +1761,64 @@ test('P1: a visited meadow at 8x pace (butterflies do reach some flowers) keeps 
   const roll = rollVolunteers(items, 'summer', 'autumn', 42, 5, () => true, () => false);
   const onlyA = rollVolunteers([items[0]], 'summer', 'autumn', 42, 5, () => true, () => false);
   assert.deepStrictEqual(roll, onlyA, 'non-empty ledger: strict per-flower N2 unchanged');
+});
+
+// ---------- session 10 P3: seed codes (ROADMAP v4 item 8) ----------
+const mkSeedItem = (id, plantId, x, z) => ({
+  id, plantId, position: [x, 0, z], rotationY: 0, phase: 0,
+  variation: { rotationY: 0, heightJitter: 0, tiltX: 0, tiltZ: 0 },
+});
+
+test('P3 seed code: round-trip — same seed -> same layout, across "machines" (pure decode)', () => {
+  const items = [
+    mkSeedItem('p0', 'lavender', -6.12, 3.45),
+    mkSeedItem('p1', 'cosmos', 5.5, -7.25),
+    mkSeedItem('p2', 'crocus', 0.03, 12.9),
+    mkSeedItem('p3', 'poppy', -11.87, -2.01),
+  ];
+  const code = encodeSeedCode(424242, items);
+  assert.ok(code.startsWith(SEED_CODE_PREFIX + '.'), 'versioned prefix: ' + code.slice(0, 6));
+  assert.ok(/^ML1\.[0-9a-z.]+$/.test(code), 'URL-safe charset only: ' + code);
+  const dec = decodeSeedCode(code);
+  assert.ok(dec, 'decodes');
+  assert.strictEqual(dec.worldSeed, 424242, 'the code carries the world seed');
+  assert.strictEqual(dec.items.length, 4, 'all items round-trip');
+  for (let i = 0; i < 4; i++) {
+    assert.strictEqual(dec.items[i].plantId, items[i].plantId, 'species preserved');
+    assert.ok(Math.abs(dec.items[i].position[0] - items[i].position[0]) < 0.011, 'x within quantization');
+    assert.ok(Math.abs(dec.items[i].position[2] - items[i].position[2]) < 0.011, 'z within quantization');
+    assert.ok(isPlantableCell(dec.items[i].position[0], dec.items[i].position[2]), 'decoded cell is plantable');
+  }
+  // determinism: same inputs -> byte-identical code, regardless of order
+  const shuffled = [...items].reverse();
+  assert.strictEqual(encodeSeedCode(424242, shuffled), code, 'code is insertion-order independent');
+  // a different world seed -> a different code
+  assert.notStrictEqual(encodeSeedCode(999, items), code, 'different seed = different code');
+});
+
+test('P3 seed code: unknown/corrupt codes are rejected (fresh world + backup path)', () => {
+  assert.strictEqual(decodeSeedCode(''), null);
+  assert.strictEqual(decodeSeedCode('ML2.abc'), null, 'unknown version');
+  assert.strictEqual(decodeSeedCode('ML1.'), null, 'empty payload');
+  assert.strictEqual(decodeSeedCode('ML1.zz.00'), null, 'bad seed field');
+  assert.strictEqual(decodeSeedCode('ML1.abc.zzzz'), null, 'garbage records');
+  const good = encodeSeedCode(7, [mkSeedItem('p0', 'lavender', 2, 2)]);
+  assert.strictEqual(decodeSeedCode(good + 'x'), null, 'trailing garbage rejected');
+  assert.strictEqual(decodeSeedCode(good.slice(0, -2)), null, 'truncated record rejected');
+  // out-of-range position (water) -> whole code rejected (exact layout or nothing)
+  const waterCode = encodeSeedCode(7, [mkSeedItem('p0', 'lavender', 36, -14)]); // pond center
+  assert.strictEqual(decodeSeedCode(waterCode), null, 'a code landing in water is rejected wholesale');
+});
+
+test('P3 seed code: decoded layout is identical across two independent decodes (cross-machine shape)', () => {
+  const items = [];
+  for (let i = 0; i < 12; i++) {
+    items.push(mkSeedItem('p' + i, ['lavender', 'cosmos', 'poppy', 'clover'][i % 4], -10 + (i % 4) * 5.3, -8 + Math.floor(i / 4) * 6.1));
+  }
+  const code = encodeSeedCode(987654321, items);
+  const a = decodeSeedCode(code);
+  const b = decodeSeedCode(code);
+  assert.deepStrictEqual(a, b, 'two decodes of one code are byte-identical (same layout across machines)');
 });
 
 

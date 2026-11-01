@@ -3,6 +3,7 @@ import {
   loadWorld,
   saveWorld,
   clearSavedWorld,
+  preserveSaveBeforeSeedStart,
 } from '../engine/persistence';
 import type { PlacedItem, PlacedStructure } from '../engine/persistence';
 import { withVisit } from '../engine/visits';
@@ -27,6 +28,7 @@ import { groundAt } from '../engine/ground';
 import { selectToolDisarmsGlass } from '../engine/interactionGrammar';
 import type { MilestoneId } from '../data/milestones';
 import { starterPatchFor } from '../engine/starterPatch';
+import { decodeSeedCode } from '../engine/seedCode';
 import { recordForInspection, appendRecord, type JournalRecord } from '../engine/sightingJournal';
 import type { Season as _Season } from '../data/seasons';
 
@@ -166,6 +168,15 @@ export interface PlacementState {
   closeNotebook: () => void;
   /** full reset: empty world + cleared save + default season/milestones */
   resetWorld: () => void;
+  /**
+   * P3 (v4 seed codes): start a fresh world from a friend's seed code.
+   * The current save is preserved via the corrupt-blob backup pattern
+   * (clearSavedWorld already moves it aside), the decoded layout replaces
+   * the world, and the world's named seed becomes the code's seed — so the
+   * same code grows the same meadow across reloads and machines. Returns
+   * false (and changes nothing) for an unknown/corrupt code.
+   */
+  startFromSeedCode: (code: string) => boolean;
   /**
    * #30: dev-only reload-from-save. Discards ALL in-memory state and
    * rehydrates purely from the localStorage blob — the exact loadWorld()
@@ -433,6 +444,39 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
     startSeasonAt('summer');
     setSeasonProgressForTest(0);
     get().save();
+  },
+  startFromSeedCode: (code) => {
+    const decoded = decodeSeedCode(code);
+    if (!decoded) return false;
+    // corrupt-blob pattern applied to the incoming world: the player's
+    // current save is copied to _backup, then cleared — never destroyed
+    preserveSaveBeforeSeedStart();
+    clearSavedWorld();
+    set({
+      items: decoded.items,
+      structures: [],
+      milestones: [],
+      season: 'summer',
+      worldSeed: decoded.worldSeed,
+      seedingEpoch: 0,
+      visitorWindows: [],
+      journal: [],
+      nudgesShown: [],
+      toasts: [],
+      modalOpen: false,
+      seenFacts: [],
+      wildSeasons: [],
+      onboardingDismissed: true, // a seeded meadow is not a first visit
+      foundRecipes: [],
+      hiveCombs: {},
+      honeyJars: 0,
+      harvestDips: {},
+      hivePopup: null,
+    });
+    startSeasonAt('summer');
+    setSeasonProgressForTest(0);
+    get().save();
+    return true;
   },
   reloadFromSave: () => {
     const w = loadWorld();

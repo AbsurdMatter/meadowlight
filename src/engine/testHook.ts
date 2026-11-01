@@ -10,6 +10,7 @@ import { beeDebug } from '../render/BeeSwarm';
 import { wildDebug } from '../render/WildPollinators';
 import { fireflyDebug } from '../render/Fireflies';
 import { setDayPhase } from './dayCycle';
+import { encodeSeedCode } from './seedCode';
 import { precipitationVisual } from './weather';
 import { precipReadback, tickPrecipScheduleForTest } from './rainSchedule';
 import { allWildlife } from '../render/magnifierProbes';
@@ -153,6 +154,8 @@ declare global {
     /** O5 (v4, #43): readbacks for the keyboard gate */
     hubOpenReadback: () => boolean;
     modalOpenReadback: () => boolean;
+    /** P3: open/close the reset confirm modal (the same modal R opens) */
+    setModalOpenForTest: (open: boolean) => void;
     toastsReadback: () => { id: number; title: string; body: string }[];
     dismissAllToastsForTest: () => void;
     /** O2 (v4, #40): the journal readback (the store reads the saved blob) */
@@ -177,6 +180,9 @@ declare global {
       ghostVariation: () => { rotationY: number; heightJitter: number; tiltX: number; tiltZ: number } | null;
       resetWorld: () => void;
       reloadFromSave: () => void;
+      /** P3: seed codes — encode the live meadow / start from a code */
+      seedCodeEncode: () => string;
+      startFromSeedCode: (code: string) => boolean;
       openNotebookPlant: (itemId: string) => void;
       __three?: {
         camera: PerspectiveCamera;
@@ -376,6 +382,7 @@ export function installTestHook() {
     audioIsRunning: () => audioRunning(),
     hubOpenReadback: () => usePlacementStore.getState().hubOpen,
     modalOpenReadback: () => usePlacementStore.getState().modalOpen,
+    setModalOpenForTest: (open) => usePlacementStore.getState().setModalOpen(open),
     toastsReadback: () => usePlacementStore.getState().toasts,
     dismissAllToastsForTest: () => usePlacementStore.getState().dismissAllToastsForTest(),
     journalReadback: () => usePlacementStore.getState().journal,
@@ -394,6 +401,11 @@ export function installTestHook() {
     freshBootForTest: () => freshBootForTest(),
     __setWorldSeedForTest: (seed) => usePlacementStore.setState({ worldSeed: seed }),
     reloadFromSave: () => usePlacementStore.getState().reloadFromSave(),
+    seedCodeEncode: () => {
+      const s = usePlacementStore.getState();
+      return encodeSeedCode(s.worldSeed, s.items);
+    },
+    startFromSeedCode: (code) => usePlacementStore.getState().startFromSeedCode(code),
     openNotebookPlant: (itemId) =>
       usePlacementStore.getState().openNotebook({ kind: 'plant', id: itemId }),
   };
