@@ -236,13 +236,25 @@ export function KeyboardShortcuts() {
       // the panel's getBoundingClientRect().height is border-box, so the
       // band the panel may occupy is floorY - top (both viewport coords).
       const band = Math.max(0, floorY - top);
-      // measure the natural height STABLY: while a maxHeight clamp is
-      // applied, scrollHeight reports the CLAMPED height, so measure the
-      // unclamped content directly — the panel has no box-sizing reset, so
-      // maxHeight applies to the content box; the natural border-box
-      // height = scrollHeight(unclamped) + padding(24) + border(4). When
-      // clamped, recompute the unclamped scrollHeight from the last
-      // child's bottom edge relative to the content box top.
+      // Round-6 (PR #49 comment #6561476001): NO pixel derivation survives
+      // cross-platform fonts (headless FreeType vs Windows ClearType render
+      // the same woff2 ~42px apart at this panel's height), so the height
+      // rule is purely: height = min(content, lane), BOTH live-measured
+      // from the DOM on THIS platform at open/re-measure.
+      //   content = the panel's own unclamped rendered extent — measured
+      //     via the last child's bottom edge relative to the content box
+      //     (stable even while a clamp is applied, unlike scrollHeight,
+      //     which reports the clamped height). Ceiled so fractional
+      //     rasterizer rows never cause a sub-pixel scrollbar.
+      //   lane = floorY - top (toast ceiling -> cornerControls/cornerRow
+      //     top, or viewport bottom), also ceiled.
+      // Ample lane -> panel sizes to content, needsScroll=false on every
+      // platform. Short lane -> cap at the lane, scroll inside
+      // (shrink+scroll unchanged). No fixed max, no derived constant, no
+      // assumed row heights — only numbers the DOM just gave us.
+      // The clamp is expressed as maxHeight in CONTENT-box px (this
+      // element has no box-sizing reset): content max = lane - padding -
+      // border.
       const rect = panel.getBoundingClientRect();
       const cs = getComputedStyle(panel);
       const padTop = parseFloat(cs.paddingTop) || 0;
@@ -252,22 +264,10 @@ export function KeyboardShortcuts() {
       const unclampedScroll = lastChild
         ? Math.max(panel.scrollHeight, lastChild.getBoundingClientRect().bottom - (rect.top + padTop + (parseFloat(cs.borderTopWidth) || 0)))
         : panel.scrollHeight;
-      // Round-3 finding 4: ceil the content extent — fractional real-font
-      // rows (24.69px) sum to a fractional border box, and comparing a
-      // fractional natural height against an integral band let a sub-pixel
-      // overflow show a scrollbar at an ample viewport. Ceil both sides.
       const naturalHeight = Math.ceil(unclampedScroll + padTop + padBottom + borderY);
-      // shrink+scroll on conflict, capped at the ample-lane max so a panel
-      // that FITS never scrolls just because the viewport is short (the
-      // max is derived from measured real-font content + headroom, not
-      // assumed rows). The clamp is expressed as maxHeight in CONTENT-box
-      // px (no box-sizing reset on this element): content max = band -
-      // padding - border.
-      const bandCeil = Math.ceil(band);
+      const laneCeil = Math.ceil(band);
       const cssMaxHeight =
-        naturalHeight > bandCeil
-          ? Math.min(bandCeil, CHROME_TUNING.helpPanelMaxHeight) - padTop - padBottom - borderY
-          : null;
+        naturalHeight > laneCeil ? laneCeil - padTop - padBottom - borderY : null;
       if (top !== panelTop || cssMaxHeight !== panelMaxHeight) {
         setPanelTop(top);
         setPanelMaxHeight(cssMaxHeight);

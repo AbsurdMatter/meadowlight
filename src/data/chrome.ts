@@ -71,26 +71,22 @@ export const CHROME_TUNING = {
   /** the hint panel's width (one key + action pair per line fits) */
   helpPanelWidth: 280,
   /**
-   * Round-2 finding 4 rework: the hint panel's MAXIMUM border-box height
-   * when the lane is ample — derived from MEASURED content (3 group
-   * headings + 6 rows at the panel's font size, plus title + padding),
-   * NOT from an assumed row height. Headless Chromium without a font
-   * rasterizer measures rows at 19.5px; real Pixelify Sans rows measure
-   * ~24.7px (1.9em of 13px). The cap uses the REAL-font metrics with a
-   * generous per-em margin so the panel never needs internal scroll at an
-   * ample viewport: title (11px + 8 margin) + 3 headings (11px + 3 margin
-   * each) + 6 rows (1.9em of 13px = 24.7px each) + 2 group gaps (10px) +
-   * padding 24px + border 4px ~= 262px; 280px gives headroom. When the
-   * lane is SHORTER than the content, the panel clamps to the band and
-   * scrolls (never relocates into the toast lane or corner row). NOTE:
-   * the panel has no box-sizing reset, so a CSS maxHeight applies to the
-   * CONTENT box — the component subtracts padding+border before applying.
-   * Round-3 finding 4: +8px headroom over the ~262px measured content so
-   * fractional real-font rows (24.69px each) never trigger a sub-pixel
-   * scrollbar at an ample viewport — the solver ceils the measured
-   * extent, and this cap carries the same headroom.
+   * Round-6 (PR #49 comment #6561476001): every px value that claimed to
+   * describe RENDERED TEXT is GONE from here — headless FreeType and
+   * Windows ClearType render the same woff2 ~42px apart at the hint
+   * panel's height, so no fixed maxHeight, derived constant, or per-em
+   * fallback can survive both platforms. The panel's height is now
+   * min(content, lane), both live-measured from the DOM at open/re-measure
+   * (see KeyboardShortcuts.tsx): content = the panel's own unclamped
+   * rendered extent (last-child bottom readback), lane = toast ceiling ->
+   * cornerControls/cornerRow top (or viewport bottom). Ample lane ->
+   * sizes to content, never scrolls; short lane -> caps at the lane and
+   * scrolls inside. What remains in CHROME_TUNING is platform-independent
+   * only: gaps, lane offsets, min-widths.
    */
-  helpPanelMaxHeight: 288,
-  /** each hint-panel row's min-height in em (tall-font fallback, see above) */
+  /** each hint-panel row's min-height in em — a LAYOUT floor in em (not a
+   *  px claim about any font): keeps rows from collapsing when a rasterizer
+   *  reports very short line boxes; the panel's total height is still
+   *  measured, never derived from this */
   helpRowMinHeightEm: 1.9,
 } as const;

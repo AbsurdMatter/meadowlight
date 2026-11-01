@@ -959,20 +959,58 @@ async function checkHintPanel() {
       panelSize: { w: +pb.width.toFixed(1), h: +pb.height.toFixed(1) },
     };
   });
-  // round-2: at narrow the panel MAY scroll (the lane is genuinely short),
-  // but the structure must hold and the panel must be in-viewport. When it
-  // scrolls, rows are reachable — assert the panel's client box is within
-  // the viewport (already checked) and row boxes are inside the panel's
-  // scrollable content (they are — they're children).
+  // round-6 (PR #49 comment #6561476001): at 360x800 the lane is ample
+  // (~335px vs ~204-246px content across rasterizers), so by construction
+  // (height = min(content, lane), both live-measured) the panel sizes to
+  // content and must NOT need scroll — on EVERY platform, not just
+  // headless. The exact no-scroll assertion now holds at narrow too.
   const narrowOk =
-    !narrow.error && narrow.panelInViewport && narrow.rowCount === expectedRows && narrow.rowsInViewport;
+    !narrow.error && narrow.panelInViewport && narrow.rowCount === expectedRows && narrow.rowsInViewport && !narrow.scrollable;
   rec.record(
     'keys.hint-panel-grouped-list@narrow',
     narrowOk,
     narrow.error
       ? narrow.error
       : 'rows=' + narrow.rowCount + ' rowsInViewport=' + narrow.rowsInViewport +
-        ' scrollable=' + narrow.scrollable + ' panel=' + JSON.stringify(narrow.panelSize),
+        ' needsScroll=' + narrow.scrollable + ' panel=' + JSON.stringify(narrow.panelSize),
+  );
+  // round-6: a genuinely SHORT viewport (360x360 — corner row wraps to
+  // three rows at <480 wide, so the live lane floor is high and the band
+  // is shorter than the content) must cap at the lane and scroll inside —
+  // shrink+scroll unchanged. (360x500's lane turned out ample at 360
+  // wide because the corner row wraps to two rows there, leaving ~304px;
+  // 360x360 makes the band genuinely short.)
+  await page.setViewportSize({ width: 360, height: 360 });
+  await page.waitForTimeout(400);
+  const short = await page.evaluate(() => {
+    const panel = document.querySelector('[data-shortcut-hint-panel]');
+    if (!panel) return { error: 'panel missing' };
+    const pb = panel.getBoundingClientRect();
+    const cs = getComputedStyle(panel);
+    const borderY = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+    const inVp = (b) => b.top >= 0 && b.bottom <= innerHeight && b.left >= 0 && b.right <= innerWidth;
+    const corner = document.querySelector('[data-corner-controls]') ?? document.querySelector('[data-corner-row]');
+    const floorY = (corner ? corner.getBoundingClientRect().top : innerHeight) - 8;
+    return {
+      panelInViewport: inVp(pb),
+      needsScroll: panel.scrollHeight + borderY > pb.height + 1,
+      scrollsInside: panel.scrollHeight > panel.clientHeight + 1 && cs.overflowY === 'auto',
+      cappedAtLane: pb.height <= floorY - pb.top + 1.5,
+      panelSize: { w: +pb.width.toFixed(1), h: +pb.height.toFixed(1) },
+      laneTop: +pb.top.toFixed(1),
+      laneBottom: +floorY.toFixed(1),
+      viewportH: innerHeight,
+    };
+  });
+  const shortOk =
+    !short.error && short.panelInViewport && short.needsScroll && short.scrollsInside && short.cappedAtLane;
+  rec.record(
+    'keys.hint-panel-grouped-list@short-lane-shrink-scroll',
+    shortOk,
+    short.error
+      ? short.error
+      : 'vpH=' + short.viewportH + ' panel=' + JSON.stringify(short.panelSize) + ' lane=[' + short.laneTop + ',' + short.laneBottom + ']' +
+        ' needsScroll=' + short.needsScroll + ' scrollsInside=' + short.scrollsInside + ' cappedAtLane=' + short.cappedAtLane,
   );
   const re2 = realErrors(errors);
   rec.record('keys.hint-panel-no-console-errors', re2.length === 0, re2.slice(0, 3).join(' | '));
