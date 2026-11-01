@@ -574,3 +574,57 @@ existing stores — no new clocks, no new state.
 Success test: a stranger opens the deployed link, is greeted by a
 living meadow, learns it in three gentle nudges, and — on a phone,
 one-handed — can plant, inspect, and keep a sightings journal.
+
+### Session 9 — v4: the meadow others meet (post-merge record, PR #49, merge 86d8789)
+Delivered (9 unit commits + 8 user-verification rounds): #44 DAY_CYCLE_SECONDS
+720→360 (6-minute day, every window a phase fraction); #45 snow spawn
+distribution — one seeded `spawnPosition(index, salt, area)` in Rain.tsx shared
+by burst AND steady re-seed (rain rides it too), with an ONSET-frame gate
+assertion (≥80% of steady-state spread at the first measurable frame, not
+settled-only); #46 fireflies note gated on the same `dusk` variable the render
+loop draws; #47 verified-only (landed session 8); O1 onboarding (#39) —
+seeded starter patch (5 flowers + hive from worldSeed via hash2, empty world
+only, stable `starter:<seed>:<i>` ids), trigger-first nudges writing the same
+`openNotebook` state, hint anchored ABOVE the dock via CHROME_TUNING, save
+v8→v9; O2 journal (#40) — first-sighting records from the one kind-enum
+inspection entry, persisted; O5 keyboard shortcuts (#43) — WASD/QE/R/I/J/ESC
+onto the same stores, keys dead while typing, R opens confirm-never-instant;
+O3 audio (#41) — ambient bed + bee hum + rain hush, off by default, single
+corner toggle (state-gated; listening is the user's); O4 touch (#42) —
+tap-to-inspect, narrow-frame dock geometry. Round work: season-select STARTS
+the season and drifts (`startSeasonAt`, no hold state — the only freeze is
+pause); help button owns a measured lane (`helpLaneTop:102`, toasts/reset
+`toastLaneTop:138`); help panel as a grouped list with a two-way-constrained
+placement solver (toast ceiling structural via column-reverse, corner-row
+floor, conflicts shrink+scroll, live-measured at 7 viewports); real font
+split as data (`src/data/typography.ts` — Nunito body / Silkscreen
+headings, self-hosted OFL woff2); select-tool-disarms-glass grammar; dev-only
+claimProbe. Totals: 92/92 unit, 42/42 gates agent-side at unit end (61/61 +
+chrome 14/14 at final), tsc clean, build green, all user-side acceptance
+runs green on the Windows machine.
+Lessons (canonize): (1) Argument-mismatch class (#45's two-pass close): a
+shared function called with different ARGUMENTS is not one source — source
+claims name the arguments. (2) Measured-lane discipline: corner surfaces get
+measured lanes from real rendered boxes, never eye placement. (3) Onset-frame
+gating: gate the question the user asked (at start), not the settled state.
+(4) Font-honest measurement: the sandbox now stages real woff2 + system libs
+so headless gates measure real-font boxes (document.fonts.check true) — AND
+its platform limits are canon: FreeType vs ClearType differ ~40px on the same
+files, so agent-side green is never acceptance for font/taste/timing classes.
+(5) Platform-proof sizing: min(content, lane) with both sides live-measured.
+(6) Derivation-based gate assertions over platform-tuned outcomes — assert
+the solver's decision matches its measured inputs, no absolute pixel counts.
+(7) Self-describing FAIL dumps ([hint-evidence] style) — one evidence dump
+closed round 8. (8) Gates await `document.fonts.ready` before measuring.
+(9) The evaporating-bug probe pattern (dev-only claimProbe readback) for
+environment divergence. (10) Stale-server fingerprinting —
+restart-before-verdict. (11) Copy-vs-behavior divergence is a bug class
+("empty hand" copy while the grammar is hover). (12) Force-push etiquette:
+lease, and the history-rewrite gate rule honored. (13) Gate-in-test:smoke so
+a broken gate script red-flags CI structurally.
+Known open at merge: session7 `seeding.accelerated-4season-caps-hold` and
+`seeding.seedlings-persist-and-clear` roll 0 volunteers in 4 accelerated
+seasons on the session-9 world seed (red on the base commit, quarantined) —
+P1 of session 10 (issue #53). #50 outer-hill sky gaps, #51 reset/toast lane,
+#52 vite 6→8 + esbuild advisory, #54 notebook tabs, #55 stem-head gap,
+#56 hive panels ride the backlog.
