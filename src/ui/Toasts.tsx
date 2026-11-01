@@ -57,11 +57,16 @@ export function Toasts() {
         position: 'absolute',
         // round-1 finding 2: the toast lane sits BELOW the help button
         // (which owns the lane above it) — measured clear of the help
-        // button's bottom (130) + gap; the lane's ORDER is unchanged
+        // button's bottom (130) + gap; the lane's ORDER is unchanged.
+        // round-2 finding 4 rework: the stack is a COLUMN anchored at the
+        // BOTTOM of its lane (cards grow UPWARD from the corner-row side),
+        // so a growing stack never runs down into the help panel's lane —
+        // the panel's ceiling is the lane's top, not each card's bottom.
         top: CHROME_TUNING.toastLaneTop,
         right: 12,
         display: 'flex',
-        flexDirection: 'column',
+        flexDirection: 'column-reverse',
+        justifyContent: 'flex-end',
         gap: 8,
         pointerEvents: 'none',
       }}

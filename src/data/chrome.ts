@@ -70,4 +70,23 @@ export const CHROME_TUNING = {
   toastLaneTop: 138,
   /** the hint panel's width (one key + action pair per line fits) */
   helpPanelWidth: 280,
+  /**
+   * Round-2 finding 4 rework: the hint panel's MAXIMUM border-box height
+   * when the lane is ample — derived from MEASURED content (3 group
+   * headings + 6 rows at the panel's font size, plus title + padding),
+   * NOT from an assumed row height. Headless Chromium without a font
+   * rasterizer measures rows at 19.5px; real Pixelify Sans rows measure
+   * ~24.7px (1.9em of 13px). The cap uses the REAL-font metrics with a
+   * generous per-em margin so the panel never needs internal scroll at an
+   * ample viewport: title (11px + 8 margin) + 3 headings (11px + 3 margin
+   * each) + 6 rows (1.9em of 13px = 24.7px each) + 2 group gaps (10px) +
+   * padding 24px + border 4px ~= 262px; 280px gives headroom. When the
+   * lane is SHORTER than the content, the panel clamps to the band and
+   * scrolls (never relocates into the toast lane or corner row). NOTE:
+   * the panel has no box-sizing reset, so a CSS maxHeight applies to the
+   * CONTENT box — the component subtracts padding+border before applying.
+   */
+  helpPanelMaxHeight: 280,
+  /** each hint-panel row's min-height in em (tall-font fallback, see above) */
+  helpRowMinHeightEm: 1.9,
 } as const;

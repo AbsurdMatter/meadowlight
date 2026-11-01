@@ -202,23 +202,57 @@ export function KeyboardShortcuts() {
         setPanelMaxWidth(cssMaxWidth);
         return; // re-measure after the width applies (it changes the height)
       }
-      // vertical: below the lowest live toast card, never below the lane's
-      // floor (the corner row's top minus a gap, or the viewport bottom).
-      // The panel's chrome is 36px of padding+border on top of the CSS
-      // height (content-box), so a clamp leaves room for that chrome plus
-      // a sliver of content; when even that can't fit, the top yields back
-      // toward minTop rather than starting a panel the floor would cut.
+      // Round-2 finding 4 rework: the placement solver treats every
+      // measured surface as a HARD constraint in BOTH directions.
+      //   ceiling: the lowest live toast card's bottom + gap (toasts are
+      //     a ceiling, not just a floor — the panel must never start
+      //     inside the toast lane)
+      //   floor: the corner row's top - gap, or the viewport bottom
+      //   minTop: just under the help button
+      // The panel occupies [top, top+height]. Conflicts resolve by
+      // SHRINK+SCROLL (maxHeight clamp), never by relocating into an
+      // occupied lane: if the free band [max(minTop, ceiling), floor]
+      // is shorter than the content, the panel is pinned to the TOP of
+      // the band (top = max(minTop, ceiling)) and its height is clamped
+      // to the band — it scrolls internally. It never moves DOWN into
+      // the floor (corner row) and never UP into the ceiling (toasts).
       const cards = [...document.querySelectorAll('[data-toast]')];
       const cardsBottom = cards.reduce((m, c) => Math.max(m, c.getBoundingClientRect().bottom), 0);
       const minTop = CHROME_TUNING.helpLaneTop + 28 + 6;
+      const ceiling = cardsBottom > 0 ? cardsBottom + 6 : minTop;
       const cornerRow = document.querySelector('[data-corner-row]');
       const floorY = (cornerRow ? cornerRow.getBoundingClientRect().top : window.innerHeight) - 8;
-      const top = Math.min(
-        Math.max(minTop, cardsBottom > 0 ? cardsBottom + 6 : minTop),
-        Math.max(minTop, floorY - 84),
-      );
-      const naturalHeight = panel.scrollHeight + 4; // scrollHeight excludes the border
-      const cssMaxHeight = top + naturalHeight > floorY ? Math.max(0, floorY - top - 36) : null;
+      const top = Math.max(minTop, ceiling); // never above the ceiling
+      // free vertical band below the ceiling, measured in BORDER-box px:
+      // the panel's getBoundingClientRect().height is border-box, so the
+      // band the panel may occupy is floorY - top (both viewport coords).
+      const band = Math.max(0, floorY - top);
+      // measure the natural height STABLY: while a maxHeight clamp is
+      // applied, scrollHeight reports the CLAMPED height, so measure the
+      // unclamped content directly — the panel has no box-sizing reset, so
+      // maxHeight applies to the content box; the natural border-box
+      // height = scrollHeight(unclamped) + padding(24) + border(4). When
+      // clamped, recompute the unclamped scrollHeight from the last
+      // child's bottom edge relative to the content box top.
+      const rect = panel.getBoundingClientRect();
+      const cs = getComputedStyle(panel);
+      const padTop = parseFloat(cs.paddingTop) || 0;
+      const padBottom = parseFloat(cs.paddingBottom) || 0;
+      const borderY = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+      const lastChild = panel.lastElementChild as HTMLElement | null;
+      const unclampedScroll = lastChild
+        ? Math.max(panel.scrollHeight, lastChild.getBoundingClientRect().bottom - (rect.top + padTop + (parseFloat(cs.borderTopWidth) || 0)))
+        : panel.scrollHeight;
+      const naturalHeight = unclampedScroll + padTop + padBottom + borderY;
+      // shrink+scroll on conflict, capped at the ample-lane max so a panel
+      // that FITS never scrolls just because the viewport is short (the
+      // max is derived from measured real-font content, not assumed rows).
+      // The clamp is expressed as maxHeight in CONTENT-box px (no
+      // box-sizing reset on this element): content max = band - padding - border.
+      const cssMaxHeight =
+        naturalHeight > band
+          ? Math.min(band, CHROME_TUNING.helpPanelMaxHeight) - padTop - padBottom - borderY
+          : null;
       if (top !== panelTop || cssMaxHeight !== panelMaxHeight) {
         setPanelTop(top);
         setPanelMaxHeight(cssMaxHeight);
@@ -304,7 +338,21 @@ export function KeyboardShortcuts() {
                 <div
                   key={row.key}
                   data-shortcut-row
-                  style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontSize: theme.font.smallSize + 1, lineHeight: theme.font.lineHeight }}
+                  // Round-2 finding 4 rework: rows get an explicit min-height
+                  // in em (CHROME_TUNING.helpRowMinHeightEm of the row's font
+                  // size) so a font with tall metrics (real Pixelify Sans)
+                  // never clips or crowds the key chip. 13px * 1.9em = 24.7px —
+                  // above the 19.5px that a unitless line-height yields
+                  // headless with a fallback font, and above Pixelify's real
+                  // ~22px line box.
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    fontSize: theme.font.smallSize + 1,
+                    lineHeight: theme.font.lineHeight,
+                    minHeight: CHROME_TUNING.helpRowMinHeightEm + 'em',
+                  }}
                 >
                   <span
                     data-shortcut-key

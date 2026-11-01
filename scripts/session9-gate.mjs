@@ -175,11 +175,19 @@ async function checkChrome() {
         // A wrong count means the fixture broke — fail loudly instead of
         // measuring a wrong stack.
         toastStackExact: toastCards.length === 2,
+        // round-2: the panel must treat the toast stack as a CEILING, not
+        // just a floor — its top must never sit inside the toast lane.
+        // panelTop >= max(cardsBottom + 6, helpLaneTop+34) when cards exist.
+        panelClearsToastCeiling: panel
+          ? panel.top >= (toastCards.length > 0
+              ? Math.max(...toastCards.map((t) => t.bottom)) + 6 - 0.5
+              : 0)
+          : false,
       };
     });
     rec.record(
       'chrome.help-lane-no-intersection@' + width + 'x' + height,
-      geo.hits.length === 0 && geo.helpInViewport && geo.panelInViewport === true && geo.toastStackExact,
+      geo.hits.length === 0 && geo.helpInViewport && geo.panelInViewport === true && geo.toastStackExact && geo.panelClearsToastCeiling,
       JSON.stringify(geo),
     );
     const re = realErrors(errors);
@@ -764,7 +772,20 @@ async function checkKeys() {
  *  pairing) AND measured layout (every row in-viewport, key chips aligned
  *  to one column, no row overlapping another). Measure-don't-assume. */
 async function checkHintPanel() {
-  const { page, errors } = await newPage(browser, url);
+  // explicit 1280x800 viewport — the default newPage() viewport is 1280x720,
+  // and the round-2 failure was measured at 800px tall where the lane is ample
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const errors = [];
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 8000 });
+  await page.waitForFunction(() => window.__meadowlight, null, { timeout: 20000 }).catch(() => {});
+  await page.waitForTimeout(2000);
+  await page.evaluate(() => {
+    const btns = [...document.querySelectorAll('button')].filter((b) => /next|begin/i.test(b.textContent || ''));
+    btns[btns.length - 1]?.click();
+  });
+  await page.waitForTimeout(300);
   await freshWorld(page);
   await page.keyboard.press('?');
   await page.waitForTimeout(300);
@@ -779,7 +800,21 @@ async function checkHintPanel() {
     const pb = box(panel);
     const inVp = (b) => b.top >= 0 && b.bottom <= innerHeight && b.left >= 0 && b.right <= innerWidth;
     // every row's key chip + action must be in the viewport
+    // round-2: a row that is scrolled out of view still has its box in the
+    // viewport only if the panel itself is tall enough — the honest check at
+    // an ample viewport is that the panel does NOT need internal scroll:
+    // every row must be within the panel's CLIENT box (visible without
+    // scrolling), i.e. panel.scrollHeight <= panel.clientHeight + 1.
     const rowsInVp = rows.every((r) => inVp(box(r)));
+    const panelEl = document.querySelector('[data-shortcut-hint-panel]');
+    // border-box check (getBoundingClientRect().height includes border;
+    // scrollHeight excludes border but includes padding — comparing
+    // scrollHeight+borderY to rect.height is the exact no-scroll test)
+    const cs0 = panelEl ? getComputedStyle(panelEl) : null;
+    const borderY0 = cs0 ? (parseFloat(cs0.borderTopWidth) || 0) + (parseFloat(cs0.borderBottomWidth) || 0) : 0;
+    const needsScroll = panelEl
+      ? panelEl.scrollHeight + borderY0 > panelEl.getBoundingClientRect().height + 1
+      : true;
     // key chips share one left column: their lefts align within 1px
     const keyLefts = keys.map((k) => box(k).left);
     const keyAlign = keyLefts.length > 0 && Math.max(...keyLefts) - Math.min(...keyLefts) <= 1;
@@ -810,6 +845,7 @@ async function checkHintPanel() {
       keyCount: keys.length,
       actionCount: actions.length,
       rowsInViewport: rowsInVp,
+      needsScroll,
       keyColumnAligned: keyAlign,
       rowsDoNotOverlap: !rowsOverlap,
       pairs,
@@ -827,6 +863,10 @@ async function checkHintPanel() {
     layout.keyCount === expectedRows &&
     layout.actionCount === expectedRows &&
     layout.rowsInViewport &&
+    // round-2: at an ample viewport (1280x800, lane ~379px) the panel must
+    // NOT need internal scroll — a panel needing scroll where the lane is
+    // ample is a layout bug (the round-2 failure on real hardware)
+    !layout.needsScroll &&
     layout.keyColumnAligned &&
     layout.rowsDoNotOverlap &&
     // pairing spot-check: every pair has a non-empty key AND action
@@ -840,7 +880,9 @@ async function checkHintPanel() {
         ' rows=' + layout.rowCount +
         ' keyColumnAligned=' + layout.keyColumnAligned +
         ' rowsInViewport=' + layout.rowsInViewport +
+        ' needsScroll=' + layout.needsScroll +
         ' rowsOverlap=' + !layout.rowsDoNotOverlap +
+        ' panel=' + JSON.stringify(layout.panelSize) +
         ' pairs=' + JSON.stringify(layout.pairs),
   );
   // also assert at a narrow viewport (the panel shrinks — finding 2 — the
@@ -864,6 +906,11 @@ async function checkHintPanel() {
       panelSize: { w: +pb.width.toFixed(1), h: +pb.height.toFixed(1) },
     };
   });
+  // round-2: at narrow the panel MAY scroll (the lane is genuinely short),
+  // but the structure must hold and the panel must be in-viewport. When it
+  // scrolls, rows are reachable — assert the panel's client box is within
+  // the viewport (already checked) and row boxes are inside the panel's
+  // scrollable content (they are — they're children).
   const narrowOk =
     !narrow.error && narrow.panelInViewport && narrow.rowCount === expectedRows && narrow.rowsInViewport;
   rec.record(
