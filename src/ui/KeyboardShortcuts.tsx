@@ -12,7 +12,7 @@ import {
   SHORTCUT_HINT,
   type KeyState,
 } from '../engine/keyboardShortcuts';
-import { theme } from './theme';
+import { theme, headingStyle } from './theme';
 import { CHROME_TUNING } from '../data/chrome';
 
 /**
@@ -336,7 +336,7 @@ export function KeyboardShortcuts() {
             zIndex: 6,
           }}
         >
-          <div style={{ fontSize: theme.font.smallSize - 1, letterSpacing: 0.6, textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 8 }}>
+          <div style={{ ...headingStyle(theme.font.smallSize - 1), textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 8 }}>
             {SHORTCUT_HINT.title}
           </div>
           {/* Round-1 finding 4: the content is a GROUPED LIST, not one
@@ -346,7 +346,7 @@ export function KeyboardShortcuts() {
               placement was finding 2), not assumed. */}
           {SHORTCUT_HINT.groups.map((group, gi) => (
             <div key={group.heading} data-shortcut-group={group.heading} style={{ marginBottom: gi < SHORTCUT_HINT.groups.length - 1 ? 10 : 0 }}>
-              <div style={{ fontSize: theme.font.smallSize - 1, letterSpacing: 0.6, textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 3 }}>
+              <div style={{ ...headingStyle(theme.font.smallSize - 1), textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 3 }}>
                 {group.heading}
               </div>
               {group.rows.map((row) => (
@@ -373,7 +373,7 @@ export function KeyboardShortcuts() {
                     data-shortcut-key
                     style={{
                       flex: '0 0 64px',
-                      fontWeight: 600,
+                      fontWeight: theme.font.weightEmphasis,
                       color: theme.color.text,
                       background: theme.color.parchment,
                       border: `${theme.border.chunk}px solid ${theme.color.honeyDark}`,

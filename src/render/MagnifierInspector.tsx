@@ -6,7 +6,7 @@ import { allWildlife } from './magnifierProbes';
 import { MAGNIFIER_TUNING } from '../data/magnifier';
 import { resolveWildlifeHit } from '../engine/magnifierHit';
 import type { MagnifierEntry } from '../data/magnifierKinds';
-import { isMeshOwnedEntry } from '../data/magnifierKinds';
+import { isMeshOwnedEntry, claimDistanceReadback } from '../data/magnifierKinds';
 
 /**
  * N3 wildlife hit resolution — IN-Canvas half, a THIN SHELL over the pure
@@ -38,6 +38,18 @@ export function MagnifierResolver() {
         e.clientX <= rect.right &&
         e.clientY >= rect.top &&
         e.clientY <= rect.bottom;
+      // round 5 (PR #49 comment #6560170382): mirror the live pointer +
+      // claim state onto window for the DEV-ONLY claimProbe readback — so a
+      // real browser can answer "what does the claim path see?" via
+      // __meadowlight.claimProbe() in DevTools. Display-only, never read
+      // back into the app.
+      (window as unknown as { __meadowlightClaimPointer?: unknown }).__meadowlightClaimPointer = {
+        x: e.clientX,
+        y: e.clientY,
+        ndcX: pointerNdc.current.x,
+        ndcY: pointerNdc.current.y,
+        inside: inside.current,
+      };
     };
     window.addEventListener('pointermove', onMove);
     // O4 (v4, #42): TAP-TO-INSPECT — hover has no touch equivalent, so a
@@ -100,6 +112,10 @@ export function MagnifierResolver() {
 
   useFrame(() => {
     const s = usePlacementStore.getState();
+    // round 5: same dev-only mirror for the claim distance (the resolver's
+    // per-frame view of who won the last claim)
+    (window as unknown as { __meadowlightClaimDistance?: number | null }).__meadowlightClaimDistance =
+      claimDistanceReadback();
     if (!s.magnifierOn) {
       if (s.magnifierEntry) s.setMagnifierEntry(null);
       missStreak.current = 0;

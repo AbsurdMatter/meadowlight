@@ -77,3 +77,12 @@ export function meshMayClaim(current: MagnifierEntry, distance: number): boolean
 export function releaseClaim(): void {
   claimDistance.value = Infinity;
 }
+
+/**
+ * round 5 (PR #49 comment #6560170382): readback of the current claim bar
+ * for the DEV-ONLY claimProbe (testHook) — display-only, never serialized.
+ * Returns null when no mesh claim is live (bar at Infinity).
+ */
+export function claimDistanceReadback(): number | null {
+  return claimDistance.value === Infinity ? null : claimDistance.value;
+}

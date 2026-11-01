@@ -61,7 +61,7 @@ export function Onboarding() {
         zIndex: 5,
       }}
     >
-      <div style={{ fontSize: theme.font.smallSize - 1, letterSpacing: 0.6, textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 4 }}>
+      <div style={{ ...headingStyle(theme.font.smallSize - 1), textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 4 }}>
         Welcome to your meadow · step {step + 1} of 3
       </div>
       <div style={{ ...headingStyle(theme.font.bodySize + 1), marginBottom: 6 }}>{STEPS[step].title}</div>

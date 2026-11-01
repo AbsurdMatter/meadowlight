@@ -63,6 +63,23 @@ declare global {
       visitsReadback: () => { id: string; plantId: string; visitedSeasons: string[] }[];
       /** N3: the magnifying-glass inspect tool (pure inspection, zero mutation) */
       magnifierReadback: () => { on: boolean; entry: unknown };
+      /** round 5: which palette tool is selected (null when none) — readback
+       *  for the grammar-rule gate (select-tool-disarms-glass) */
+      selectedToolReadback: () => { plant: string | null; structure: string | null };
+      /** round 5 (PR #49 comment #6560170382): DEV-ONLY claim probe — hover
+       *  anything with the glass armed in a real browser and paste
+       *  `__meadowlight.claimProbe()` from DevTools to see the full claim
+       *  state: live pointer (client + NDC), hovered mesh kind, claim
+       *  owner/distance, the store entry, and whether the card is visible.
+       *  Read-only: writes nothing to the world. */
+      claimProbe: () => {
+        on: boolean;
+        entry: unknown;
+        pointer: { clientX: number; clientY: number; ndcX: number; ndcY: number; insideCanvas: boolean };
+        claim: { distance: number } | null;
+        cardVisible: boolean;
+        cardText: string;
+      };
       toggleMagnifier: () => void;
       setMagnifierOnForTest: (on: boolean) => void;
       setMagnifierEntryForTest: (e: unknown) => void;
@@ -259,6 +276,33 @@ export function installTestHook() {
     magnifierReadback: () => {
       const s = usePlacementStore.getState();
       return { on: s.magnifierOn, entry: s.magnifierEntry };
+    },
+    selectedToolReadback: () => {
+      const s = usePlacementStore.getState();
+      return { plant: s.selectedPlantId, structure: s.selectedStructureId };
+    },
+    // round 5: DEV-ONLY claim probe (see the interface comment). Reads the
+    // live pointer position from the resolver's own listener state (kept on
+    // window by MagnifierInspector under __meadowlightClaimPointer), the
+    // claim distance from magnifierKinds, and the card's DOM state — one
+    // paste answers "what does the claim path see right now?" in a real
+    // browser. Read-only.
+    claimProbe: () => {
+      const s = usePlacementStore.getState();
+      const ptr = (window as unknown as { __meadowlightClaimPointer?: { x: number; y: number; ndcX: number; ndcY: number; inside: boolean } }).__meadowlightClaimPointer;
+      const claim = (window as unknown as { __meadowlightClaimDistance?: number | null }).__meadowlightClaimDistance;
+      const card = document.querySelector('[data-magnifier-card="true"]');
+      const r = card?.getBoundingClientRect();
+      return {
+        on: s.magnifierOn,
+        entry: s.magnifierEntry,
+        pointer: ptr
+          ? { clientX: ptr.x, clientY: ptr.y, ndcX: ptr.ndcX, ndcY: ptr.ndcY, insideCanvas: ptr.inside }
+          : { clientX: 0, clientY: 0, ndcX: 0, ndcY: 0, insideCanvas: false },
+        claim: typeof claim === 'number' ? { distance: claim } : null,
+        cardVisible: !!r && r.width > 0 && r.height > 0,
+        cardText: card?.textContent ?? '',
+      };
     },
     toggleMagnifier: () => usePlacementStore.getState().toggleMagnifier(),
     wildlifeSightings: () => allWildlife().map((w) => ({ ...w })),

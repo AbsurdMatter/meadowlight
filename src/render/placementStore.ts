@@ -24,6 +24,7 @@ import { rollVolunteers } from '../engine/seeding';
 import { isPlantableCell } from '../engine/ground';
 import { flowerBlocked } from '../engine/collision';
 import { groundAt } from '../engine/ground';
+import { selectToolDisarmsGlass } from '../engine/interactionGrammar';
 import type { MilestoneId } from '../data/milestones';
 import { starterPatchFor } from '../engine/starterPatch';
 import { recordForInspection, appendRecord, type JournalRecord } from '../engine/sightingJournal';
@@ -237,9 +238,23 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   removeStructure: (id) =>
     set((s) => ({ structures: s.structures.filter((it) => it.id !== id) })),
   rotateGhost: () => set((s) => ({ ghostRotationY: s.ghostRotationY + Math.PI / 6 })),
-  select: (plantId) => set({ selectedPlantId: plantId, selectedStructureId: null }),
+  // round 5 GRAMMAR RULE (PR #49 comment #6560170382): selecting a tool
+  // DISARMS the glass — arm is exclusive. The decision lives in ONE place
+  // (engine/interactionGrammar.ts) next to the armed + selected-tool states
+  // it relates; both select paths consult it. One-directional: re-arming the
+  // glass (toggleMagnifier) never deselects a chip.
+  select: (plantId) =>
+    set((s) => ({
+      selectedPlantId: plantId,
+      selectedStructureId: null,
+      ...(selectToolDisarmsGlass(s, plantId) ? { magnifierOn: false, magnifierEntry: null } : {}),
+    })),
   selectStructure: (structureId) =>
-    set({ selectedStructureId: structureId, selectedPlantId: null }),
+    set((s) => ({
+      selectedStructureId: structureId,
+      selectedPlantId: null,
+      ...(selectToolDisarmsGlass(s, structureId) ? { magnifierOn: false, magnifierEntry: null } : {}),
+    })),
   toggleVariation: () =>
     set((s) => {
       const next = !s.placementVariation;

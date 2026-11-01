@@ -6,19 +6,23 @@
  * restyled (or re-themed) by editing this file alone.
  *
  * Design language ("everything voxel, including the chrome"):
- *   - Pixelify Sans (self-hosted woff2 in public/fonts — the embed never
- *     fetches anything at runtime; @font-face is declared here)
+ *   - the two font ROLES live in src/data/typography.ts (typography as
+ *     data, round 5): BODY = Nunito 400/500/700 (self-hosted woff2 in
+ *     public/fonts), HEADINGS = Silkscreen 400/700 — pixel identity where
+ *     short labels read best, legible rounded body for long copy. The
+ *     embed never fetches anything at runtime; @font-face is in index.html
  *   - chunky borders (2-3px), small radii (voxels have none, but 4-6px keeps
  *     buttons friendly), hard offset shadows instead of soft blurs
  *   - the meadow's own palette: parchment, honey, sage, soil
  */
+import { TYPOGRAPHY } from '../data/typography';
 
 export const theme = {
   font: {
-    /** UI stack; Pixelify Sans is bundled, so it works offline/file:// */
-    family:
-      "'Pixelify Sans', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif",
-    /** facts/body copy stay highly readable at Pixelify's small sizes */
+    /** BODY stack — Nunito, bundled, so it works offline/file:// */
+    family: TYPOGRAPHY.body.family,
+    /** HEADING stack — Silkscreen titles/labels (see typography.ts) */
+    familyHeading: TYPOGRAPHY.heading.family,
     bodySize: 14,
     smallSize: 12,
     titleSize: 17,
@@ -27,9 +31,9 @@ export const theme = {
     /** weight hierarchy: 700 for headings/fact titles/section labels,
      *  500 for emphasis in body, 400 for plain body — part of the token
      *  language, never bolted on per panel */
-    weightHeading: 700,
-    weightBody: 400,
-    weightEmphasis: 500,
+    weightHeading: TYPOGRAPHY.heading.weights.heading,
+    weightBody: TYPOGRAPHY.body.weights.body,
+    weightEmphasis: TYPOGRAPHY.body.weights.emphasis,
   },
   color: {
     text: '#5a4322',
@@ -83,12 +87,13 @@ export const panelStyle: React.CSSProperties = {
 };
 
 /**
- * Heading preset — the ONE way panels express hierarchy: Pixelify Sans 700
- * (self-hosted), themed color, tight letter spacing. Section labels, fact
- * titles, dialog headings all use this; body copy stays 400/500.
+ * Heading preset — the ONE way panels express hierarchy: the HEADING font
+ * role (Silkscreen 700, self-hosted — see data/typography.ts), themed
+ * color, tight letter spacing. Section labels, fact titles, dialog headings
+ * all use this; body copy stays in the body role (Nunito 400/500).
  */
 export const headingStyle = (size?: number): React.CSSProperties => ({
-  fontFamily: theme.font.family,
+  fontFamily: theme.font.familyHeading,
   fontWeight: theme.font.weightHeading,
   color: theme.color.text,
   fontSize: size ?? theme.font.bodySize,

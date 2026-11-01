@@ -1,8 +1,8 @@
 /**
  * Postcard compose (#18 / PR #32 review + blocker fix): turn the bare meadow
  * capture into a real postcard before export — themed chunky border, a
- * Pixelify Sans title "Greetings from Meadowlight", and the four stat lines
- * in the same organized form as the hover strip.
+ * heading-role (Silkscreen, round 5) title "Greetings from Meadowlight",
+ * and the four stat lines in the same organized form as the hover strip.
  *
  * Canvas 2D does NOT inherit @font-face — the font must be explicitly
  * loaded (document.fonts.load) and awaited before fillText, or the title
@@ -16,6 +16,7 @@
  * assumed). Layout is measured, never assumed.
  */
 import { theme } from '../ui/theme';
+import { TYPOGRAPHY } from '../data/typography';
 import {
   computeCaptionLayout,
   fallbackMetrics,
@@ -27,7 +28,11 @@ export interface PostcardStat {
   value: string;
 }
 
-const FONT_FAMILY = "'Pixelify Sans', monospace";
+// round 5: the postcard follows the app's typography roles — title in the
+// HEADING role (Silkscreen 700), stat lines in the BODY role (Nunito) —
+// one source (data/typography.ts), so the PNG matches the DOM hierarchy
+const FONT_FAMILY = TYPOGRAPHY.body.family + ', monospace';
+const TITLE_FAMILY = TYPOGRAPHY.heading.family + ', monospace';
 const TITLE_SIZE = 44;
 const LINE_SIZE = 20;
 
@@ -36,7 +41,7 @@ const LINE_SIZE = 20;
  *  export — the card composes with whatever face is available. */
 async function ensureFontsLoaded(): Promise<boolean> {
   const load = Promise.all([
-    document.fonts.load(`700 ${TITLE_SIZE}px ${FONT_FAMILY}`),
+    document.fonts.load(`700 ${TITLE_SIZE}px ${TITLE_FAMILY}`),
     document.fonts.load(`500 ${LINE_SIZE}px ${FONT_FAMILY}`),
     document.fonts.load(`400 ${LINE_SIZE}px ${FONT_FAMILY}`),
   ]).then(() => true);
@@ -62,7 +67,7 @@ function measureMetrics(ctx: CanvasRenderingContext2D): CaptionMetrics {
     const descent = (m as TextMetrics).actualBoundingBoxDescent;
     return { ascent, descent };
   };
-  const title = measured(`700 ${TITLE_SIZE}px ${FONT_FAMILY}`, 'Greetings from Meadowlight');
+  const title = measured(`700 ${TITLE_SIZE}px ${TITLE_FAMILY}`, 'Greetings from Meadowlight');
   const line = measured(`700 ${LINE_SIZE}px ${FONT_FAMILY}`, 'Nature planted —');
   const fb = fallbackMetrics(TITLE_SIZE, LINE_SIZE);
   const num = (v: number | undefined, fbv: number) =>
@@ -120,7 +125,7 @@ export async function composePostcard(
 
   // title (700 face, measured baseline)
   ctx.fillStyle = theme.color.text;
-  ctx.font = `700 ${TITLE_SIZE}px ${FONT_FAMILY}`;
+  ctx.font = `700 ${TITLE_SIZE}px ${TITLE_FAMILY}`;
   ctx.textBaseline = 'alphabetic';
   ctx.fillText('Greetings from Meadowlight', captionX, bandTop + layout.titleBaseline);
 

@@ -765,6 +765,55 @@ async function checkKeys() {
   await page.waitForTimeout(300);
   const rEsc = await page.evaluate(() => window.__meadowlight.modalOpenReadback());
   rec.record('keys.esc-dismisses-confirm', rEsc === false, 'modalOpen after ESC: ' + rEsc);
+  // round 5 grammar rule (PR #49 comment #6560170382): selecting a tool
+  // DISARMS the glass — arm is exclusive. Gate: arm (I) → click a real
+  // palette chip → glass disarmed AND chip selected. One-directional: the
+  // check does NOT assert re-arming deselects the chip (not specified).
+  await page.keyboard.press('i'); // arm the glass
+  await page.waitForTimeout(200);
+  const armed = await page.evaluate(() => window.__meadowlight.magnifierReadback().on);
+  const chip = await page.evaluate(() => {
+    // the palette keys are 'plant:<id>' / 'structure:<id>' — the gate needs
+    // the bare id the store selects, so strip the prefix for comparison
+    const el = document.querySelector('[data-palette-entry]');
+    if (!el) return null;
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    return (el.getAttribute('data-palette-entry') ?? '').replace(/^(plant|structure):/, '');
+  });
+  await page.waitForTimeout(200);
+  const afterChip = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    const s = w.magnifierReadback();
+    const st = w.selectedToolReadback();
+    const selected = st.plant ?? st.structure;
+    return { on: s.on, entry: s.entry, selected };
+  });
+  const grammarOk =
+    armed === true &&
+    chip !== null &&
+    afterChip.on === false &&
+    afterChip.entry === null &&
+    afterChip.selected === chip;
+  rec.record(
+    'keys.select-tool-disarms-glass',
+    grammarOk,
+    'arm (I) → click chip "' + chip + '" → glass ' + (afterChip.on ? 'STILL ARMED' : 'disarmed') +
+      ', entry ' + JSON.stringify(afterChip.entry) + ', selected ' + JSON.stringify(afterChip.selected),
+  );
+  // one-directional per spec: re-arming does NOT deselect the chip (logged
+  // as the specified behavior, asserted since it IS the specified grammar)
+  await page.keyboard.press('i'); // re-arm
+  await page.waitForTimeout(200);
+  const rearm = await page.evaluate(() => {
+    const w = window.__meadowlight;
+    const st = w.selectedToolReadback();
+    return { on: w.magnifierReadback().on, selected: st.plant ?? st.structure };
+  });
+  rec.record(
+    'keys.rearm-does-not-deselect-chip',
+    rearm.on === true && rearm.selected === chip,
+    're-arm: glass ' + (rearm.on ? 'armed' : 'off') + ', chip still "' + rearm.selected + '" (one-directional grammar, as specified)',
+  );
   const re = realErrors(errors);
   rec.record('keys.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
   await page.close();

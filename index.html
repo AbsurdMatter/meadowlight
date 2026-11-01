@@ -18,8 +18,58 @@
     <meta property="og:image:height" content="630" />
     <style>
       html, body, #root { margin: 0; height: 100%; overflow: hidden; }
-      body { font-family: 'Pixelify Sans', ui-rounded, "SF Pro Rounded", system-ui, sans-serif; background: #f7d9a3; }
-      /* #16: self-hosted Pixelify Sans — the embed never fetches fonts at runtime */
+      body { font-family: 'Nunito', ui-rounded, "SF Pro Rounded", system-ui, sans-serif; background: #f7d9a3; }
+      /* round 5 (PR #49 comment #6560170382): the two font ROLES, both
+         self-hosted OFL woff2 — the embed never fetches fonts at runtime.
+         BODY = Nunito 400/500/700 (legible small-size body copy),
+         HEADINGS = Silkscreen 400/700 (pixel identity for titles/labels).
+         The stacks themselves live in src/data/typography.ts; the families
+         here are what those stacks reference. */
+      @font-face {
+        font-family: 'Nunito';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('./fonts/nunito-v32-latin-regular.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Nunito';
+        font-style: normal;
+        font-weight: 500;
+        font-display: swap;
+        src: url('./fonts/nunito-v32-latin-500.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Nunito';
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url('./fonts/nunito-v32-latin-700.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Silkscreen';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('./fonts/silkscreen-v6-latin-regular.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Silkscreen';
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url('./fonts/silkscreen-v6-latin-700.woff2') format('woff2');
+      }
+      /* round-4 leftovers kept for the ?font-preview=1 comparison overlay
+         only (src/ui/FontPreview.tsx) — not referenced by the app theme.
+         Varela Round (candidate C, not picked) + the old Pixelify files. */
+      @font-face {
+        font-family: 'Cand Varela Round';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('./fonts/varela-round-v21-latin-regular.woff2') format('woff2');
+      }
       @font-face {
         font-family: 'Pixelify Sans';
         font-style: normal;
@@ -41,10 +91,6 @@
         font-display: swap;
         src: url('./fonts/pixelify-sans-latin-700-normal.woff2') format('woff2');
       }
-      /* round-4 font candidates (session 9, PR #49): self-hosted woff2, OFL,
-         rendered ONLY by the /?font-preview overlay (src/ui/FontPreview.tsx) —
-         the app font is untouched until the user picks. Never fetched at
-         runtime from anywhere but ./fonts/. */
       @font-face {
         font-family: 'Cand Silkscreen';
         font-style: normal;
@@ -79,13 +125,6 @@
         font-weight: 700;
         font-display: swap;
         src: url('./fonts/nunito-v32-latin-700.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Cand Varela Round';
-        font-style: normal;
-        font-weight: 400;
-        font-display: swap;
-        src: url('./fonts/varela-round-v21-latin-regular.woff2') format('woff2');
       }
     </style>
   </head>

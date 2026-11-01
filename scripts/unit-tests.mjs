@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts', 'visits.ts', 'magnifierHit.ts', 'starterPatch.ts', 'sightingJournal.ts', 'keyboardShortcuts.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts', 'visits.ts', 'magnifierHit.ts', 'starterPatch.ts', 'sightingJournal.ts', 'keyboardShortcuts.ts', 'interactionGrammar.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -108,6 +108,7 @@ const { MAGNIFIER_WILDLIFE } = require(OUT + '/data/magnifierWildlife.js');
 const { MAGNIFIER_KINDS } = require(OUT + '/data/magnifierKinds.js');
 const { starterPatchFor } = require(OUT + '/engine/starterPatch.js');
 const { recordForInspection, appendRecord, journalKey } = require(OUT + '/engine/sightingJournal.js');
+const { selectToolDisarmsGlass } = require(OUT + '/engine/interactionGrammar.js');
 const { emptyKeyState, applyKey, toggleForKey, escActionFor, isTypingTarget } = require(OUT + '/engine/keyboardShortcuts.js');
 const { ONBOARDING_TUNING } = require(OUT + '/data/onboarding.js');
 
@@ -1439,6 +1440,19 @@ test('O1: the starter patch species bloom in the boot season (alive on frame one
     assert.ok(def, 'known species: ' + it.plantId);
     assert.ok(def.bloom.includes('summer'), it.plantId + ' blooms in the boot season');
   }
+});
+
+test('round 5 grammar rule: selecting a tool disarms the glass (one-directional)', () => {
+  // armed + a tool selected -> disarm
+  assert.strictEqual(selectToolDisarmsGlass({ magnifierOn: true }, 'lavender'), true);
+  assert.strictEqual(selectToolDisarmsGlass({ magnifierOn: true }, 'hive'), true);
+  // armed + DESELECTING the chip (null) -> glass untouched
+  assert.strictEqual(selectToolDisarmsGlass({ magnifierOn: true }, null), false);
+  // glass off + a tool selected -> nothing to disarm
+  assert.strictEqual(selectToolDisarmsGlass({ magnifierOn: false }, 'lavender'), false);
+  // the one-directional half lives in toggleMagnifier (it never deselects a
+  // chip) — asserted there by construction; this module only answers the
+  // select side
 });
 
 test('O2: the journal records exactly one entry per (kind, subject, season)', () => {
