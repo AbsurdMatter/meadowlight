@@ -36,7 +36,7 @@ import { HivePopup } from './ui/HivePopup';
 import { MilestoneWatcher } from './ui/MilestoneWatcher';
 import { PerfOverlay } from './ui/PerfOverlay';
 import { usePlacementStore, seedStarterPatchIfFresh } from './render/placementStore';
-import { maybeSeedDemoWorld } from './engine/testHook';
+import { maybeSeedDemoWorld, maybeCaptureShot } from './engine/testHook';
 import { SEASON_INFO } from './data/seasons';
 import { CHROME_TUNING } from './data/chrome';
 import { LIGHT_WARMTH, LONG_SHADOWS } from './data/polish';
@@ -153,6 +153,10 @@ export default function App() {
   // dev-only demo seed (?demo=1): lazy, error-bounded, no default-play effect
   useEffect(() => {
     if (loaded) maybeSeedDemoWorld();
+  }, [loaded]);
+  // P5: dev-only ?demo=1&shot=1 screenshot capture (README/og refresh)
+  useEffect(() => {
+    if (loaded) maybeCaptureShot();
   }, [loaded]);
   // O1 (v4, #39): a fresh world greets with a living meadow — a few
   // flowers + a hive on frame one, seeded from the worldSeed (never

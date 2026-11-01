@@ -4,7 +4,7 @@ A cozy voxel meadow where you plant flowers, keep bees, and learn real
 pollinator ecology along the way. No fail states, no time pressure — if you
 do nothing at all, the meadow quietly thrives anyway.
 
-![Meadowlight screenshot](docs/screenshot.png)
+![Meadowlight — a cozy voxel meadow](public/og-image.png)
 
 ## What it is
 
@@ -17,6 +17,11 @@ principle. Click anything and your field notebook shares a genuine,
 warmly-phrased fact (one in three bites of food depends on pollinators;
 more than 70% of bee species live alone; a single mason bee can do the
 pollinating of roughly 100 honeybees).
+
+Share a meadow with a **seed code** (the 🌱 button next to the postcard — a
+friend grows the identical layout from it), and read every label in
+**Slovenian** (the EN/SL toggle in the corner; defaults to your browser
+locale).
 
 ## Run it
 
@@ -122,10 +127,11 @@ npm run build
   each embedding site gets its own save slot — saves won't follow the
   player across sites, and the meadow boots fresh there. Nothing breaks;
   nothing syncs.
-- **Sharing.** The `og:image` tag is absolute-URL-ready: it points at
-  `https://meadowlight.example/og-image.png` (1200×630) — swap in the real
-  deployment origin at deploy time and drop a real-GPU screenshot at
-  `/og-image.png`. No other og tag needs touching.
+- **Sharing.** The `og:image` tag points at `https://meadowlight.example/og-image.png`
+  (placeholder origin — swap in the real deployment origin at deploy time).
+  `public/og-image.png` is a real 1280×800 canvas capture and already ships
+  at `/og-image.png` in `dist/`; no other og tag needs touching. For meadow
+  sharing between players, the in-app seed code (🌱) is the path.
 - **Embed checklist (re-run, session 6 deploy unit).** Verified headlessly in an iframe
   at 1280×300, 480×900, 600×600, and 914×391: canvas fills the frame
   exactly, zero horizontal/vertical scroll, zero console errors, fonts
@@ -135,15 +141,19 @@ npm run build
 
 ## Deploying
 
-The repo ships a GitHub Pages workflow (`.github/workflows/deploy-pages.yml`):
-on every push to `main` it runs the smoke gate, builds `dist/`, and publishes
-it to GitHub Pages. Enable it once in **Settings → Pages → Source: GitHub
-Actions**; the site then serves at the default Pages URL.
+The repo ships a GitHub Pages workflow (`.github/workflows/deploy-pages.yml`),
+**verified live on `main`** (every merge runs smoke → build → publish; the
+site serves at `https://absurdmatter.github.io/meadowlight/`). Enable it once
+in **Settings → Pages → Source: GitHub Actions** if the repo is forked.
 
-**Post-deploy step (documented, not done yet):** point the portfolio
-subdomain at the Pages URL (a `CNAME` file in `dist` + your DNS CNAME record),
-then swap the og:image placeholder origin in `index.html` and drop the
-real-GPU `/og-image.png` at the deploy origin.
+**Go-live (session 10, one user input):** point the portfolio subdomain at
+the Pages URL — add a `CNAME` file containing your subdomain to `public/`
+(it is copied into `dist/` on every build) and create the DNS CNAME record
+at your registrar. Then swap the og:image placeholder origin in
+`index.html` (`https://meadowlight.example/og-image.png` → your origin;
+`public/og-image.png` is already a real 1280×800 capture and ships at
+`/og-image.png`). Verify on the live URL: boot, a seed-code round-trip,
+Slovenian (EN/SL toggle in the corner), and a mobile pass at 360px.
 
 ## Credits
 

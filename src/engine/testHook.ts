@@ -208,6 +208,42 @@ declare global {
  * it via the PerfOverlay-style lazy check).
  */
 let demoSeeded = false;
+
+/**
+ * P5 (deploy): ?shot=1 captures a 1200x630 README/og screenshot of the demo
+ * meadow from the real WebGL canvas and downloads it as meadowlight-shot.png.
+ * Dev-only (?demo=1 gates the seeding, same pattern); never runs in normal
+ * play. Used once to refresh the README screenshot after v4.
+ */
+let shotTaken = false;
+export function maybeCaptureShot() {
+  if (shotTaken) return;
+  if (typeof window === 'undefined') return;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('shot') !== '1') return;
+    if (params.get('demo') !== '1') return;
+    const w = window.__meadowlight;
+    if (!w) return;
+    shotTaken = true;
+    setTimeout(() => {
+      try {
+        const t = (window as unknown as { __meadowlight?: { __three?: { gl?: { domElement: HTMLCanvasElement } } } }).__meadowlight?.__three;
+        const canvas = t?.gl?.domElement;
+        if (!canvas) return;
+        canvas.toBlob((blob) => {
+          if (!blob) return;
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'meadowlight-shot.png';
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        }, 'image/png');
+      } catch { /* dev-only convenience */ }
+    }, 4000);
+  } catch { /* never break the app */ }
+}
+
 export function maybeSeedDemoWorld() {
   if (demoSeeded) return;
   if (typeof window === 'undefined') return;
