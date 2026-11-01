@@ -220,8 +220,17 @@ export function KeyboardShortcuts() {
       const cardsBottom = cards.reduce((m, c) => Math.max(m, c.getBoundingClientRect().bottom), 0);
       const minTop = CHROME_TUNING.helpLaneTop + 28 + 6;
       const ceiling = cardsBottom > 0 ? cardsBottom + 6 : minTop;
+      // Round-3 finding 4: EVERY constraint is measured LIVE per viewport.
+      // The floor is the corner CONTROLS' live box (the outer wrapper), not
+      // the inner row — at narrow widths the row WRAPS (flexWrap wrap at
+      // < cornerWrapBelow) and the wrapper grows taller than the row, so a
+      // row-derived floor would let the panel overlap the wrapped second
+      // row. Wrap heights are never width-derived; the live box is the only
+      // truth. Fall back to the viewport bottom when no controls render.
+      const corner = document.querySelector('[data-corner-controls]');
       const cornerRow = document.querySelector('[data-corner-row]');
-      const floorY = (cornerRow ? cornerRow.getBoundingClientRect().top : window.innerHeight) - 8;
+      const cornerBox = corner ? corner.getBoundingClientRect() : cornerRow ? cornerRow.getBoundingClientRect() : null;
+      const floorY = (cornerBox ? cornerBox.top : window.innerHeight) - 8;
       const top = Math.max(minTop, ceiling); // never above the ceiling
       // free vertical band below the ceiling, measured in BORDER-box px:
       // the panel's getBoundingClientRect().height is border-box, so the
@@ -243,15 +252,21 @@ export function KeyboardShortcuts() {
       const unclampedScroll = lastChild
         ? Math.max(panel.scrollHeight, lastChild.getBoundingClientRect().bottom - (rect.top + padTop + (parseFloat(cs.borderTopWidth) || 0)))
         : panel.scrollHeight;
-      const naturalHeight = unclampedScroll + padTop + padBottom + borderY;
+      // Round-3 finding 4: ceil the content extent — fractional real-font
+      // rows (24.69px) sum to a fractional border box, and comparing a
+      // fractional natural height against an integral band let a sub-pixel
+      // overflow show a scrollbar at an ample viewport. Ceil both sides.
+      const naturalHeight = Math.ceil(unclampedScroll + padTop + padBottom + borderY);
       // shrink+scroll on conflict, capped at the ample-lane max so a panel
       // that FITS never scrolls just because the viewport is short (the
-      // max is derived from measured real-font content, not assumed rows).
-      // The clamp is expressed as maxHeight in CONTENT-box px (no
-      // box-sizing reset on this element): content max = band - padding - border.
+      // max is derived from measured real-font content + headroom, not
+      // assumed rows). The clamp is expressed as maxHeight in CONTENT-box
+      // px (no box-sizing reset on this element): content max = band -
+      // padding - border.
+      const bandCeil = Math.ceil(band);
       const cssMaxHeight =
-        naturalHeight > band
-          ? Math.min(band, CHROME_TUNING.helpPanelMaxHeight) - padTop - padBottom - borderY
+        naturalHeight > bandCeil
+          ? Math.min(bandCeil, CHROME_TUNING.helpPanelMaxHeight) - padTop - padBottom - borderY
           : null;
       if (top !== panelTop || cssMaxHeight !== panelMaxHeight) {
         setPanelTop(top);

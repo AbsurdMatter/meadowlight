@@ -85,8 +85,12 @@ export const CHROME_TUNING = {
    * scrolls (never relocates into the toast lane or corner row). NOTE:
    * the panel has no box-sizing reset, so a CSS maxHeight applies to the
    * CONTENT box — the component subtracts padding+border before applying.
+   * Round-3 finding 4: +8px headroom over the ~262px measured content so
+   * fractional real-font rows (24.69px each) never trigger a sub-pixel
+   * scrollbar at an ample viewport — the solver ceils the measured
+   * extent, and this cap carries the same headroom.
    */
-  helpPanelMaxHeight: 280,
+  helpPanelMaxHeight: 288,
   /** each hint-panel row's min-height in em (tall-font fallback, see above) */
   helpRowMinHeightEm: 1.9,
 } as const;

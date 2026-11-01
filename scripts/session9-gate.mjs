@@ -146,6 +146,10 @@ async function checkChrome() {
         dial: box(document.querySelector('[data-season-dial]')),
         timeRow: box(document.querySelector('[data-time-row]')),
         cornerRow: box(document.querySelector('[data-corner-row]')),
+        // round-3: the corner CONTROLS wrapper is the real floor — at narrow
+        // widths the row wraps and the wrapper is taller than the row, so
+        // asserting against the wrapper catches the wrapped-overlap class
+        cornerControls: box(document.querySelector('[data-corner-controls]')),
       };
       const toastCards = [...document.querySelectorAll('[data-toast]')].map(box);
       const dockEl = document.querySelector('[data-palette-dock]');
