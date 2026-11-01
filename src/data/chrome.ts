@@ -66,8 +66,22 @@ export const CHROME_TUNING = {
    * the ORDER is unchanged — toasts/reset were always the lowest lane.
    */
   helpLaneTop: 102,
-  /** the toast/reset lane's top (below the help button's bottom + gap) */
+  /**
+   * the toast lane's top (below the help button's bottom + gap). #51: the
+   * reset button no longer shares this lane — it owns the lane below the
+   * toasts, so a live toast card can never cover it.
+   */
   toastLaneTop: 138,
+  /**
+   * #51 (session 10): the reset button's OWN lane top — below the toast
+   * stack's lane. The toast stack grows UPWARD from its lane's bottom
+   * (column-reverse) AND is capped at the lane's height, so no stack can
+   * reach the reset button; the chrome gate measures the reset button's
+   * real box against every live toast card.
+   */
+  resetLaneTop: 240,
+  /** the gap between the toast lane's bottom and the reset button's lane */
+  resetLaneGap: 6,
   /** the hint panel's width (one key + action pair per line fits) */
   helpPanelWidth: 280,
   /**

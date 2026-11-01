@@ -159,12 +159,22 @@ async function checkChrome() {
       const toastCards = [...document.querySelectorAll('[data-toast]')].map(box);
       const dockEl = document.querySelector('[data-palette-dock]');
       const dockBox = dockEl ? box(dockEl) : null;
+      // #51 (session 10): the reset button owns its own lane below the
+      // toasts — its real rendered box must never intersect any toast card
+      const resetEl = document.querySelector('[data-reset-button]');
+      const resetBox = resetEl ? box(resetEl) : null;
       const hits = [];
       for (const [name, b] of Object.entries(corners)) if (intersect(help, b)) hits.push('help∩' + name);
       if (panel) for (const [name, b] of Object.entries(corners)) if (intersect(panel, b)) hits.push('panel∩' + name);
       for (const [i, tb] of toastCards.entries()) {
         if (intersect(help, tb)) hits.push('help∩toast#' + i);
         if (panel && intersect(panel, tb)) hits.push('panel∩toast#' + i);
+        if (resetBox && intersect(resetBox, tb)) hits.push('reset∩toast#' + i);
+      }
+      if (resetBox) {
+        for (const [name, b] of Object.entries(corners)) if (intersect(resetBox, b)) hits.push('reset∩' + name);
+        if (intersect(resetBox, help)) hits.push('reset∩help');
+        if (dockBox && intersect(resetBox, dockBox)) hits.push('reset∩dock');
       }
       if (dockBox) {
         if (intersect(help, dockBox)) hits.push('help∩dock');
@@ -174,6 +184,7 @@ async function checkChrome() {
         vp: innerWidth + 'x' + innerHeight,
         help, panel,
         corners,
+        reset: resetBox,
         toastCount: toastCards.length,
         hits,
         helpInViewport: help.top >= 0 && help.bottom <= innerHeight && help.left >= 0 && help.right <= innerWidth,
@@ -198,6 +209,16 @@ async function checkChrome() {
       'chrome.help-lane-no-intersection@' + width + 'x' + height,
       geo.hits.length === 0 && geo.helpInViewport && geo.panelInViewport === true && geo.toastStackExact && geo.panelClearsToastCeiling,
       JSON.stringify(geo),
+    );
+    // #51: the reset button owns its lane below the toasts — with the
+    // deterministic two-card stack live, its box must be in-viewport and
+    // intersect nothing (cards included)
+    rec.record(
+      'chrome.reset-lane-no-intersection@' + width + 'x' + height,
+      geo.reset !== null &&
+        !geo.hits.some((h) => h.startsWith('reset')) &&
+        geo.reset.top >= 0 && geo.reset.bottom <= innerHeight && geo.reset.left >= 0 && geo.reset.right <= innerWidth,
+      'reset=' + JSON.stringify(geo.reset) + ' resetHits=' + JSON.stringify(geo.hits.filter((h) => h.startsWith('reset'))),
     );
     const re = realErrors(errors);
     rec.record('chrome.no-console-errors@' + width + 'x' + height, re.length === 0, re.slice(0, 3).join(' | '));

@@ -62,7 +62,12 @@ export function Toasts() {
         // BOTTOM of its lane (cards grow UPWARD from the corner-row side),
         // so a growing stack never runs down into the help panel's lane —
         // the panel's ceiling is the lane's top, not each card's bottom.
+        // #51: the stack is also CAPPED at its lane's height so a tall stack
+        // can never grow down into the reset button's own lane below
+        // (resetLaneTop) — the button is never covered by a card.
         top: CHROME_TUNING.toastLaneTop,
+        maxHeight: CHROME_TUNING.resetLaneTop - CHROME_TUNING.toastLaneTop - CHROME_TUNING.resetLaneGap,
+        overflow: 'hidden',
         right: 12,
         display: 'flex',
         flexDirection: 'column-reverse',

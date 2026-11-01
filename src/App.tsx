@@ -194,7 +194,7 @@ body[data-magnifier-hit='1'] canvas { cursor: url("data:image/svg+xml,%3Csvg xml
       {loaded && <SeasonDial />}
       {loaded && <TimeControls />}
       {loaded && (
-        <div style={{ position: 'absolute', top: CHROME_TUNING.toastLaneTop, right: 12 }}>
+        <div style={{ position: 'absolute', top: CHROME_TUNING.resetLaneTop, right: 12 }}>
           <ResetDialog />
         </div>
       )}
