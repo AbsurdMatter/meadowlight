@@ -41,6 +41,52 @@
         font-display: swap;
         src: url('./fonts/pixelify-sans-latin-700-normal.woff2') format('woff2');
       }
+      /* round-4 font candidates (session 9, PR #49): self-hosted woff2, OFL,
+         rendered ONLY by the /?font-preview overlay (src/ui/FontPreview.tsx) —
+         the app font is untouched until the user picks. Never fetched at
+         runtime from anywhere but ./fonts/. */
+      @font-face {
+        font-family: 'Cand Silkscreen';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('./fonts/silkscreen-v6-latin-regular.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Cand Silkscreen';
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url('./fonts/silkscreen-v6-latin-700.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Cand Nunito';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('./fonts/nunito-v32-latin-regular.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Cand Nunito';
+        font-style: normal;
+        font-weight: 500;
+        font-display: swap;
+        src: url('./fonts/nunito-v32-latin-500.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Cand Nunito';
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url('./fonts/nunito-v32-latin-700.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Cand Varela Round';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('./fonts/varela-round-v21-latin-regular.woff2') format('woff2');
+      }
     </style>
   </head>
   <body>

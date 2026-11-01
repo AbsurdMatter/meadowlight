@@ -163,7 +163,7 @@ function HubInner() {
           <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '14px 0 6px', letterSpacing: 0.4 }}>LEARNED FACTS</h4>
           {learnedByGroup.length === 0 && miscSeen.length === 0 && (
             <div style={{ fontSize: 13, opacity: 0.75 }}>
-              Nothing yet — every flower, hive, and quiet corner of the meadow has a story. Click one with an empty hand and it will land here. 🐝
+              Nothing yet — arm the magnifying glass and hover a flower, hive, or bee; its fact lands here. 🔍
             </div>
           )}
           {learnedByGroup.map((g) => (

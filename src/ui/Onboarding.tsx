@@ -21,8 +21,8 @@ const STEPS: { title: string; body: string }[] = [
     body: 'Pick any flower from the palette below and click the meadow to plant it. There is no wrong spot — winding drifts look best.',
   },
   {
-    title: '🐝 Click it to learn',
-    body: 'Click any flower, hive, or bath with an empty hand (no tool selected) and your field notebook shares a real bee fact.',
+    title: '🔍 Hover it to learn',
+    body: 'Arm the magnifying glass in the corner and hover any flower, hive, or bee for a close read — your field notebook shares a real fact.',
   },
   {
     title: '🌇 Come back tomorrow',

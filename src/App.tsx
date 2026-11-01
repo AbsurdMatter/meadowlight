@@ -31,6 +31,7 @@ import { Toasts } from './ui/Toasts';
 import { Notebook } from './ui/Notebook';
 import { MagnifierCard } from './ui/MagnifierCard';
 import { MagnifierResolver } from './render/MagnifierInspector';
+import { FontPreview } from './ui/FontPreview';
 import { HivePopup } from './ui/HivePopup';
 import { MilestoneWatcher } from './ui/MilestoneWatcher';
 import { PerfOverlay } from './ui/PerfOverlay';
@@ -161,6 +162,9 @@ export default function App() {
   }, [loaded]);
   const magnifierOn = usePlacementStore((s) => s.magnifierOn);
   const placing = selectedPlantId ?? selectedStructureId;
+  // round 4 (PR #49 comment #6558805747): font-candidate preview overlay,
+  // dev-only via ?font-preview=1 — never renders in normal play
+  const fontPreview = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('font-preview') === '1';
   return (
     <div
       data-magnifier={magnifierOn ? 'on' : 'off'}
@@ -204,6 +208,7 @@ body[data-magnifier-hit='1'] canvas { cursor: url("data:image/svg+xml,%3Csvg xml
       {loaded && <HivePopup />}
       <MilestoneWatcher />
       {PerfOverlay && <PerfOverlay />}
+      {fontPreview && <FontPreview />}
       <div
         style={{
           position: 'absolute',
