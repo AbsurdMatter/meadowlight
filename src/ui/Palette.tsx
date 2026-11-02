@@ -7,6 +7,7 @@ import { plantingsBySeason, bloomSeasonsLabel, seasonBadge } from '../data/bloom
 import { theme, headingStyle } from './theme';
 import { CHROME_TUNING } from '../data/chrome';
 import { useLocale } from '../engine/locale';
+import { PLANT_NAME_COPY, STRUCTURE_NAME_COPY } from '../data/i18n';
 
 const chipStyle = (active: boolean, enabled: boolean): React.CSSProperties => ({
   border: `${theme.border.chunk}px solid ${active ? theme.color.clay : 'transparent'}`,
@@ -84,6 +85,7 @@ const tabStyle = (active: boolean): React.CSSProperties => ({
  *  bee-care structures + the nature structures that live with them. */
 export function Palette() {
   const t = useLocale((s) => s.t());
+  const locale = useLocale((s) => s.locale);
   const [tab, setTab] = useState<'planting' | 'equipment'>('planting');
   const selectedPlantId = usePlacementStore((s) => s.selectedPlantId);
   const selectedStructureId = usePlacementStore((s) => s.selectedStructureId);
@@ -158,7 +160,7 @@ export function Palette() {
         season: g.season,
         entries: g.plants.map((p) => ({
           key: 'plant:' + p.id,
-          name: p.name,
+          name: PLANT_NAME_COPY[locale][p.id] ?? p.name,
           kind: 'plant' as const,
           id: p.id,
           thumb: thumbs['plant:' + p.id] ?? null,
@@ -173,7 +175,7 @@ export function Palette() {
     () =>
       STRUCTURES.filter((s) => s.id === 'hedge' || s.id === 'wildcorner' || s.id === 'bush').map((s) => ({
         key: 'structure:' + s.id,
-        name: s.name,
+        name: STRUCTURE_NAME_COPY[locale][s.id] ?? s.name,
         kind: 'structure' as const,
         id: s.id,
         thumb: thumbs['structure:' + s.id] ?? null,
@@ -185,7 +187,7 @@ export function Palette() {
     () =>
       STRUCTURES.filter((s) => s.id === 'hive' || s.id === 'bath' || s.id === 'hotel').map((s) => ({
         key: 'structure:' + s.id,
-        name: s.name,
+        name: STRUCTURE_NAME_COPY[locale][s.id] ?? s.name,
         kind: 'structure' as const,
         id: s.id,
         thumb: thumbs['structure:' + s.id] ?? null,
@@ -382,7 +384,7 @@ export function Palette() {
               data-palette-section="nature"
             >
               <span style={sectionLabelStyle} data-section="nature">
-                nature
+                {t.paletteSectionNature}
               </span>
               <div style={{ display: 'flex', gap: 6 }}>{natureEntries.map(renderEntry)}</div>
             </div>
@@ -390,7 +392,7 @@ export function Palette() {
         ) : (
           <div style={sectionStyle('rgba(255, 233, 184, 0.35)')} data-palette-section="beecare">
             <span style={sectionLabelStyle} data-section="beecare">
-              🐝 Bee care
+              {t.paletteSectionBeeCare}
             </span>
             <div style={{ display: 'flex', gap: 6 }}>{beeCare.map(renderEntry)}</div>
           </div>

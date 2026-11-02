@@ -107,8 +107,8 @@ function HubInner() {
 
   const learnedByGroup: { group: string; facts: { id: string; text: string }[] }[] = [];
   const groups: { name: string; ids: string[] }[] = [
-    ...PLANTS.map((p) => ({ name: p.name, ids: [p.id && `plant:${p.id}`] })),
-    ...STRUCTURES.map((s) => ({ name: s.name, ids: [`structure:${s.id}`] })),
+    ...PLANTS.map((p) => ({ name: PLANT_NAME_COPY[locale][p.id] ?? p.name, ids: [p.id && `plant:${p.id}`] })),
+    ...STRUCTURES.map((s) => ({ name: STRUCTURE_NAME_COPY[locale][s.id] ?? s.name, ids: [`structure:${s.id}`] })),
   ];
   for (const g of groups) {
     const facts: { id: string; text: string }[] = [];

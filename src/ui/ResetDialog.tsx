@@ -65,7 +65,7 @@ function ResetDialogInner() {
         }}
         title={t.resetButtonTitle}
       >
-        Reset meadow
+        {t.resetButtonLabel}
       </button>
       {open && (
         <div

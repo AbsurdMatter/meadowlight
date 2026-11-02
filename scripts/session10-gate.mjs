@@ -203,12 +203,17 @@ async function checkI18nOutput() {
       await new Promise((res) => setTimeout(res, 700));
       document.querySelector('[data-language-toggle]')?.click();
       await new Promise((res) => setTimeout(res, 500));
-      // open every surface: help panel, hub, season dial is always visible
+      // open every surface: hub, hint panel, reset dialog (its button label
+      // + modal), palette dock sections — the #58 tail scan walks the whole
+      // DOM, not a fixed surface list
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j' }));
       await new Promise((res) => setTimeout(res, 400));
       window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }));
       await new Promise((res) => setTimeout(res, 400));
+      document.querySelector('[data-reset-button]')?.click();
+      await new Promise((res) => setTimeout(res, 400));
       const text = document.body.innerText;
+      document.querySelector('[role="dialog"] button, [data-reset-button]')?.click(); // close modal if open
       // residual-English detector: common UI English words that must not
       // appear in SL mode (allowlisted: brand "Meadowlight", key names)
       const englishWords = ['\bThe\b', '\bthe meadow\b', '\bHow to play\b', '\bField notebook\b', '\bIn bloom\b', '\bclick the meadow\b', '\bwander\b', '\bSpring\b', '\bSummer\b', '\bAutumn\b', '\bWinter\b', '\bblooms rarely\b', '\bvisited in\b', '\bfirst sighting\b', '\bReset\b', '\bCancel\b', '\bPostcard\b', '\bKeyboard\b', '\bCamera\b', '\bTools\b', '\bCancel\b', '\bSound\b', '\bMagnifying\b'];

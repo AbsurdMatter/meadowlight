@@ -48,6 +48,10 @@ export interface UiCopy {
   palettePlantingLabel: string;
   paletteEquipmentTitle: string;
   paletteEquipmentLabel: string;
+  /** #58 tail: palette section labels + reset button label (were hardcoded EN) */
+  paletteSectionNature: string;
+  paletteSectionBeeCare: string;
+  resetButtonLabel: string;
   naturalPlacement: string;
   on: string;
   off: string;
@@ -190,6 +194,9 @@ const en: UiCopy = {
   palettePlantingLabel: '\u{1F33F} Planting',
   paletteEquipmentTitle: 'Bee housing & care',
   paletteEquipmentLabel: '\u{1F41D} Equipment',
+  paletteSectionNature: 'nature',
+  paletteSectionBeeCare: '\u{1F41D} Bee care',
+  resetButtonLabel: 'Reset meadow',
   naturalPlacement: 'Natural placement',
   on: 'ON',
   off: 'OFF',
@@ -321,6 +328,9 @@ const sl: UiCopy = {
   palettePlantingLabel: '\u{1F33F} Sajenje',
   paletteEquipmentTitle: 'Čebelnjak in skrb za čebele',
   paletteEquipmentLabel: '\u{1F41D} Oprema',
+  paletteSectionNature: 'narava',
+  paletteSectionBeeCare: '\u{1F41D} Skrb za \u010debele',
+  resetButtonLabel: 'Ponastavi travnik',
   naturalPlacement: 'Naravna postavitev',
   on: 'VKLOPLJENO',
   off: 'IZKLOPLJENO',
