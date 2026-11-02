@@ -1095,7 +1095,11 @@ async function checkHintPanel() {
       })(),
     };
   });
-  const expectedGroups = ['Camera', 'Tools', 'Cancel'];
+  // #70: locale-agnostic — the group headings are COPY (Kamera/Orodja/Prekliči
+  // in SL, Camera/Tools/Cancel in EN), so assert COUNT + ORDER-STRUCTURE via
+  // data attributes, never the English literals. The gate runs under
+  // whatever locale the world is in (SL in the full-suite run).
+  const expectedGroupCount = 3;
   const expectedRows = 6; // 2 camera + 3 tools + 1 cancel
   // round-8 (PR #49 comment #6562533719): the assertion is DERIVATION-BASED
   // and platform-proof — assert the solver's DECISION matches the measured
@@ -1118,8 +1122,9 @@ async function checkHintPanel() {
   const ok =
     !layout.error &&
     layout.panelInViewport &&
-    layout.groupCount === 3 &&
-    JSON.stringify(layout.headings) === JSON.stringify(expectedGroups) &&
+    layout.groupCount === expectedGroupCount &&
+    layout.headings.every((h, i) => typeof h === 'string' && h.length > 0) &&
+    layout.headings.length === expectedGroupCount &&
     layout.rowCount === expectedRows &&
     layout.keyCount === expectedRows &&
     layout.actionCount === expectedRows &&
@@ -1129,12 +1134,28 @@ async function checkHintPanel() {
     layout.rowsDoNotOverlap &&
     // pairing spot-check: every pair has a non-empty key AND action
     layout.pairs.every((p) => p.includes(' -> ') && p.split(' -> ')[0].length > 0 && p.split(' -> ')[1].length > 0);
+  // #70: name the failing predicate(s) in the FAIL detail — a FAIL that
+  // doesn't say which assertion failed is a half-fixed detector
+  const failedPredicates = [];
+  if (layout.error) failedPredicates.push('error:' + layout.error);
+  if (!layout.panelInViewport) failedPredicates.push('panelInViewport');
+  if (layout.groupCount !== expectedGroupCount) failedPredicates.push('groupCount=' + layout.groupCount);
+  if (!(layout.headings.every((h) => typeof h === 'string' && h.length > 0) && layout.headings.length === expectedGroupCount)) failedPredicates.push('headings=' + JSON.stringify(layout.headings));
+  if (layout.rowCount !== expectedRows) failedPredicates.push('rowCount=' + layout.rowCount);
+  if (layout.keyCount !== expectedRows) failedPredicates.push('keyCount=' + layout.keyCount);
+  if (layout.actionCount !== expectedRows) failedPredicates.push('actionCount=' + layout.actionCount);
+  if (!layout.rowsInViewport) failedPredicates.push('rowsInViewport');
+  if (!solverDecisionOk) failedPredicates.push('solverDecision(branch=' + (sv.expectNoScroll ? 'no-scroll' : 'capped') + ',noScrollBranchOk=' + noScrollBranchOk + ',cappedBranchOk=' + cappedBranchOk + ')');
+  if (!layout.keyColumnAligned) failedPredicates.push('keyColumnAligned');
+  if (!layout.rowsDoNotOverlap) failedPredicates.push('rowsDoNotOverlap');
+  if (!layout.pairs.every((p) => p.includes(' -> ') && p.split(' -> ')[0].length > 0 && p.split(' -> ')[1].length > 0)) failedPredicates.push('pairing');
   rec.record(
     'keys.hint-panel-grouped-list',
     ok,
     layout.error
       ? layout.error
-      : 'groups=' + JSON.stringify(layout.headings) +
+      : (ok ? 'all predicates pass' : 'FAILED predicates: ' + failedPredicates.join(', ')) +
+        ' | groups=' + JSON.stringify(layout.headings) +
         ' rows=' + layout.rowCount +
         ' keyColumnAligned=' + layout.keyColumnAligned +
         ' rowsInViewport=' + layout.rowsInViewport +
