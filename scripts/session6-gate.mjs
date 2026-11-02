@@ -84,17 +84,25 @@ async function checkSeasons() {
       w.setSeasonProgressForTest(0.999); // near the boundary so the rollover lands inside the wait
     });
     await page.waitForTimeout(2500);
-    const after = await page.evaluate(() => {
+    // #63: the toast title is localized — read the ACTIVE locale's title from
+    // the page's own copy table first, then scan the toast cards with it
+    const toastTitle = await page.evaluate(() =>
+      window.__meadowlight.toastSeasonTitleReadback
+        ? window.__meadowlight.toastSeasonTitleReadback()
+        : 'A season drifts in',
+    );
+    const after = await page.evaluate((title) => {
       const w = window.__meadowlight;
-      const toasts = [...document.querySelectorAll('div')].some((d) =>
-        d.textContent.includes('A season drifts in'),
+      const toasts = [...document.querySelectorAll('[data-toast]')].some((d) =>
+        d.textContent.includes(title),
       );
       return {
         season: w.seasonReadback(),
         progress: w.seasonProgressReadback(),
         toastShown: toasts,
+        toastTitle: title,
       };
-    });
+    }, toastTitle);
     rec.record(
       'seasons.rollover-fires-gentle-toast',
       after.toastShown && after.season === 'autumn',

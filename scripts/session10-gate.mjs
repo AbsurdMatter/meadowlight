@@ -362,12 +362,46 @@ async function checkPostcard() {
   await page.close();
 }
 
+
+async function checkRolloverToast() {
+  const { page, errors } = await newPage(browser, url);
+  // #63: rollover toast must render in the ACTIVE locale — force a rollover
+  // in both locales and assert the toast card shows that locale's title
+  for (const loc of ['en', 'sl']) {
+    const r = await page.evaluate(async (locale) => {
+      const w = window.__meadowlight;
+      w.resetWorld();
+      w.setLocaleForTest(locale);
+      w.dismissAllToastsForTest();
+      w.setSeason('summer');
+      w.setSeasonProgressForTest(0.999);
+      w.timeSetPaused(false);
+      w.timeSetSpeed(8);
+      await new Promise((res) => setTimeout(res, 1200));
+      w.timeSetSpeed(1);
+      w.timeSetPaused(true);
+      const title = w.toastSeasonTitleReadback();
+      const cards = [...document.querySelectorAll('[data-toast]')].map((d) => d.textContent);
+      return { locale, title, shown: cards.some((c) => c.includes(title)), cardCount: cards.length };
+    }, loc);
+    rec.record(
+      'toast.rollover-renders-in-active-locale@' + loc,
+      r.shown && r.cardCount >= 1,
+      JSON.stringify(r),
+    );
+  }
+  const re = realErrors(errors);
+  rec.record('toast.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
 for (const check of checks.split(',')) {
   if (check === 'seeds') await checkSeeds();
   else if (check === 'i18n') await checkI18n();
   else if (check === 'i18n-output') await checkI18nOutput();
   else if (check === 'fonts') await checkFonts();
   else if (check === 'postcard') await checkPostcard();
+  else if (check === 'toast') await checkRolloverToast();
   else {
     console.error('[GATE] unknown check: ' + check);
     process.exit(2);

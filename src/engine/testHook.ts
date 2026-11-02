@@ -156,6 +156,8 @@ declare global {
     hubOpenReadback: () => boolean;
     /** #61/#62: share-panel + hint-panel open readbacks (the Esc-close surfaces) */
     sharePanelOpenReadback: () => boolean;
+    /** #63: the active locale's season-rollover toast title (localized) */
+    toastSeasonTitleReadback: () => string;
     modalOpenReadback: () => boolean;
     /** P3: open/close the reset confirm modal (the same modal R opens) */
     setModalOpenForTest: (open: boolean) => void;
@@ -426,6 +428,7 @@ export function installTestHook() {
     audioIsRunning: () => audioRunning(),
     hubOpenReadback: () => usePlacementStore.getState().hubOpen,
     sharePanelOpenReadback: () => usePlacementStore.getState().sharePanelOpen,
+    toastSeasonTitleReadback: () => useLocale.getState().t().toastSeasonDriftsIn,
     modalOpenReadback: () => usePlacementStore.getState().modalOpen,
     setModalOpenForTest: (open) => usePlacementStore.getState().setModalOpen(open),
     toastsReadback: () => usePlacementStore.getState().toasts,
