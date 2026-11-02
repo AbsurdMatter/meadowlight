@@ -14,6 +14,7 @@ import {
 import { theme, headingStyle } from './theme';
 import { CHROME_TUNING } from '../data/chrome';
 import { useLocale } from '../engine/locale';
+import { isPaused, setPaused } from '../engine/timeControl';
 
 /**
  * O5 (v4, #43): the keyboard grammar — PURE input translation onto the
@@ -96,7 +97,10 @@ function hintGroups(t: import('../data/i18n').UiCopy): { heading: string; rows: 
       { key: 'J', action: t.shortcutsJournal },
       { key: 'R', action: t.shortcutsStartOver },
     ] },
-    { heading: t.shortcutsGroupCancel, rows: [{ key: 'Esc', action: t.shortcutsCloseOpen }] },
+    { heading: t.shortcutsGroupCancel, rows: [
+      { key: 'Esc', action: t.shortcutsCloseOpen },
+      { key: 'Space', action: t.shortcutsPause },
+    ] },
   ];
 }
 
@@ -146,6 +150,14 @@ export function KeyboardShortcuts() {
       if (action === 'reset') {
         // R opens the inline confirm modal — NEVER instant
         s.setModalOpen(true);
+        return;
+      }
+      if (action === 'pause') {
+        // #71: Space toggles pause through the SAME timeControl the pause
+        // button uses — one input path, one store, no button-first focus
+        // requirement (the old gap: Space was never bound, so only the
+        // mouse-clicked button path worked)
+        setPaused(!isPaused());
         return;
       }
       if (action === 'cancel') {

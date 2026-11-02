@@ -753,6 +753,23 @@ async function checkJournal() {
 async function checkKeys() {
   const { page, errors } = await newPage(browser, url);
   await freshWorld(page);
+  // #71: Space toggles pause from a FRESH world — no mouse click on the
+  // pause button first (the old gap: Space was unbound, so only the
+  // button's click path worked). Assert both directions: pause -> resume.
+  {
+    const p0 = await page.evaluate(() => window.__meadowlight.timeIsPaused());
+    await page.keyboard.press(' ');
+    await page.waitForTimeout(250);
+    const p1 = await page.evaluate(() => window.__meadowlight.timeIsPaused());
+    await page.keyboard.press(' ');
+    await page.waitForTimeout(250);
+    const p2 = await page.evaluate(() => window.__meadowlight.timeIsPaused());
+    rec.record(
+      'keys.space-toggles-pause-fresh-boot',
+      p0 === false && p1 === true && p2 === false,
+      'paused ' + p0 + ' -> ' + p1 + ' -> ' + p2 + ' (fresh boot, zero prior button clicks)',
+    );
+  }
   // I toggles the glass (the SAME store the pointer drives)
   const i1 = await page.evaluate(() => window.__meadowlight.magnifierReadback().on);
   await page.keyboard.press('i');
@@ -1100,7 +1117,7 @@ async function checkHintPanel() {
   // data attributes, never the English literals. The gate runs under
   // whatever locale the world is in (SL in the full-suite run).
   const expectedGroupCount = 3;
-  const expectedRows = 6; // 2 camera + 3 tools + 1 cancel
+  const expectedRows = 7; // 2 camera + 3 tools + 2 cancel (Esc + Space, #71)
   // round-8 (PR #49 comment #6562533719): the assertion is DERIVATION-BASED
   // and platform-proof — assert the solver's DECISION matches the measured
   // inputs, never an absolute pixel count (toast/panel font metrics differ

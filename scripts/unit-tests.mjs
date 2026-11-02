@@ -1730,6 +1730,9 @@ test('O5: held keys drive the key state; toggles are single-fire', () => {
   assert.strictEqual(toggleForKey('J'), 'journal');
   assert.strictEqual(toggleForKey('r'), 'reset');
   assert.strictEqual(toggleForKey('Escape'), 'cancel');
+  // #71: Space (and legacy 'Spacebar') is the pause toggle
+  assert.strictEqual(toggleForKey(' '), 'pause');
+  assert.strictEqual(toggleForKey('Spacebar'), 'pause');
   assert.strictEqual(toggleForKey('k'), null, 'unbound = no toggle');
   // typing targets are never consumed
   assert.ok(isTypingTarget({ tagName: 'INPUT' }), 'input is a typing target');

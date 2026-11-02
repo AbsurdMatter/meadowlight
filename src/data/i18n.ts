@@ -129,6 +129,7 @@ export interface UiCopy {
   shortcutsJournal: string;
   shortcutsStartOver: string;
   shortcutsCloseOpen: string;
+  shortcutsPause: string;
   shortcutsPanelTitle: string;
   /** postcard stats */
   statNaturePlanted: string;
@@ -267,6 +268,7 @@ const en: UiCopy = {
   shortcutsJournal: 'journal',
   shortcutsStartOver: 'start over (asks first)',
   shortcutsCloseOpen: 'close whatever is open',
+  shortcutsPause: 'pause / resume time',
   shortcutsPanelTitle: 'Keyboard shortcuts',
   statNaturePlanted: 'Nature planted',
   statBeeCarePutUp: 'Bee care put up',
@@ -401,6 +403,7 @@ const sl: UiCopy = {
   shortcutsJournal: 'dnevnik',
   shortcutsStartOver: 'začni znova (vpraša najprej)',
   shortcutsCloseOpen: 'zapre, kar je odprto',
+  shortcutsPause: 'premor / nadaljevanje časa',
   shortcutsPanelTitle: 'Bližnjice na tipkovnici',
   statNaturePlanted: 'Posajene rastline',
   statBeeCarePutUp: 'Postavljena skrb za čebele',
