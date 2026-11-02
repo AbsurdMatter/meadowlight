@@ -149,7 +149,16 @@ async function checkChrome() {
     const geo = await page.evaluate(() => {
       const intersect = (a, b) => !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
       const box = (el) => { const b = el.getBoundingClientRect(); return { top: b.top, right: b.right, bottom: b.bottom, left: b.left }; };
-      const help = box(document.querySelector('[data-shortcut-hint]'));
+      const helpEl = document.querySelector('[data-shortcut-hint]');
+      const help = box(helpEl);
+      // #65: the "?" help button is an INTENDED MEMBER of the corner row
+      // (#59 moved it there) — containment is member-of, not an intersection
+      // hit. Skip corner boxes that actually CONTAIN the button.
+      const cornerRowEl = document.querySelector('[data-corner-row]');
+      const cornerCtlEl = document.querySelector('[data-corner-controls]');
+      const memberOf = (name) =>
+        (name === 'cornerRow' && cornerRowEl && helpEl && cornerRowEl.contains(helpEl)) ||
+        (name === 'cornerControls' && cornerCtlEl && helpEl && cornerCtlEl.contains(helpEl));
       const panelEl = document.querySelector('[data-shortcut-hint-panel]');
       const panel = panelEl ? box(panelEl) : null;
       const corners = {
@@ -173,7 +182,7 @@ async function checkChrome() {
       const shareEl = document.querySelector('[data-seed-share-popover]');
       const shareBox = shareEl ? box(shareEl) : null;
       const hits = [];
-      for (const [name, b] of Object.entries(corners)) if (intersect(help, b)) hits.push('help∩' + name);
+      for (const [name, b] of Object.entries(corners)) if (intersect(help, b) && !memberOf(name)) hits.push('help∩' + name);
       if (panel) for (const [name, b] of Object.entries(corners)) if (intersect(panel, b)) hits.push('panel∩' + name);
       for (const [i, tb] of toastCards.entries()) {
         if (intersect(help, tb)) hits.push('help∩toast#' + i);
@@ -187,7 +196,7 @@ async function checkChrome() {
       }
       if (shareBox) {
         for (const [i, tb] of toastCards.entries()) if (intersect(shareBox, tb)) hits.push('share∩toast#' + i);
-        for (const [name, b] of Object.entries(corners)) if (intersect(shareBox, b)) hits.push('share∩' + name);
+        for (const [name, b] of Object.entries(corners)) if (intersect(shareBox, b) && !memberOf(name)) hits.push('share∩' + name);
         if (resetBox && intersect(shareBox, resetBox)) hits.push('share∩reset');
         if (shareBox && intersect(shareBox, help)) hits.push('share∩help');
       }
@@ -206,6 +215,9 @@ async function checkChrome() {
         toastCount: toastCards.length,
         hits,
         helpInViewport: help.top >= 0 && help.bottom <= innerHeight && help.left >= 0 && help.right <= innerWidth,
+        // #65: the share popover opens UPWARD from the corner row — it must
+        // be fully inside the viewport (the old downward open went off-screen)
+        shareInViewport: shareBox ? (shareBox.top >= 0 && shareBox.bottom <= innerHeight && shareBox.left >= 0 && shareBox.right <= innerWidth) : null,
         panelInViewport: panel ? (panel.top >= 0 && panel.bottom <= innerHeight && panel.left >= 0 && panel.right <= innerWidth) : null,
         // the fixture is deterministic: exactly two season-arrival cards
         // (raised via two re-armed crossings at 8x, all inside TOAST_MS —
@@ -241,8 +253,8 @@ async function checkChrome() {
     );
     rec.record(
       'chrome.share-lane-no-intersection@' + width + 'x' + height,
-      geo.share !== null && !geo.hits.some((h) => h.startsWith('share')),
-      'share=' + JSON.stringify(geo.share) + ' shareHits=' + JSON.stringify(geo.hits.filter((h) => h.startsWith('share'))),
+      geo.share !== null && !geo.hits.some((h) => h.startsWith('share')) && geo.shareInViewport === true,
+      'share=' + JSON.stringify(geo.share) + ' shareInViewport=' + geo.shareInViewport + ' shareHits=' + JSON.stringify(geo.hits.filter((h) => h.startsWith('share'))),
     );
     rec.record(
       'chrome.reset-lane-no-intersection@' + width + 'x' + height,

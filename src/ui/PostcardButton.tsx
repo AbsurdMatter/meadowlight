@@ -134,11 +134,17 @@ export function PostcardButton() {
           data-seed-share-popover
           style={{
             position: 'absolute',
-            // #59: the share popover owns the lane below the toast lane,
-            // measured (chrome gate asserts it never intersects a notice)
-            top: CHROME_TUNING.shareLaneTop - 190,
+            // #65: the button lives in the bottom corner row, so the popover
+            // opens UPWARD toward available space (bottom-anchored at the
+            // row's top) and is clamped to the viewport top — it can never
+            // render off-screen below the fold again. The chrome gate still
+            // asserts it never intersects a notice/corner box.
+            bottom: 'calc(100% + ' + CHROME_TUNING.shareLaneGap + 'px)',
+            top: 'auto',
             right: 0,
             zIndex: 60,
+            maxHeight: 'calc(100vh - ' + CHROME_TUNING.shareLaneTop + 'px)',
+            overflowY: 'auto',
             padding: theme.spacing.panelPadding,
             borderRadius: theme.border.radiusPanel,
             background: theme.color.panel,

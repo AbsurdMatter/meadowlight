@@ -125,10 +125,30 @@ export function Palette() {
   const [narrow, setNarrow] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < CHROME_TUNING.narrowDockBelow : false,
   );
+  // #65: the corner lane is the LIVE measured corner-controls height — re-read
+  // whenever the wrapper resizes (wrap changes its height) or the window does
+  const [cornerH, setCornerH] = useState<number>(() => {
+    if (typeof document === 'undefined') return 0;
+    const el = document.querySelector('[data-corner-controls]');
+    const h = el ? Number(el.getAttribute('data-corner-controls-height')) : NaN;
+    return Number.isFinite(h) && h > 0 ? h : 0;
+  });
   useEffect(() => {
     const onResize = () => setNarrow(window.innerWidth < CHROME_TUNING.narrowDockBelow);
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    const el = document.querySelector('[data-corner-controls]');
+    const read = () => {
+      const h = el ? Number(el.getAttribute('data-corner-controls-height')) : NaN;
+      if (Number.isFinite(h) && h > 0) setCornerH(h);
+    };
+    const mo = new MutationObserver(read);
+    if (el) mo.observe(el, { attributes: true, attributeFilter: ['data-corner-controls-height'] });
+    window.addEventListener('resize', read);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('resize', read);
+      mo.disconnect();
+    };
   }, []);
   // season-grouped planting tab: derived from the engine's bloom windows
   // (one source — plantingsBySeason reads PLANTS[].bloom directly)
@@ -246,10 +266,13 @@ export function Palette() {
         // height — the dock stacks on top of it, never beside it). Below
         // cornerWrap3Below the corner row wraps to three rows, so the
         // dock lifts by the three-row lane height instead.
+        // #65: at narrow widths the dock's bottom offset is read from the
+        // LIVE corner-controls wrapper (published as data-corner-controls-
+        // height by CornerControls) + the dock inset — the corner lane is
+        // the measured wrapped-row height, never a stale constant. Fallback
+        // to the tuned constants only before the attribute is published.
         bottom: narrow
-          ? window.innerWidth < CHROME_TUNING.cornerWrap3Below
-            ? CHROME_TUNING.cornerWrap3Height + CHROME_TUNING.dockInset
-            : CHROME_TUNING.narrowDockBottom
+          ? (cornerH > 0 ? cornerH + CHROME_TUNING.dockInset : (window.innerWidth < CHROME_TUNING.cornerWrap3Below ? CHROME_TUNING.cornerWrap3Height + CHROME_TUNING.dockInset : CHROME_TUNING.narrowDockBottom))
           : 16,
         // UI round 3 (#6383867199): the dock sits in the space BETWEEN the
         // onboarding panel (bottom-left) and the corner controls
@@ -284,12 +307,13 @@ export function Palette() {
         // three rows below cornerWrap3Below). The bound is measured from
         // the dock's own bottom offset, so the dock's TOP edge always sits
         // below the corner rows' top.
+        // #65: same measured lane — the maxHeight bound uses the live
+        // corner height too, so the dock's top edge can never reach the
+        // corner rows at any width
         maxHeight: narrow
-          ? `calc(100vh - ${
-              (window.innerWidth < CHROME_TUNING.cornerWrap3Below
-                ? CHROME_TUNING.cornerWrap3Height + CHROME_TUNING.dockInset
-                : CHROME_TUNING.narrowDockBottom) + CHROME_TUNING.dockInset
-            }px)`
+          ? (cornerH > 0
+              ? `calc(100vh - ${cornerH + CHROME_TUNING.dockInset + CHROME_TUNING.dockInset}px)`
+              : `calc(100vh - ${(window.innerWidth < CHROME_TUNING.cornerWrap3Below ? CHROME_TUNING.cornerWrap3Height + CHROME_TUNING.dockInset : CHROME_TUNING.narrowDockBottom) + CHROME_TUNING.dockInset}px)`)
           : undefined,
         borderRadius: theme.border.radiusPanel,
         background: theme.color.panel,

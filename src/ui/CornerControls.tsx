@@ -83,6 +83,22 @@ const controlButtonStyle = (armed: boolean): React.CSSProperties => ({
 export function CornerControls() {
   const t = useLocale((s) => s.t());
   const [helpOpen, setHelpOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  // #65: publish the corner wrapper's MEASURED height on a data attribute so
+  // the dock can reserve its lane from the live box (the #59 rework added two
+  // buttons to the row; stale lane constants overlapped the dock at 480/700)
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const publish = () => {
+      el.setAttribute('data-corner-controls-height', String(Math.ceil(el.getBoundingClientRect().height)));
+    };
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    window.addEventListener('resize', publish);
+    return () => { ro.disconnect(); window.removeEventListener('resize', publish); };
+  }, []);
   // O4 (v4, #42): at narrow frames the corner row WRAPS to two rows
   // (right-anchored) instead of running under the dock — the reserved lane
   // becomes the wrapped row's height, never an overlap
@@ -103,6 +119,7 @@ export function CornerControls() {
   const setLocale = useLocale((s) => s.setLocale);
   return (
     <div
+      ref={wrapRef}
       data-corner-controls
       style={{
         position: 'absolute',
