@@ -339,11 +339,35 @@ async function checkFonts() {
   await page.close();
 }
 
+
+async function checkPostcard() {
+  const { page, errors } = await newPage(browser, url);
+  // #60: the OBSERVABLE is a non-empty image blob from the real save path —
+  // "the handler ran" is a proxy; postcardSaveForTest runs capture -> compose
+  // -> download and measures the blob
+  const r = await page.evaluate(async () => {
+    const w = window.__meadowlight;
+    w.resetWorld();
+    w.plant('lavender', 2, 2);
+    await new Promise((res) => setTimeout(res, 1200));
+    return await w.postcardSaveForTest();
+  });
+  rec.record(
+    'postcard.save-produces-image-blob',
+    r.ok && r.bytes > 1000,
+    JSON.stringify(r),
+  );
+  const re = realErrors(errors);
+  rec.record('postcard.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
 for (const check of checks.split(',')) {
   if (check === 'seeds') await checkSeeds();
   else if (check === 'i18n') await checkI18n();
   else if (check === 'i18n-output') await checkI18nOutput();
   else if (check === 'fonts') await checkFonts();
+  else if (check === 'postcard') await checkPostcard();
   else {
     console.error('[GATE] unknown check: ' + check);
     process.exit(2);

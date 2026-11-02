@@ -31,7 +31,7 @@ import { hillsBoxes, rimBoxes } from './hillsLayout';
 import { setFireflyForce } from '../render/Fireflies';
 import { rainDebug } from '../render/Rain';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
-import { capturePostcardPng } from './postcard';
+import { capturePostcardPng, downloadPostcard } from './postcard';
 import { audioDebugInfo, audioRunning, audioEnabled, buzzLevelForBeeCount } from './audio';
 import { ghostDebug } from '../render/PlacementSystem';
 import { DAY_CYCLE_SECONDS, resumeDayCycle } from './dayCycle';
@@ -185,6 +185,8 @@ declare global {
       reloadFromSave: () => void;
       /** P3: seed codes — encode the live meadow / start from a code */
       seedCodeEncode: () => string;
+    /** #60: run the REAL save path and report the observable (blob present + size), not the handler */
+    postcardSaveForTest: () => Promise<{ ok: boolean; bytes: number; error: string | null }>;
       startFromSeedCode: (code: string) => boolean;
     /** P4: locale readback + test setter (same store the toggle drives) */
     localeReadback: () => string;
@@ -444,6 +446,26 @@ export function installTestHook() {
     freshBootForTest: () => freshBootForTest(),
     __setWorldSeedForTest: (seed) => usePlacementStore.setState({ worldSeed: seed }),
     reloadFromSave: () => usePlacementStore.getState().reloadFromSave(),
+    postcardSaveForTest: async () => {
+      try {
+        const capture = capturePostcardPng();
+        if (!capture) return { ok: false, bytes: 0, error: 'no capture' };
+        const { composePostcard } = await import('./postcardCompose');
+        const { postcardStatText } = await import('../ui/PostcardStats');
+        const stats = postcardStatText().map((l) => ({ label: l.label, value: l.value }));
+        const composed = await composePostcard(capture, stats);
+        const dataUrl = composed ?? capture;
+        // the observable: a non-empty image blob — decode the data URL and measure
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        // actually trigger the download path too (what the user clicks), but
+        // measure the blob, not the click
+        downloadPostcard(dataUrl);
+        return { ok: blob.size > 1000 && blob.type.startsWith('image/'), bytes: blob.size, error: null };
+      } catch (e) {
+        return { ok: false, bytes: 0, error: String(e) };
+      }
+    },
     seedCodeEncode: () => {
       const s = usePlacementStore.getState();
       return encodeSeedCode(s.worldSeed, s.items);

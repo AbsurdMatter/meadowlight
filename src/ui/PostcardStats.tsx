@@ -112,6 +112,8 @@ export function PostcardStats() {
 
 /** The same four facts, for the composed postcard image (canvas 2D). */
 export function postcardStatText(): StatLine[] {
-  const t = useLocale((s) => s.t());
-  return statLines(t);
+  // #60: this is called from the postcard click handler (NOT a component) —
+  // calling a hook there throws and the handler's catch swallowed it, so the
+  // save silently did nothing. Read the store directly instead.
+  return statLines(useLocale.getState().t());
 }
