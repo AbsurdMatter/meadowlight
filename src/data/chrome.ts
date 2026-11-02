@@ -67,21 +67,27 @@ export const CHROME_TUNING = {
    */
   helpLaneTop: 102,
   /**
-   * the toast lane's top (below the help button's bottom + gap). #51: the
-   * reset button no longer shares this lane — it owns the lane below the
-   * toasts, so a live toast card can never cover it.
+   * #59 (session 10 fix round): the reset button is anchored DIRECTLY under
+   * the time controls (top 56, bottom 94 at 700-1280 / 80 at 360-480) — its
+   * lane top is the time row's measured bottom + gap, same discipline as the
+   * help lane. The toast stack (season notices) flows BELOW the reset button;
+   * the share popover gets its own measured lane below the toasts.
+   */
+  resetLaneTop: 102,
+  /**
+   * the toast lane's top — directly below the reset button's lane. The stack
+   * grows UPWARD (column-reverse) from its lane and is capped at the lane
+   * height, so it can never reach the reset button above it.
    */
   toastLaneTop: 138,
   /**
-   * #51 (session 10): the reset button's OWN lane top — below the toast
-   * stack's lane. The toast stack grows UPWARD from its lane's bottom
-   * (column-reverse) AND is capped at the lane's height, so no stack can
-   * reach the reset button; the chrome gate measures the reset button's
-   * real box against every live toast card.
+   * the share popover's lane top — below the toast lane. The popover is
+   * measured against every live toast card (chrome gate) and must never
+   * overlap a notice.
    */
-  resetLaneTop: 240,
-  /** the gap between the toast lane's bottom and the reset button's lane */
-  resetLaneGap: 6,
+  shareLaneTop: 240,
+  /** the gap between the toast lane's bottom and the share lane */
+  shareLaneGap: 6,
   /** the hint panel's width (one key + action pair per line fits) */
   helpPanelWidth: 280,
   /**

@@ -140,6 +140,11 @@ async function checkChrome() {
       w.timeSetPaused(true);
       w.timeSetSpeed(1);
     });
+    // #59: open the share popover via its real button so its lane is measured
+    // live alongside the two notice cards
+    await page.evaluate(() => {
+      document.querySelector('[data-seed-share-button]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
     await page.waitForTimeout(400); // let the panel re-measure after the cards land
     const geo = await page.evaluate(() => {
       const intersect = (a, b) => !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
@@ -163,6 +168,10 @@ async function checkChrome() {
       // toasts — its real rendered box must never intersect any toast card
       const resetEl = document.querySelector('[data-reset-button]');
       const resetBox = resetEl ? box(resetEl) : null;
+      // #59: the share popover gets its own measured lane — open it via the
+      // real button and measure its box against the toast cards
+      const shareEl = document.querySelector('[data-seed-share-popover]');
+      const shareBox = shareEl ? box(shareEl) : null;
       const hits = [];
       for (const [name, b] of Object.entries(corners)) if (intersect(help, b)) hits.push('help∩' + name);
       if (panel) for (const [name, b] of Object.entries(corners)) if (intersect(panel, b)) hits.push('panel∩' + name);
@@ -176,6 +185,12 @@ async function checkChrome() {
         if (intersect(resetBox, help)) hits.push('reset∩help');
         if (dockBox && intersect(resetBox, dockBox)) hits.push('reset∩dock');
       }
+      if (shareBox) {
+        for (const [i, tb] of toastCards.entries()) if (intersect(shareBox, tb)) hits.push('share∩toast#' + i);
+        for (const [name, b] of Object.entries(corners)) if (intersect(shareBox, b)) hits.push('share∩' + name);
+        if (resetBox && intersect(shareBox, resetBox)) hits.push('share∩reset');
+        if (shareBox && intersect(shareBox, help)) hits.push('share∩help');
+      }
       if (dockBox) {
         if (intersect(help, dockBox)) hits.push('help∩dock');
         if (panel && intersect(panel, dockBox)) hits.push('panel∩dock');
@@ -185,6 +200,7 @@ async function checkChrome() {
         help, panel,
         corners,
         reset: resetBox,
+        share: shareBox,
         toastCount: toastCards.length,
         hits,
         helpInViewport: help.top >= 0 && help.bottom <= innerHeight && help.left >= 0 && help.right <= innerWidth,
@@ -213,6 +229,19 @@ async function checkChrome() {
     // #51: the reset button owns its lane below the toasts — with the
     // deterministic two-card stack live, its box must be in-viewport and
     // intersect nothing (cards included)
+    // #59: reset anchored directly under the time controls (same y with or
+    // without notices — the fixture has two live cards here), and the share
+    // popover (opened below) never intersects a notice or the reset button
+    rec.record(
+      'chrome.reset-anchored-under-time-row@' + width + 'x' + height,
+      geo.reset !== null && Math.abs(geo.reset.top - (geo.corners.timeRow.bottom + 8)) < 2,
+      'resetTop=' + (geo.reset ? geo.reset.top : null) + ' timeRowBottom=' + geo.corners.timeRow.bottom,
+    );
+    rec.record(
+      'chrome.share-lane-no-intersection@' + width + 'x' + height,
+      geo.share !== null && !geo.hits.some((h) => h.startsWith('share')),
+      'share=' + JSON.stringify(geo.share) + ' shareHits=' + JSON.stringify(geo.hits.filter((h) => h.startsWith('share'))),
+    );
     rec.record(
       'chrome.reset-lane-no-intersection@' + width + 'x' + height,
       geo.reset !== null &&

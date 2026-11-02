@@ -163,6 +163,18 @@ export function CornerControls() {
         >
           ?
         </button>
+        {/* #59: the "?" help button lives in the corner row (chrome), not in
+            the top-right stack — the stack's fixed lanes are dial → time row →
+            reset → notices → share panel */}
+        <button
+          onClick={() => usePlacementStore.getState().setHintOpen(!usePlacementStore.getState().hintOpen)}
+          data-shortcut-hint
+          title={t.shortcutsPanelTitle}
+          aria-pressed={usePlacementStore((s) => s.hintOpen)}
+          style={controlButtonStyle(false)}
+        >
+          ?
+        </button>
         {/* P4 (i18n): the manual language toggle — one button in the corner
             row, cycles the locales, persisted, aria-pressed syncs both ways */}
         <button

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { capturePostcardPng, downloadPostcard } from '../engine/postcard';
 import { composePostcard } from '../engine/postcardCompose';
 import { theme, headingStyle } from './theme';
+import { CHROME_TUNING } from '../data/chrome';
 import { PostcardStats, postcardStatText } from './PostcardStats';
 import { usePlacementStore } from '../render/placementStore';
 import { encodeSeedCode } from '../engine/seedCode';
@@ -133,7 +134,9 @@ export function PostcardButton() {
           data-seed-share-popover
           style={{
             position: 'absolute',
-            bottom: 44,
+            // #59: the share popover owns the lane below the toast lane,
+            // measured (chrome gate asserts it never intersects a notice)
+            top: CHROME_TUNING.shareLaneTop - 190,
             right: 0,
             zIndex: 60,
             padding: theme.spacing.panelPadding,

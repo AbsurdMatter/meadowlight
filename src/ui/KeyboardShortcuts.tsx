@@ -103,7 +103,8 @@ function hintGroups(t: import('../data/i18n').UiCopy): { heading: string; rows: 
 export function KeyboardShortcuts() {
   const t = useLocale((s) => s.t());
   const keys = useRef<KeyState>(emptyKeyState());
-  const [hintOpen, setHintOpen] = useState(false);
+  const hintOpen = usePlacementStore((s) => s.hintOpen);
+  const setHintOpen = usePlacementStore((s) => s.setHintOpen);
   const hintOpenRef = useRef(false);
   useEffect(() => { hintOpenRef.current = hintOpen; }, [hintOpen]);
 
@@ -128,7 +129,7 @@ export function KeyboardShortcuts() {
       // single-fire toggles
       const action = toggleForKey(e.key);
       if (!action) {
-        if (e.key === '?') setHintOpen((o) => !o);
+        if (e.key === '?') { const h = usePlacementStore.getState().hintOpen; usePlacementStore.getState().setHintOpen(!h); }
         return;
       }
       e.preventDefault();
@@ -269,7 +270,7 @@ export function KeyboardShortcuts() {
       // the floor (corner row) and never UP into the ceiling (toasts).
       const cards = [...document.querySelectorAll('[data-toast]')];
       const cardsBottom = cards.reduce((m, c) => Math.max(m, c.getBoundingClientRect().bottom), 0);
-      const minTop = CHROME_TUNING.helpLaneTop + 28 + 6;
+      const minTop = CHROME_TUNING.toastLaneTop + 6; // panel opens below the toast lane
       const ceiling = cardsBottom > 0 ? cardsBottom + 6 : minTop;
       // Round-3 finding 4: EVERY constraint is measured LIVE per viewport.
       // The floor is the corner CONTROLS' live box (the outer wrapper), not
@@ -370,37 +371,13 @@ export function KeyboardShortcuts() {
           62 at 700-900 wide, 48 at 360-480) and the time row (bottom 94).
           The hint panel measures its own placement (below the toast
           stack, clear of the dock) instead of assuming it. */}
-      <button
-        onClick={() => setHintOpen((o) => !o)}
-        data-shortcut-hint
-        title={t.shortcutsPanelTitle}
-        aria-pressed={hintOpen}
-        style={{
-          position: 'absolute',
-          top: CHROME_TUNING.helpLaneTop,
-          right: 12,
-          height: 28,
-          padding: '0 10px',
-          borderRadius: theme.border.radius,
-          border: `${theme.border.chunk}px solid ${theme.color.honey}`,
-          background: theme.color.parchment,
-          color: theme.color.text,
-          fontFamily: theme.font.family,
-          fontSize: theme.font.smallSize,
-          cursor: 'pointer',
-          boxShadow: theme.border.shadow,
-          zIndex: 6,
-        }}
-      >
-        ?
-      </button>
       {hintOpen && (
         <div
           ref={panelRef}
           data-shortcut-hint-panel
           style={{
             position: 'absolute',
-            top: panelTop ?? CHROME_TUNING.helpLaneTop + 28 + 6,
+            top: panelTop ?? CHROME_TUNING.toastLaneTop + 6,
             right: 12,
             width: CHROME_TUNING.helpPanelWidth,
             // round 7: border-box so maxHeight is the BORDER-box height and

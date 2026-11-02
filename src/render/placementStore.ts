@@ -70,6 +70,9 @@ export interface PlacementState {
   /** #61: the seed share popover's open state — joins the ESC close-grammar family (one source) */
   sharePanelOpen: boolean;
   setSharePanelOpen: (open: boolean) => void;
+  /** #59: the "?" hint panel open state (hosted in the corner row now) */
+  hintOpen: boolean;
+  setHintOpen: (open: boolean) => void;
   /** true while a blocking dialog (reset confirmation) is open: no placement */
   modalOpen: boolean;
   setModalOpen: (open: boolean) => void;
@@ -224,6 +227,8 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   hubOpen: false,
   sharePanelOpen: false,
   setSharePanelOpen: (open) => set({ sharePanelOpen: open }),
+  hintOpen: false,
+  setHintOpen: (open) => set({ hintOpen: open }),
   dismissOnboarding: () => {
     set({ onboardingDismissed: true });
     get().save();
