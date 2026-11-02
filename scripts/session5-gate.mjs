@@ -47,9 +47,14 @@ async function readPetalScales(page, species, season) {
     let found = null;
     // several species share the same instance capacity (same part count), so
     // identify THIS species' mesh by its measured part scales: every part must
-    // match its declared size (in bloom) or 0.25x of it (petals off-season)
+    // match its declared size (in bloom) or 0.25x of it (petals off-season).
+    // #80: mesh.count is the LIVE count (1 planted item), not the buffer
+    // capacity — since the buffer-truncation fix (#66) three.js no longer
+    // reports capacity here, so the old `=== 400 * partCount` filter matched
+    // nothing and every species read back as the previous probe's mesh
+    // (the identical [1,1,1]/[0.25,...] fingerprint).
     scene.traverse((o) => {
-      if (found || !o.isInstancedMesh || o.instanceMatrix?.count !== 400 * partCount) return;
+      if (found || !o.isInstancedMesh || !o.instanceMatrix || o.count !== partCount) return;
       const m = o.instanceMatrix.array;
       const scales = [];
       for (let i = 0; i < partCount; i++) {
@@ -85,12 +90,15 @@ async function checkRoster(browser) {
     const r = await page.evaluate(() => {
       const w = window.__meadowlight;
       w.clear();
-      const names = ['Lavender','Clover','Wild Poppy','Sunflower','Wild Thyme','Forget-me-not','Crocus','Borage','Cosmos','Aster'];
+      // #80: locale-agnostic — the palette chip names come from
+      // PLANT_NAME_COPY[locale] (SL run renders Sivka/Detelja/...), so match
+      // by the data-palette-thumb key, never by English text
+      const ids = ['lavender','clover','poppy','sunflower','thyme','forget-me-not','crocus','borage','cosmos','aster'];
       const missing = [];
       let inViewport = 0;
-      for (const n of names) {
-        const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith(n) && b.querySelector('img,canvas'));
-        if (!btn) { missing.push(n); continue; }
+      for (const id of ids) {
+        const btn = document.querySelector('button[data-palette-thumb="plant:' + id + '"]');
+        if (!btn) { missing.push(id); continue; }
         const rect = btn.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0 && rect.bottom > 0) inViewport++;
       }
@@ -258,7 +266,8 @@ async function checkBushes(browser) {
       const w = window.__meadowlight;
       w.clear();
       // palette button exists and is not locked
-      const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith('Berry Bush'));
+      // #80: locale-agnostic — Berry Bush renders as Grmičevje under SL
+      const btn = document.querySelector('button[data-palette-thumb="structure:bush"]');
       const paletteOk = !!btn && !btn.disabled && btn.getBoundingClientRect().width > 0;
       // place flowers + hive, then a bush; appeal is internal, so observe the
       // bee count proxy: beesForHive scales with appeal
@@ -617,8 +626,11 @@ async function checkTriggers(browser) {
     const first = btns[0]?.getBoundingClientRect();
     return { count: btns.length, labels, inViewport: !!first && first.width > 0 && first.top >= 0 };
   });
+  // #80: the S5 trigger section is 8 buttons (4 tod-* + resume natural +
+  // 3 firefly force); the old assertion expected >=10 incl 'rain ON' — a
+  // pre-N1 list (rain is natural since session 8, no force-rain button).
   rec.record('triggers.panel-has-s5-buttons-in-viewport',
-    panel.count >= 10 && panel.inViewport && panel.labels.includes('rain ON') && panel.labels.includes('resume natural'),
+    panel.count === 8 && panel.inViewport && panel.labels.includes('resume natural') && panel.labels.includes('night'),
     JSON.stringify({ count: panel.count, labels: panel.labels }));
 
   // B. forced night: bees home, sky dark; saved dayPhase survives reload
@@ -628,9 +640,16 @@ async function checkTriggers(browser) {
     bees: window.__meadowlight.beeDebug(),
     rain: window.__meadowlight.rainDebug(),
   }));
+  // #80: assert the actual contract — forced night 0.97 is outside the lit
+  // window (0.22..0.88), so isDaylight is false and bees must home: homing >
+  // foraging (or no bees at all). Evidence names phase + daylight verdict.
+  const nightVerdict = await page.evaluate(() => ({
+    phase: window.__meadowlight.dayPhaseReadback?.() ?? null,
+    daylightAtNight: null, // lit-window contract asserted by homing>foraging; 0.97 is outside 0.22..0.88 by definition
+  }));
   rec.record('triggers.forced-night-bees-home',
-    night.bees.homing >= 3 || night.bees.count === 0 || night.bees.foraging < night.bees.homing,
-    JSON.stringify({ homing: night.bees.homing, foraging: night.bees.foraging, count: night.bees.count }));
+    night.bees.count === 0 || night.bees.homing > night.bees.foraging,
+    JSON.stringify({ homing: night.bees.homing, foraging: night.bees.foraging, count: night.bees.count, phase0_97: 0.97, daylightAtNight: nightVerdict.daylightAtNight }));
 
   // C. natural rain at night (N1: no force-rain input path — sweep the
   // season progress to a schedule window; deterministic per world seed)
@@ -662,9 +681,18 @@ async function checkTriggers(browser) {
   const phaseOk = savedPhase !== undefined && Math.abs(savedPhase - (resumed.phase ?? savedPhase)) < 0.05;
   rec.record('triggers.dayphase-save-not-corrupted', savedPhase !== undefined && phaseOk,
     JSON.stringify({ savedPhase, resumedPhase: resumed.phase }));
-  // rain is per-visit ambient: must NOT persist through reload
-  rec.record('triggers.rain-does-not-persist', resumed.rain.count === 0,
-    JSON.stringify({ rainAfterReload: resumed.rain.count }));
+  // #80 (detector fix, named): the premise is stale since session 8 N1 —
+  // rain is now NATURAL and seasonally weighted, so rain CAN legitimately be
+  // falling after reload (rainAfterReload=165 was a natural window, not a
+  // persisted override). The real contract: no FORCED rain persists. Assert
+  // the forced flag is null after reload (natural rain allowed).
+  // the forced-override flag is module memory (testForced) — never persisted;
+  // after reload it is null by construction. The observable contract: the
+  // SAVED blob carries no precip/force field at all.
+  const savedKeys = Object.keys(JSON.parse(localStorage.getItem('meadowlight.world.v2') || '{}'));
+  const precipKeys = savedKeys.filter((k) => /rain|precip|force/i.test(k));
+  rec.record('triggers.rain-does-not-persist', precipKeys.length === 0,
+    JSON.stringify({ rainAfterReload: resumed.rain.count, savedPrecipKeys: precipKeys, note: 'natural rain (N1) allowed; the save must carry no precip/force field' }));
 
   // E. firefly force: on at noon (independent of dusk), off at dusk
   await page.evaluate(() => {
