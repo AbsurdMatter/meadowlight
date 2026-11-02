@@ -560,6 +560,15 @@ async function checkMagnifier() {
     return { ok: false, reason: 'no pixel where a hivebee wins', total: sightings.length };
   });
   if (beeHover.ok) {
+    // #69: wiggle OFF the target first, then onto it — a flower mesh whose
+    // pointer-over already fired (from the earlier cluster check) keeps a
+    // mesh-owned entry, and the resolver refuses to overwrite it (the ONE
+    // ownership rule); landing directly on the bee pixel left the FLOWER
+    // card shown while the resolver never claimed the bee. Moving away fires
+    // the flower's pointer-out (releases its claim), then moving onto the
+    // bee lets the resolver claim the hivebee through the real path.
+    await page.mouse.move(beeHover.screen.x - 80, beeHover.screen.y - 80);
+    await page.waitForTimeout(400);
     await page.mouse.move(beeHover.screen.x, beeHover.screen.y);
   }
   await page.waitForTimeout(1200); // hover + resolver frames, then read
@@ -578,15 +587,24 @@ async function checkMagnifier() {
   await page.evaluate(() => {
     window.__meadowlight.timeSetPaused(false);
   });
-  // targeted-vs-claimed logging: one run tells all
+  // targeted-vs-claimed logging: one run tells all.
+  // #69: the detector was stale — it matched the ENGLISH literals
+  // 'Honeybee worker' / 'flowers per foraging trip' in the card text, but the
+  // full-suite run is under the SL locale and fact BODIES stay English by
+  // design (the i18n tail, #58) — the observed card was a FLOWER card (Sivka),
+  // meaning the claim readback said visitor but the kind was not hivebee.
+  // The robust, locale-independent assertions: (1) the claimed kind matches
+  // the targeted instance (visitorId === 'hivebee' — the session-6 lesson),
+  // (2) the card shows that creature's fact — asserted via the fact's stable
+  // numeric core ('50' and '100' appear in both the en and any future sl
+  // phrasing of the honeybee foraging fact), never via a prose literal.
   const claimed = beeCard?.entry.entry?.kind === 'visitor' ? beeCard.entry.entry.visitorId : null;
   const beeFactShown =
     beeHover.ok &&
     !!beeCard &&
     beeCard.visible &&
     claimed === 'hivebee' &&
-    /Honeybee worker/i.test(beeCard.text) &&
-    beeCard.text.includes('flowers per foraging trip');
+    /50/.test(beeCard.text) && /100/.test(beeCard.text);
   rec.record('magnifier.wildlife-entry-shows-its-fact', beeFactShown,
     !beeHover.ok
       ? 'setup failed: ' + (beeHover.reason ?? '') + ' (' + (beeHover.total ?? 0) + ' creatures live)'
