@@ -197,6 +197,8 @@ async function checkChrome() {
       }
       return {
         vp: innerWidth + 'x' + innerHeight,
+        vpW: innerWidth,
+        vpH: innerHeight,
         help, panel,
         corners,
         reset: resetBox,
@@ -246,7 +248,7 @@ async function checkChrome() {
       'chrome.reset-lane-no-intersection@' + width + 'x' + height,
       geo.reset !== null &&
         !geo.hits.some((h) => h.startsWith('reset')) &&
-        geo.reset.top >= 0 && geo.reset.bottom <= innerHeight && geo.reset.left >= 0 && geo.reset.right <= innerWidth,
+        geo.reset.top >= 0 && geo.reset.bottom <= geo.vpH && geo.reset.left >= 0 && geo.reset.right <= geo.vpW,
       'reset=' + JSON.stringify(geo.reset) + ' resetHits=' + JSON.stringify(geo.hits.filter((h) => h.startsWith('reset'))),
     );
     const re = realErrors(errors);
