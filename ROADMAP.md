@@ -628,3 +628,23 @@ seasons on the session-9 world seed (red on the base commit, quarantined) —
 P1 of session 10 (issue #53). #50 outer-hill sky gaps, #51 reset/toast lane,
 #52 vite 6→8 + esbuild advisory, #54 notebook tabs, #55 stem-head gap,
 #56 hive panels ride the backlog.
+
+### Gate runner check lists (canonical, #68 — read the gate, don't trust the list)
+
+`run-all-gates.ps1` lives OUTSIDE the repo (user's local copy). The valid
+`--checks` names per gate at branch head (verified by reading each script;
+an unknown name now fails clean and lists the valid ones via
+dispatchChecks in scripts/gate-lib.mjs):
+
+- browser-gate: boot, onboarding, audio, postcard, solitary, perf
+- bee-gate: no --checks (runs its two bee scenarios)
+- session5-gate: roster, terrain, bushes, sky, wild, daynight, weather, triggers
+- session6-gate: seasons, recipes, honey, time, corners, hivepopup
+- session7-gate: seeding, visitors, timecontrols, colony, habitat, nightsky
+- session8-gate: precip, visits, magnifier
+- session9-gate: polish, onboarding, journal, keys, audio, touch, chrome
+- session10-gate: seeds, i18n, i18n-output, fonts, postcard, toast
+  (NOTE: names like rim/resetlane/seedcodes do NOT exist here — the #66 rim
+  assertions live in the UNIT gate, scripts/unit-tests.mjs)
+- unit + lint + build: npm run test:smoke (unit-tests + build-health +
+  node --check on EVERY gate script + gate-scope-lint)

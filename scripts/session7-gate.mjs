@@ -17,7 +17,7 @@
  *     save loads without loss), and determinism holds across reload.
  */
 import { chromium } from 'playwright-core';
-import { parseArgs, launchChromium, newPage, makeRecorder, realErrors } from './gate-lib.mjs';
+import { parseArgs, launchChromium, newPage, makeRecorder, realErrors, dispatchChecks } from './gate-lib.mjs';
 
 const { url = 'http://localhost:5199', checks = 'seeding', 'lib-path': libPath = '' } = parseArgs();
 const rec = makeRecorder();
@@ -691,10 +691,8 @@ async function checkNightSky() {
   await page.close();
 }
 
+// #68: shared dispatch — unknown names name the valid checks
 const map = { seeding: checkSeeding, visitors: checkVisitors, timecontrols: checkTimeControlsUI, colony: checkColony, habitat: checkHabitat, nightsky: checkNightSky };
-for (const c of checks.split(',')) {
-  if (map[c]) await map[c]();
-  else rec.record(`unknown-check:${c}`, false, 'no such check in session7-gate');
-}
+const code = await dispatchChecks(rec, checks, map, 'session7-gate');
 await browser.close();
-process.exit(rec.exitCode());
+process.exit(code);

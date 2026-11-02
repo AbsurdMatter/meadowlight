@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test:smoke": "node scripts/unit-tests.mjs && node scripts/build-health.mjs && node --check scripts/session8-gate.mjs && node --check scripts/session9-gate.mjs && node --check scripts/session10-gate.mjs && node --check scripts/gate-lib.mjs && node scripts/gate-scope-lint.mjs",
+    "test:smoke": "node scripts/unit-tests.mjs && node scripts/build-health.mjs && node --check scripts/session5-gate.mjs && node --check scripts/session6-gate.mjs && node --check scripts/session7-gate.mjs && node --check scripts/session8-gate.mjs && node --check scripts/session9-gate.mjs && node --check scripts/session10-gate.mjs && node --check scripts/browser-gate.mjs && node --check scripts/bee-gate.mjs && node --check scripts/gate-lib.mjs && node scripts/gate-scope-lint.mjs",
     "test:perf": "echo \"[perf] start the dev server (npm run dev), open the game, press F3 or P, then click the stress button - results log to the browser console\"",
     "test:unit": "node scripts/unit-tests.mjs"
   },

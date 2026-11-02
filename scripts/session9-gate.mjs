@@ -60,7 +60,7 @@
  *     the lane). The open hint panel is also intersection-checked.
  */
 import { chromium } from 'playwright-core';
-import { parseArgs, launchChromium, newPage, makeRecorder, realErrors } from './gate-lib.mjs';
+import { parseArgs, launchChromium, newPage, makeRecorder, realErrors, dispatchChecks } from './gate-lib.mjs';
 
 const { url = 'http://localhost:5173', checks = 'polish', 'lib-path': libPath = '' } = parseArgs();
 const rec = makeRecorder();
@@ -1369,19 +1369,16 @@ async function checkTouch() {
   }
 }
 
-for (const check of checks.split(',')) {
-  if (check === 'polish') await checkPolish();
-  else if (check === 'onboarding') await checkOnboarding();
-  else if (check === 'journal') await checkJournal();
-  else if (check === 'keys') { await checkKeys(); await checkHintPanel(); }
-  else if (check === 'audio') await checkAudio();
-  else if (check === 'touch') await checkTouch();
-  else if (check === 'chrome') await checkChrome();
-  else {
-    console.error('[GATE] unknown check: ' + check);
-    process.exit(2);
-  }
-}
-
+// #68: shared dispatch — unknown names name the valid checks (the old
+// console.error+exit(2) produced a ZERO-result run in the full-suite runner)
+const code = await dispatchChecks(rec, checks, {
+  polish: checkPolish,
+  onboarding: checkOnboarding,
+  journal: checkJournal,
+  keys: async () => { await checkKeys(); await checkHintPanel(); },
+  audio: checkAudio,
+  touch: checkTouch,
+  chrome: checkChrome,
+}, 'session9-gate');
 await browser.close();
-process.exit(rec.exitCode());
+process.exit(code);

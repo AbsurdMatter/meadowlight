@@ -20,7 +20,7 @@
  *       the modal is closed); the one-click reset path never touches seeds.
  */
 import { chromium } from 'playwright-core';
-import { parseArgs, launchChromium, newPage, makeRecorder, realErrors } from './gate-lib.mjs';
+import { parseArgs, launchChromium, newPage, makeRecorder, realErrors, dispatchChecks } from './gate-lib.mjs';
 
 const { url = 'http://localhost:5173', checks = 'seeds', 'lib-path': libPath = '' } = parseArgs();
 const rec = makeRecorder();
@@ -418,18 +418,17 @@ async function checkRolloverToast() {
   await page.close();
 }
 
-for (const check of checks.split(',')) {
-  if (check === 'seeds') await checkSeeds();
-  else if (check === 'i18n') await checkI18n();
-  else if (check === 'i18n-output') await checkI18nOutput();
-  else if (check === 'fonts') await checkFonts();
-  else if (check === 'postcard') await checkPostcard();
-  else if (check === 'toast') await checkRolloverToast();
-  else {
-    console.error('[GATE] unknown check: ' + check);
-    process.exit(2);
-  }
-}
-
+// #68: shared dispatch — unknown names name the valid checks. NOTE: the
+// full-suite runner must invoke session10 WITHOUT invented names (e.g. 'rim',
+// 'resetlane', 'seedcodes') — valid: seeds, i18n, i18n-output, fonts, postcard,
+// toast (the #66 rim assertions live in the UNIT gate, scripts/unit-tests.mjs)
+const code = await dispatchChecks(rec, checks, {
+  seeds: checkSeeds,
+  i18n: checkI18n,
+  'i18n-output': checkI18nOutput,
+  fonts: checkFonts,
+  postcard: checkPostcard,
+  toast: checkRolloverToast,
+}, 'session10-gate');
 await browser.close();
-process.exit(rec.exitCode());
+process.exit(code);

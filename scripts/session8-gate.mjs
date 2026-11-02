@@ -19,7 +19,7 @@
  *     errors. Each check builds its OWN world (the stale-probe lesson).
  */
 import { chromium } from 'playwright-core';
-import { parseArgs, launchChromium, newPage, makeRecorder, realErrors } from './gate-lib.mjs';
+import { parseArgs, launchChromium, newPage, makeRecorder, realErrors, dispatchChecks } from './gate-lib.mjs';
 
 const { url = 'http://localhost:5199', checks = 'precip', 'lib-path': libPath = '' } = parseArgs();
 const rec = makeRecorder();
@@ -874,14 +874,11 @@ async function checkMagnifier() {
   await page.close();
 }
 
-for (const check of checks.split(',')) {
-  if (check === 'precip') await checkPrecip();
-  else if (check === 'visits') await checkVisits();
-  else if (check === 'magnifier') await checkMagnifier();
-  else {
-    console.error('[GATE] unknown check: ' + check);
-    process.exit(2);
-  }
-}
-
-process.exit(rec.exitCode());
+// #68: shared dispatch — unknown names name the valid checks (the old
+// console.error+exit(2) produced a ZERO-result run in the full-suite runner)
+process.exit(await dispatchChecks(rec, checks, {
+  precip: checkPrecip,
+  visits: checkVisits,
+  magnifier: checkMagnifier,
+}, 'session8-gate'));
+await browser.close();

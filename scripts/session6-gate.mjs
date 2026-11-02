@@ -22,7 +22,7 @@
  *             boundary interpretation), no console errors.
  */
 import { chromium } from 'playwright-core';
-import { parseArgs, launchChromium, newPage, makeRecorder, realErrors } from './gate-lib.mjs';
+import { parseArgs, launchChromium, newPage, makeRecorder, realErrors, dispatchChecks } from './gate-lib.mjs';
 
 const { url = 'http://localhost:5199', checks = 'seasons', 'lib-path': libPath = '' } = parseArgs();
 const rec = makeRecorder();
@@ -1039,10 +1039,8 @@ async function checkHivePopup() {
   await page.close();
 }
 
+// #68: shared dispatch — unknown names name the valid checks
 const map = { seasons: checkSeasons, recipes: checkRecipes, honey: checkHoney, time: checkTimeControls, corners: checkCornerFold, hivepopup: checkHivePopup };
-for (const c of checks.split(',')) {
-  if (map[c]) await map[c]();
-  else rec.record(`unknown-check:${c}`, false, 'no such check in session6-gate');
-}
+const code = await dispatchChecks(rec, checks, map, 'session6-gate');
 await browser.close();
-process.exit(rec.exitCode());
+process.exit(code);

@@ -14,7 +14,7 @@
  *             bloom succession at render level, notebook fact, v4 save load
  */
 import { chromium } from 'playwright-core';
-import { parseArgs, launchChromium, newPage, makeRecorder, realErrors } from './gate-lib.mjs';
+import { parseArgs, launchChromium, newPage, makeRecorder, realErrors, dispatchChecks } from './gate-lib.mjs';
 
 const { url = 'http://localhost:5199', checks = 'roster', 'lib-path': libPath = '' } = parseArgs();
 const rec = makeRecorder();
@@ -688,16 +688,16 @@ async function checkTriggers(browser) {
 }
 
 const browser = await launchChromium(chromium, { libPath });
-for (const check of checks.split(',')) {
-  if (check === 'roster') await checkRoster(browser);
-  else if (check === 'terrain') await checkTerrain(browser);
-  else if (check === 'bushes') await checkBushes(browser);
-  else if (check === 'sky') await checkSky(browser);
-  else if (check === 'wild') await checkWild(browser);
-  else if (check === 'daynight') await checkDayNight(browser);
-  else if (check === 'weather') await checkWeather(browser);
-  else if (check === 'triggers') await checkTriggers(browser);
-  else rec.record(`unknown-check:${check}`, false, 'no such check');
-}
+// #68: dispatch via the shared helper — an unknown check name fails clean
+// and names the valid checks (never a silent zero-result run)
+process.exit(await dispatchChecks(rec, checks, {
+  roster: () => checkRoster(browser),
+  terrain: () => checkTerrain(browser),
+  bushes: () => checkBushes(browser),
+  sky: () => checkSky(browser),
+  wild: () => checkWild(browser),
+  daynight: () => checkDayNight(browser),
+  weather: () => checkWeather(browser),
+  triggers: () => checkTriggers(browser),
+}, 'session5-gate'));
 await browser.close();
-process.exit(rec.exitCode());

@@ -73,3 +73,19 @@ export function makeRecorder(log = console.log) {
 export function realErrors(errors) {
   return errors.filter((e) => !/favicon/.test(e));
 }
+
+/**
+ * #68: dispatch --checks against a gate's check map. An unknown check name is
+ * a usage error, not a silent zero-result run — fail clean and NAME the valid
+ * checks (port-default foot-gun rule: never a raw stack, never a silent pass).
+ * Returns the process exit code.
+ */
+export async function dispatchChecks(rec, checks, map, gateName) {
+  for (const c of checks.split(',').map((s) => s.trim()).filter(Boolean)) {
+    if (map[c]) await map[c]();
+    else {
+      rec.record(`unknown-check:${c}`, false, `no such check in ${gateName} — valid checks: ${Object.keys(map).join(', ')}`);
+    }
+  }
+  return rec.exitCode();
+}
