@@ -616,9 +616,17 @@ async function checkMagnifier() {
   const glassRemove = await page.evaluate(() => {
     const w = window.__meadowlight;
     const read = () => JSON.parse(localStorage.getItem('meadowlight.world.v2') || '{}');
-    // arm the glass + hold an entry (a flower), frozen clock for the diff
+    // arm the glass + hold an entry (a flower), frozen clock for the diff.
+    // #75: ALSO freeze the autosave — App.tsx autosaves every 3s and the
+    // save blob carries live-clock fields (dayPhase, seasonProgress,
+    // hiveCombs, journal); an autosave landing inside the 800ms diff window
+    // mutates those fields with the world untouched. The sibling checks
+    // freeze the clock AND save an explicit baseline; this check read the
+    // blob BEFORE any explicit save, so the baseline was whatever the last
+    // autosave wrote. Fix: explicit baseline save at the frozen instant.
     const wasPaused = w.timeIsPaused();
     w.timeSetPaused(true);
+    w.save(); // explicit baseline at the frozen instant (same as siblings)
     w.setMagnifierOnForTest(true);
     const target = w.items()[0];
     w.setMagnifierEntryForTest({ kind: 'flower', itemId: target.id });
@@ -703,11 +711,19 @@ async function checkMagnifier() {
     glassRemove.afterCount === glassRemove.beforeCount &&
     glassRemove.changed.length === 0 &&
     click1Ok && click2Ok && click3Ok;
+  // #75: name the failing predicate — removal vs save-identity vs click-state
+  const failed75 = [];
+  if (glassRemove.afterCount !== glassRemove.beforeCount) failed75.push('removal: items ' + glassRemove.beforeCount + '->' + glassRemove.afterCount);
+  if (glassRemove.changed.length > 0) failed75.push('save-identity: changed fields ' + glassRemove.changed.join(','));
+  if (!click1Ok) failed75.push('click1 (dismiss, stays armed)');
+  if (!click2Ok) failed75.push('click2 (disarm)');
+  if (!click3Ok) failed75.push('click3 (dismiss after re-hover)');
   rec.record('magnifier.rightclick-while-armed-removes-nothing', glassRemoveOk,
     glassRemoveOk
       ? 'three right-clicks under armed glass: ' + glassRemove.beforeCount + ' items throughout, save unchanged — click states: ' +
         states.map((s) => '#' + s.click + (s.glassOn ? ' armed' : ' off') + '/' + (s.entry ?? 'no-entry')).join(', ')
-      : 'REMOVED under armed glass — items ' + glassRemove.beforeCount + '->' + glassRemove.afterCount +
+      : 'FAILED predicates: ' + failed75.join('; ') +
+        ' — items ' + glassRemove.beforeCount + '->' + glassRemove.afterCount +
         ', changed: ' + glassRemove.changed.join(', ') + ', states: ' + JSON.stringify(states));
 
   // wildlife inspection is read-only too: same frozen-clock field diff
