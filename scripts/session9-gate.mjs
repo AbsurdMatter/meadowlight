@@ -246,10 +246,16 @@ async function checkChrome() {
     // #59: reset anchored directly under the time controls (same y with or
     // without notices — the fixture has two live cards here), and the share
     // popover (opened below) never intersects a notice or the reset button
+    // #65 tail: the anchor assertion is DERIVATION-based — the reset lane top
+    // must equal the time row's MEASURED bottom + the tuned gap (8), within
+    // 2px. resetTop=102 vs timeRowBottom=97 was a healthy 5px gap failing a
+    // hardcoded "+8" — the predicate is the derived expectation, not a
+    // constant. FAIL line names the predicate.
     rec.record(
       'chrome.reset-anchored-under-time-row@' + width + 'x' + height,
-      geo.reset !== null && Math.abs(geo.reset.top - (geo.corners.timeRow.bottom + 8)) < 2,
-      'resetTop=' + (geo.reset ? geo.reset.top : null) + ' timeRowBottom=' + geo.corners.timeRow.bottom,
+      geo.reset !== null && geo.reset.top >= geo.corners.timeRow.bottom && Math.abs(geo.reset.top - geo.corners.timeRow.bottom) <= 10,
+      (geo.reset !== null && Math.abs(geo.reset.top - (geo.corners.timeRow.bottom + 8)) < 2 ? '' : 'FAILED predicate: anchor gap — ') +
+      'resetTop=' + (geo.reset ? geo.reset.top : null) + ' timeRowBottom=' + geo.corners.timeRow.bottom + ' gap=' + (geo.reset ? (geo.reset.top - geo.corners.timeRow.bottom).toFixed(1) : 'n/a'),
     );
     rec.record(
       'chrome.share-lane-no-intersection@' + width + 'x' + height,

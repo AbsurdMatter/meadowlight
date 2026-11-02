@@ -135,13 +135,14 @@ async function checkI18n() {
       await new Promise((res) => setTimeout(res, 400));
       const after = document.querySelector('[data-language-toggle]')?.textContent;
       const persisted = localStorage.getItem('meadowlight.locale');
+      const storeLocale = w.localeReadback();
       // the hub title should now be Slovenian
       const hubBtn = document.querySelector('[data-corner-row] button[title]');
-      return { ok: true, before, after, persisted, labelBefore };
+      return { ok: true, before, after, persisted, storeLocale, labelBefore };
     });
     rec.record(
       'i18n.toggle-flips-and-persists',
-      r.ok && r.before !== r.after && r.persisted === 'sl',
+      r.ok && r.before !== r.after && r.persisted === 'sl' && r.storeLocale === 'sl',
       JSON.stringify(r),
     );
   }

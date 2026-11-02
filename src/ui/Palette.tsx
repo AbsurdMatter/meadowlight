@@ -136,20 +136,43 @@ export function Palette() {
     return Number.isFinite(h) && h > 0 ? h : 0;
   });
   useEffect(() => {
-    const onResize = () => setNarrow(window.innerWidth < CHROME_TUNING.narrowDockBelow);
+    const onResize = () => {
+      setNarrow(window.innerWidth < CHROME_TUNING.narrowDockBelow);
+      read(); // #65 tail: wrap changes the corner height at 480/700 — re-read on every resize
+    };
     window.addEventListener('resize', onResize);
     const el = document.querySelector('[data-corner-controls]');
     const read = () => {
       const h = el ? Number(el.getAttribute('data-corner-controls-height')) : NaN;
       if (Number.isFinite(h) && h > 0) setCornerH(h);
+      else {
+        // fallback: measure the wrapper directly if the attribute is missing
+        const live = el ? el.getBoundingClientRect().height : 0;
+        if (live > 0) setCornerH(Math.ceil(live));
+      }
     };
     const mo = new MutationObserver(read);
-    if (el) mo.observe(el, { attributes: true, attributeFilter: ['data-corner-controls-height'] });
+    if (el) {
+      mo.observe(el, { attributes: true, attributeFilter: ['data-corner-controls-height'] });
+      // #65 tail: also watch the inner row — the wrap point moves the WRAPPER
+      // height, and a ResizeObserver catches it even without an attribute change
+      const ro = new ResizeObserver(read);
+      ro.observe(el);
+      const row = document.querySelector('[data-corner-row]');
+      if (row) ro.observe(row);
+      window.addEventListener('resize', read);
+      read();
+      return () => {
+        window.removeEventListener('resize', onResize);
+        window.removeEventListener('resize', read);
+        mo.disconnect();
+        ro.disconnect();
+      };
+    }
     window.addEventListener('resize', read);
     return () => {
       window.removeEventListener('resize', onResize);
       window.removeEventListener('resize', read);
-      mo.disconnect();
     };
   }, []);
   // season-grouped planting tab: derived from the engine's bloom windows

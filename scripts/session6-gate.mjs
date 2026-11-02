@@ -22,7 +22,7 @@
  *             boundary interpretation), no console errors.
  */
 import { chromium } from 'playwright-core';
-import { parseArgs, launchChromium, newPage, makeRecorder, realErrors, dispatchChecks } from './gate-lib.mjs';
+import { parseArgs, launchChromium, newPage, makeRecorder, realErrors, refusedResources, dispatchChecks } from './gate-lib.mjs';
 
 const { url = 'http://localhost:5199', checks = 'seasons', 'lib-path': libPath = '' } = parseArgs();
 const rec = makeRecorder();
@@ -36,15 +36,18 @@ async function checkSeasons() {
     await page.evaluate(() => {
       const w = window.__meadowlight;
       w.clear();
+      w.timeSetPaused(false); // #72: an earlier check's pause must not leak into the drift probe
+      w.timeSetSpeed(1);
       w.setSeasonProgressForTest(0);
     });
     const before = await page.evaluate(() => window.__meadowlight.seasonProgressReadback());
     await page.waitForTimeout(3000);
     const after = await page.evaluate(() => window.__meadowlight.seasonProgressReadback());
+    const driftState = await page.evaluate(() => ({ paused: window.__meadowlight.timeIsPaused(), mult: window.__meadowlight.timeMultiplierReadback() }));
     rec.record(
       'seasons.natural-drift-advances',
       after > before && after < 0.05,
-      `before=${before.toFixed(4)} after=${after.toFixed(4)} (monotonic advance, not exact-zero start)`,
+      `before=${before.toFixed(4)} after=${after.toFixed(4)} paused=${driftState.paused} mult=${driftState.mult} (monotonic advance, not exact-zero start)`,
     );
     // 2. a dial selection STARTS the season, never stops progression
     //    (round-1 finding 3): select winter -> the clock sits at winter's
@@ -69,7 +72,10 @@ async function checkSeasons() {
       JSON.stringify(started),
     );
     const re = realErrors(errors);
-    rec.record('seasons.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+    const refused = refusedResources(errors);
+    rec.record('seasons.no-console-errors', re.length === 0 && refused.length === 0,
+      (re.length ? 'consoleErrors: ' + re.slice(0, 3).join(' | ') : '') +
+      (refused.length ? (re.length ? ' | ' : '') + 'refusedResources: ' + refused.slice(0, 3).join(' | ') : '') || 'clean');
     await page.close();
   }
 

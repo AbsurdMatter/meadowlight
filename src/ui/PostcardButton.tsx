@@ -42,6 +42,25 @@ export function PostcardButton() {
   const seedShown = usePlacementStore((s) => s.sharePanelOpen);
   const setSeedShown = usePlacementStore((s) => s.setSharePanelOpen);
   const [seedCopied, setSeedCopied] = useState(false);
+  // #65 tail: publish the toast-stack clearance on the popover so its
+  // maxHeight shrinks out from under live notices at short viewports
+  // (measured from the live [data-toast] cards, re-measured on an interval
+  // while open — same live-measure discipline as the hint panel)
+  useEffect(() => {
+    if (!seedShown) return;
+    const el = popRef.current;
+    if (!el) return;
+    const update = () => {
+      const cards = [...document.querySelectorAll('[data-toast]')];
+      const bottom = cards.reduce((m, c) => Math.max(m, c.getBoundingClientRect().bottom), 0);
+      const cornerTop = btnRef.current ? btnRef.current.getBoundingClientRect().top : window.innerHeight;
+      const clear = Math.max(0, Math.min(bottom + CHROME_TUNING.shareLaneGap, cornerTop) - CHROME_TUNING.shareLaneTop);
+      el.style.setProperty('--share-toast-clear', clear.toFixed(1) + 'px');
+    };
+    update();
+    const t = setInterval(update, 400);
+    return () => clearInterval(t);
+  }, [seedShown]);
   const onClick = async () => {
     try {
       const capture = capturePostcardPng();
@@ -143,7 +162,11 @@ export function PostcardButton() {
             top: 'auto',
             right: 0,
             zIndex: 60,
-            maxHeight: 'calc(100vh - ' + CHROME_TUNING.shareLaneTop + 'px)',
+            // #65 tail: clamp the popover's TOP to clear the live toast
+            // stack (its lowest card's bottom + gap) when toasts are up —
+            // at short viewports the upward popover otherwise overlaps the
+            // notice lane. maxHeight keeps it inside the viewport regardless.
+            maxHeight: 'calc(100vh - ' + CHROME_TUNING.shareLaneTop + 'px - var(--share-toast-clear, 0px))',
             overflowY: 'auto',
             padding: theme.spacing.panelPadding,
             borderRadius: theme.border.radiusPanel,

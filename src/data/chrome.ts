@@ -39,8 +39,13 @@ export const CHROME_TUNING = {
    * dock or the corner controls at any width. At narrow frames the dock is
    * bottom-anchored ABOVE the wrapped corner rows, so its top edge is
    * higher — this offset clears the tallest case.
+   * #65 tail: at 480 the corner row wraps to THREE rows and the dock lifts
+   * with the LIVE corner height (up to ~3*36+2*8+16 = 140 + inset), so the
+   * old constant 360 under-cleared and onboarding.hint-above-dock@480
+   * regressed. The offset is now the tallest narrow dock stack: 3-row lane
+   * + dock body + insets.
    */
-  onboardingHintBottom: 360,
+  onboardingHintBottom: 520,
   /** the narrow dock's scrollable body height */
   narrowBodyHeight: 110,
   /**
