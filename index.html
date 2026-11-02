@@ -106,73 +106,25 @@
         font-display: swap;
         src: url('./fonts/silkscreen-v6-latin-700.woff2') format('woff2');
       }
-      /* round-4 leftovers kept for the ?font-preview=1 comparison overlay
-         only (src/ui/FontPreview.tsx) — not referenced by the app theme.
-         Varela Round (candidate C, not picked) + the old Pixelify files. */
-      @font-face {
-        font-family: 'Cand Varela Round';
-        font-style: normal;
-        font-weight: 400;
-        font-display: swap;
-        src: url('./fonts/varela-round-v21-latin-regular.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Pixelify Sans';
-        font-style: normal;
-        font-weight: 400;
-        font-display: swap;
-        src: url('./fonts/pixelify-sans-latin-400-normal.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Pixelify Sans';
-        font-style: normal;
-        font-weight: 500;
-        font-display: swap;
-        src: url('./fonts/pixelify-sans-latin-500-normal.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Pixelify Sans';
-        font-style: normal;
-        font-weight: 700;
-        font-display: swap;
-        src: url('./fonts/pixelify-sans-latin-700-normal.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Cand Silkscreen';
-        font-style: normal;
-        font-weight: 400;
-        font-display: swap;
-        src: url('./fonts/silkscreen-v6-latin-regular.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Cand Silkscreen';
-        font-style: normal;
-        font-weight: 700;
-        font-display: swap;
-        src: url('./fonts/silkscreen-v6-latin-700.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Cand Nunito';
-        font-style: normal;
-        font-weight: 400;
-        font-display: swap;
-        src: url('./fonts/nunito-v32-latin-regular.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Cand Nunito';
-        font-style: normal;
-        font-weight: 500;
-        font-display: swap;
-        src: url('./fonts/nunito-v32-latin-500.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Cand Nunito';
-        font-style: normal;
-        font-weight: 700;
-        font-display: swap;
-        src: url('./fonts/nunito-v32-latin-700.woff2') format('woff2');
-      }
-    </style>
+      /* ?font-preview=1 candidate faces (session 10, finding A): the SL-heading
+         candidates, all latin-ext woff2 verified to carry \u010d\u0161\u017e in their cmap */
+      @font-face { font-family: 'Cand Jersey 25'; font-weight: 400; font-display: swap; src: url('./fonts/jersey-25-latin-ext-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Pixelify'; font-weight: 400; font-display: swap; src: url('./fonts/pixelify-sans-latin-ext-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Pixelify'; font-weight: 700; font-display: swap; src: url('./fonts/pixelify-sans-latin-ext-700-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Press Start 2P'; font-weight: 400; font-display: swap; src: url('./fonts/press-start-2p-latin-ext-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand VT323'; font-weight: 400; font-display: swap; src: url('./fonts/vt323-latin-ext-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Handjet'; font-weight: 400; font-display: swap; src: url('./fonts/handjet-latin-ext-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Handjet'; font-weight: 700; font-display: swap; src: url('./fonts/handjet-latin-ext-700-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand DotGothic16'; font-weight: 400; font-display: swap; src: url('./fonts/dotgothic16-latin-ext-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Jersey 10'; font-weight: 400; font-display: swap; src: url('./fonts/jersey-10-latin-ext-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Jersey 15'; font-weight: 400; font-display: swap; src: url('./fonts/jersey-15-latin-ext-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Jersey 20'; font-weight: 400; font-display: swap; src: url('./fonts/jersey-20-latin-ext-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Tektur'; font-weight: 400; font-display: swap; src: url('./fonts/tektur-latin-ext-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Tektur'; font-weight: 700; font-display: swap; src: url('./fonts/tektur-latin-ext-700-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Kode Mono'; font-weight: 400; font-display: swap; src: url('./fonts/kode-mono-latin-ext-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Kode Mono'; font-weight: 700; font-display: swap; src: url('./fonts/kode-mono-latin-ext-700-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Sixtyfour'; font-weight: 400; font-display: swap; src: url('./fonts/sixtyfour-latin-ext-400-normal.woff2') format('woff2'); }
+</style>
   </head>
   <body>
     <div id="root"></div>

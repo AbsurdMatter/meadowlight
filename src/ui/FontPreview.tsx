@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { SHORTCUT_HINT } from '../engine/keyboardShortcuts';
 import { theme, headingStyle } from './theme';
 
 /**
@@ -40,61 +39,57 @@ interface Cand {
  * identical either way — the same woff2 bytes.
  */
 const FONT_FACE_BYTES: Record<string, { url: string; weight: string }[]> = {
-  pixelify: [
-    { url: '/fonts/pixelify-sans-latin-400-normal.woff2', weight: '400' },
-    { url: '/fonts/pixelify-sans-latin-500-normal.woff2', weight: '500' },
-    { url: '/fonts/pixelify-sans-latin-700-normal.woff2', weight: '700' },
+  'jersey-25': [{ url: '/fonts/jersey-25-latin-ext-400-normal.woff2', weight: '400' }],
+  'pixelify-sans': [
+    { url: '/fonts/pixelify-sans-latin-ext-400-normal.woff2', weight: '400' },
+    { url: '/fonts/pixelify-sans-latin-ext-700-normal.woff2', weight: '700' },
   ],
-  silkscreen: [
-    { url: '/fonts/silkscreen-v6-latin-regular.woff2', weight: '400' },
-    { url: '/fonts/silkscreen-v6-latin-700.woff2', weight: '700' },
+  'press-start-2p': [{ url: '/fonts/press-start-2p-latin-ext-400-normal.woff2', weight: '400' }],
+  'vt323': [{ url: '/fonts/vt323-latin-ext-400-normal.woff2', weight: '400' }],
+  'handjet': [
+    { url: '/fonts/handjet-latin-ext-400-normal.woff2', weight: '400' },
+    { url: '/fonts/handjet-latin-ext-700-normal.woff2', weight: '700' },
   ],
-  nunito: [
-    { url: '/fonts/nunito-v32-latin-regular.woff2', weight: '400' },
-    { url: '/fonts/nunito-v32-latin-500.woff2', weight: '500' },
-    { url: '/fonts/nunito-v32-latin-700.woff2', weight: '700' },
+  'dotgothic16': [{ url: '/fonts/dotgothic16-latin-ext-400-normal.woff2', weight: '400' }],
+  'jersey-10': [{ url: '/fonts/jersey-10-latin-ext-400-normal.woff2', weight: '400' }],
+  'jersey-15': [{ url: '/fonts/jersey-15-latin-ext-400-normal.woff2', weight: '400' }],
+  'jersey-20': [{ url: '/fonts/jersey-20-latin-ext-400-normal.woff2', weight: '400' }],
+  'tektur': [
+    { url: '/fonts/tektur-latin-ext-400-normal.woff2', weight: '400' },
+    { url: '/fonts/tektur-latin-ext-700-normal.woff2', weight: '700' },
   ],
-  varela: [{ url: '/fonts/varela-round-v21-latin-regular.woff2', weight: '400' }],
+  'kode-mono': [
+    { url: '/fonts/kode-mono-latin-ext-400-normal.woff2', weight: '400' },
+    { url: '/fonts/kode-mono-latin-ext-700-normal.woff2', weight: '700' },
+  ],
+  'sixtyfour': [{ url: '/fonts/sixtyfour-latin-ext-400-normal.woff2', weight: '400' }],
 };
 
 const CANDIDATES: Cand[] = [
-  {
-    id: 'pixelify',
-    family: "'Pixelify Sans', ui-rounded, system-ui, sans-serif",
-    note: 'current — pixel identity, 400/500/700',
-    weights: '400/500/700',
-    faces: FONT_FACE_BYTES.pixelify,
-    probe: 'Pixelify Web',
-  },
-  {
-    id: 'silkscreen',
-    family: "'Cand Silkscreen', 'Pixelify Sans', monospace",
-    note: 'candidate A — pixel, built for small web sizes',
-    weights: '400/700',
-    faces: FONT_FACE_BYTES.silkscreen,
-    probe: 'Cand Silkscreen Web',
-  },
-  {
-    id: 'nunito',
-    family: "'Cand Nunito', 'Pixelify Sans', ui-rounded, sans-serif",
-    note: 'candidate B — rounded sans, strongest body-text legibility',
-    weights: '400/500/700',
-    faces: FONT_FACE_BYTES.nunito,
-    probe: 'Cand Nunito Web',
-  },
-  {
-    id: 'varela',
-    family: "'Cand Varela Round', 'Pixelify Sans', ui-rounded, sans-serif",
-    note: 'candidate C — soft rounded, single weight 400',
-    weights: '400 only',
-    faces: FONT_FACE_BYTES.varela,
-    probe: 'Cand Varela Round Web',
-  },
+  { id: 'jersey-25', family: "'Cand Jersey 25'", probe: 'Cand Jersey 25', note: 'chunky display pixel — closest spirit to Silkscreen', weights: '400', faces: FONT_FACE_BYTES['jersey-25'] },
+  { id: 'pixelify-sans', family: "'Cand Pixelify'", probe: 'Cand Pixelify', note: 'the original body font — always had č', weights: '400/700', faces: FONT_FACE_BYTES['pixelify-sans'] },
+  { id: 'press-start-2p', family: "'Cand Press Start 2P'", probe: 'Cand Press Start 2P', note: 'wide arcade caps', weights: '400', faces: FONT_FACE_BYTES['press-start-2p'] },
+  { id: 'vt323', family: "'Cand VT323'", probe: 'Cand VT323', note: 'CRT terminal', weights: '400', faces: FONT_FACE_BYTES['vt323'] },
+  { id: 'handjet', family: "'Cand Handjet'", probe: 'Cand Handjet', note: 'dot-matrix, huge script coverage', weights: '400/700', faces: FONT_FACE_BYTES['handjet'] },
+  { id: 'dotgothic16', family: "'Cand DotGothic16'", probe: 'Cand DotGothic16', note: 'dot gothic (note: latin-ext lacks č — shown for contrast)', weights: '400', faces: FONT_FACE_BYTES['dotgothic16'] },
+  { id: 'jersey-10', family: "'Cand Jersey 10'", probe: 'Cand Jersey 10', note: 'Jersey 10', weights: '400', faces: FONT_FACE_BYTES['jersey-10'] },
+  { id: 'jersey-15', family: "'Cand Jersey 15'", probe: 'Cand Jersey 15', note: 'Jersey 15', weights: '400', faces: FONT_FACE_BYTES['jersey-15'] },
+  { id: 'jersey-20', family: "'Cand Jersey 20'", probe: 'Cand Jersey 20', note: 'Jersey 20', weights: '400', faces: FONT_FACE_BYTES['jersey-20'] },
+  { id: 'tektur', family: "'Cand Tektur'", probe: 'Cand Tektur', note: 'Tektur', weights: '400/700', faces: FONT_FACE_BYTES['tektur'] },
+  { id: 'kode-mono', family: "'Cand Kode Mono'", probe: 'Cand Kode Mono', note: 'Kode Mono', weights: '400/700', faces: FONT_FACE_BYTES['kode-mono'] },
+  { id: 'sixtyfour', family: "'Cand Sixtyfour'", probe: 'Cand Sixtyfour', note: 'Sixtyfour CRT (latin-ext partial — no čšž)', weights: '400', faces: FONT_FACE_BYTES['sixtyfour'] },
 ];
 
 /** one panel-text sample per candidate: the help panel's real content +
  * a fact line in body size, so small-size readability is visible */
 function Sample({ family }: { family: string }) {
+  const testLine = 'ČEBULA ŠŽIVI — Pomlad, Poletje, Jesen, Zima';
+  const hintTitle = 'Terenski dnevnik';
+  const hintGroups = [
+    { heading: 'Kamera', rows: [{ key: 'W A S D', action: 'premakni kamero' }, { key: 'Q E', action: 'zavrti pogled' }] },
+    { heading: 'Orodja', rows: [{ key: 'I', action: 'povečevalno steklo' }, { key: 'J', action: 'dnevnik' }, { key: 'R', action: 'začni znova (vpraša najprej)' }] },
+    { heading: 'Prekliči', rows: [{ key: 'Esc', action: 'zapre, kar je odprto' }] },
+  ];
   return (
     <div
       style={{
@@ -105,14 +100,17 @@ function Sample({ family }: { family: string }) {
         border: `${theme.border.chunk}px solid ${theme.color.honey}`,
         boxShadow: theme.border.shadowPanel,
         color: theme.color.text,
-        width: 320,
+        width: 340,
         boxSizing: 'border-box',
       }}
     >
       <div style={{ ...headingStyle(theme.font.titleSize), fontFamily: family, fontWeight: 700 }}>
-        {SHORTCUT_HINT.title}
+        {testLine}
       </div>
-      {SHORTCUT_HINT.groups.map((g) => (
+      <div style={{ marginTop: 8, ...headingStyle(theme.font.titleSize), fontFamily: family, fontWeight: 700 }}>
+        {hintTitle} — {testLine}
+      </div>
+      {hintGroups.map((g) => (
         <div key={g.heading} style={{ marginTop: 8 }}>
           <div style={{ ...headingStyle(13), fontFamily: family, fontWeight: 700 }}>{g.heading}</div>
           {g.rows.map((r) => (
@@ -146,11 +144,10 @@ function Sample({ family }: { family: string }) {
         </div>
       ))}
       <div style={{ marginTop: 10, fontSize: theme.font.bodySize, lineHeight: 1.5, opacity: 0.9 }}>
-        ✦ Lavender at peak bloom can feed dozens of bumblebees in a single day — plant drifts of one
-        species and they will queue up at dawn.
+        Čebelji panj brenči — čebele so že odkrile četeljo. {testLine}
       </div>
       <div style={{ marginTop: 6, fontSize: theme.font.smallSize, opacity: 0.7 }}>
-        smallSize 12px sample — the notebook's quiet lines
+        smallSize 12px sample — čudevito
       </div>
     </div>
   );

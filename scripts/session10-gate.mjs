@@ -251,10 +251,54 @@ async function checkI18nOutput() {
   await page.close();
 }
 
+
+async function checkFonts() {
+  const { page, errors } = await newPage(browser, url);
+  await page.goto(url + (url.includes('?') ? '&' : '?') + 'font-preview=1', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(2500);
+
+  // per-glyph fonts.check() on the HEADING face in SL mode: every SL
+  // diacritic must resolve in the heading family itself (not a fallback).
+  // Measurement wins over metadata: we measure the loaded faces.
+  const r = await page.evaluate(async () => {
+    await document.fonts.ready;
+    const probe = 'čšžČŠŽ';
+    const out = {};
+    for (const fam of ['Silkscreen', 'Nunito']) {
+      out[fam + ' 400'] = document.fonts.check('400 16px ' + fam, probe);
+      out[fam + ' 700'] = document.fonts.check('700 16px ' + fam, probe);
+    }
+    // glyph-width measurement: render the probe in the heading family vs the
+    // body family; a fallback glyph has a different advance width
+    function widthOf(family, weight, text) {
+      const c = document.createElement('canvas').getContext('2d');
+      c.font = `${weight} 32px ${family}`;
+      return c.measureText(text).width;
+    }
+    const wHead = widthOf('Silkscreen', 700, probe);
+    const wBody = widthOf('Nunito', 700, probe);
+    out['widths'] = { silkscreen700: wHead, nunito700: wBody };
+    // candidate faces (preview overlay): which carry the diacritics
+    out['candidates'] = {};
+    for (const fam of ['Cand Jersey 25', 'Cand Pixelify', 'Cand Press Start 2P', 'Cand VT323', 'Cand Handjet', 'Cand DotGothic16', 'Cand Jersey 10', 'Cand Jersey 15', 'Cand Jersey 20', 'Cand Tektur', 'Cand Kode Mono', 'Cand Sixtyfour']) {
+      out['candidates'][fam] = document.fonts.check('400 16px ' + fam, probe);
+    }
+    return out;
+  });
+  const slHeadingOk = r['Silkscreen 700'] === true;
+  rec.record('fonts.heading-face-carries-sl-diacritics', slHeadingOk, JSON.stringify(r['Silkscreen 400']) + '/' + JSON.stringify(r['Silkscreen 700']) + ' widths ' + JSON.stringify(r.widths));
+  rec.record('fonts.candidates-diacritic-coverage', true, JSON.stringify(r.candidates));
+
+  const re = realErrors(errors);
+  rec.record('fonts.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
 for (const check of checks.split(',')) {
   if (check === 'seeds') await checkSeeds();
   else if (check === 'i18n') await checkI18n();
   else if (check === 'i18n-output') await checkI18nOutput();
+  else if (check === 'fonts') await checkFonts();
   else {
     console.error('[GATE] unknown check: ' + check);
     process.exit(2);
