@@ -207,18 +207,18 @@ function HubInner() {
 
           <h4 style={{ ...headingStyle(theme.font.headerSize), margin: '16px 0 6px', letterSpacing: 0.4 }}>{t.hubWildVisitors}</h4>
           <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
-            Who stopped by, and when — the meadow keeps its own guest book.
+            {t.hubGuestBook}
           </div>
           {(() => {
             const seasonal: SeasonalVisitorTuning[] = [QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING];
             const rows: { label: string; fact: string }[] = [];
             for (const v of seasonal) {
               const seen = visitorWindows.filter((k) => k.startsWith(v.id + ':')).map((k) => k.split(':')[1]);
-              if (seen.length > 0) rows.push({ label: `${v.name} — ${seen.join(', ')}`, fact: v.fact });
+              if (seen.length > 0) rows.push({ label: `${v.name} — ${seen.map((x) => t.seasonName(x as never)).join(', ')}`, fact: v.fact });
             }
             const fireflySeen = visitorWindows.filter((k) => k.startsWith('fireflies:')).map((k) => k.split(':')[1]);
             if (fireflySeen.length > 0)
-              rows.push({ label: `${t.hubFireflyLabel} — ${fireflySeen.join(', ')}`, fact: t.hubFireflyFact });
+              rows.push({ label: `${t.hubFireflyLabel} — ${fireflySeen.map((x) => t.seasonName(x as never)).join(', ')}`, fact: t.hubFireflyFact });
             if (rows.length === 0)
               return (
                 <div style={{ fontSize: 13, opacity: 0.6, marginBottom: 6 }}>

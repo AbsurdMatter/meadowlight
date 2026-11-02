@@ -106,8 +106,8 @@ export function MagnifierCard() {
         .map((k) => k.split(':')[1]);
       hint =
         seen.length > 0
-          ? 'recorded in the notebook — visited in ' + seen.join(', ')
-          : 'a first sighting — the notebook will remember it';
+          ? t.cardVisitedIn + seen.map((x) => t.seasonName(x as never)).join(', ')
+          : t.cardFirstSighting;
     }
     return { title: w.name, text: w.fact, hint, factId: null };
   }, [entry]);

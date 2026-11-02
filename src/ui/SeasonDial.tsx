@@ -185,7 +185,7 @@ export function TimeControls() {
       )}
       {btn('\u23F8', isPaused(), () => setPaused(!isPaused()), 'pause', t.pauseTip)}
       {SPEED_STEPS.map((s: SpeedStep) =>
-        btn(`${s}x`, !isPaused() && currentSpeedStep() === s, () => setSpeedStep(s), `speed-${s}`, `Let time drift ${s}x faster${s === 8 ? ' — a night passes in about a minute and a half' : ''}`),
+        btn(`${s}x`, !isPaused() && currentSpeedStep() === s, () => setSpeedStep(s), `speed-${s}`, t.speedTip(s)),
       )}
       {btn('\u{1F305} morning', false, () => {
         setDayPhase(0.3);

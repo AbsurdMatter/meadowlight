@@ -140,6 +140,33 @@ export interface UiCopy {
   meadowTitle: string;
   toastLovely: string;
   languageName: Record<Locale, string>;
+  /** season-name helper consumers: one source for every rendered season name */
+  seasonName: (s: Season) => string;
+  bloomRarely: string;
+  bloomAllYear: string;
+  bloomIn: string;
+  statusPlace: string;
+  statusWander: string;
+  notebookInBloomNow: string;
+  notebookQuietWinter: string;
+  cardVisitedIn: string;
+  cardFirstSighting: string;
+  hubGuestBook: string;
+  hiveMore: string;
+  hiveJarLine: (n: number) => string;
+  combFull: string;
+  combFilling: string;
+  combSettling: string;
+  colonyWinter: string;
+  colonySpring: string;
+  colonySummer: string;
+  colonyAutumn: string;
+  speedTip: (s: number) => string;
+  statOneFlower: string;
+  statNoneYet: string;
+  statQuietSkies: string;
+  statDialNotTurned: string;
+  statCombFilling: string;
 }
 
 const en: UiCopy = {
@@ -242,7 +269,33 @@ const en: UiCopy = {
   recipeFallback: 'A recipe, still undiscovered',
   meadowTitle: 'The Meadow',
   toastLovely: 'lovely',
-  languageName: { en: 'English', sl: 'Slovenščina' },
+  seasonName: (s) => SEASON_COPY.en[s].label,
+  bloomRarely: 'blooms rarely — keep tending',
+  bloomAllYear: 'in bloom all year',
+  bloomIn: 'in bloom: ',
+  statusPlace: 'click the meadow to place',
+  statusWander: 'pick something to plant, or just wander',
+  notebookInBloomNow: 'In bloom now: ',
+  notebookQuietWinter: 'A quiet winter — the bees rest.',
+  cardVisitedIn: 'recorded in the notebook — visited in ',
+  cardFirstSighting: 'a first sighting — the notebook will remember it',
+  hubGuestBook: 'Who stopped by, and when — the meadow keeps its own guest book.',
+  hiveMore: 'more about the hive',
+  hiveJarLine: (n) => `${n} jar${n === 1 ? '' : 's'} of honey brought in so far`,
+  combFull: 'The comb is full and heavy — golden to the brim. \u{1F36B}',
+  combFilling: 'The comb is filling — you can see it warming through the straw.',
+  combSettling: 'The colony is settling in; the first drops of the season are already in the comb.',
+  colonyWinter: 'The colony is tucked in for winter — clustered snug around the queen, shivering together to keep her at a cozy 21°C, feeding on stored honey. \u2744\uFE0F',
+  colonySpring: 'The colony is waking with the year — the first foragers stretch their wings among the earliest blooms.',
+  colonySummer: 'The colony is at its fullest — the summer hum at its gentle peak.',
+  colonyAutumn: 'The colony is easing toward autumn — a few late foragers keep the table, gathering the last warmth.',
+  speedTip: (s) => `Let time drift ${s}x faster${s === 8 ? ' — a night passes in about a minute and a half' : ''}`,
+  statOneFlower: 'one flower — every meadow starts here',
+  statNoneYet: 'none yet — the meadow manages on its own',
+  statQuietSkies: 'quiet skies — bees come with blooms',
+  statDialNotTurned: 'the dial has not turned yet',
+  statCombFilling: 'the comb is still filling',
+  languageName: { en: 'English', sl: 'Slovenšina' },
 };
 
 const sl: UiCopy = {
@@ -345,7 +398,33 @@ const sl: UiCopy = {
   recipeFallback: 'Recept, še neodkrit',
   meadowTitle: 'Travnik',
   toastLovely: 'čudovito',
-  languageName: { en: 'English', sl: 'Slovenščina' },
+  seasonName: (s) => SEASON_COPY.sl[s].label,
+  bloomRarely: 'redko cveti — samo neguj jo',
+  bloomAllYear: 'cveti vse leto',
+  bloomIn: 'cveti: ',
+  statusPlace: 'klikni travnik, da postaviš',
+  statusWander: 'izberi kaj za posaditi, ali pa samo poglej okoli',
+  notebookInBloomNow: 'Zdaj cveti: ',
+  notebookQuietWinter: 'Tiha zima — čebele počivajo.',
+  cardVisitedIn: 'zapisano v dnevnik — obiskano v ',
+  cardFirstSighting: 'prvo videnje — dnevnik si bo zapomnil',
+  hubGuestBook: 'Kdo se je ustavil in kdaj — travnik vodi svojo knjigo gostov.',
+  hiveMore: 'več o panju',
+  hiveJarLine: (n) => `${n} ${n === 1 ? 'kozarec' : n <= 4 ? `${n} kozarci` : `${n} kozarcev`} medu prinesenega doslej`,
+  combFull: 'Sato je polno in težko — zlato do vrha. \u{1F36B}',
+  combFilling: 'Sato se polni — skozi slamo se vidi, kako se greje.',
+  combSettling: 'Družina se vseljuje; prve kapljice sezone so že v satih.',
+  colonyWinter: 'Družina je sklenjena za zimo — stisnjena okoli matice, skupaj drgetajo, da jo ogrejejo na prijetnih 21°C, in se hranijo z zalogo medu. \u2744\uFE0F',
+  colonySpring: 'Družina se prebuja z letom — prvi nabiralci raztegnejo krila med najzgodnejšimi cvetovi.',
+  colonySummer: 'Družina je na vrhuncu — poletni brenč na svojem nežnem vrhu.',
+  colonyAutumn: 'Družina se počasi spušča v jesen — nekaj poznih nabiralcev še skrbi za mizo in nabira zadnjo toploto.',
+  speedTip: (s) => `Pusti čas teči ${s}x hitreje${s === 8 ? ' — noč mine v približno minuti in pol' : ''}`,
+  statOneFlower: 'ena roža — vsak travnik se začne tukaj',
+  statNoneYet: 'še nič — travnik se sam zna',
+  statQuietSkies: 'tiho nebo — čebele pridejo s cvetovi',
+  statDialNotTurned: 'gumb se še ni zavrtel',
+  statCombFilling: 'sato se še polni',
+  languageName: { en: 'English', sl: 'Slovenšina' },
 };
 
 export const UI_COPY: Record<Locale, UiCopy> = { en, sl };

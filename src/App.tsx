@@ -37,8 +37,10 @@ import { MilestoneWatcher } from './ui/MilestoneWatcher';
 import { PerfOverlay } from './ui/PerfOverlay';
 import { usePlacementStore, seedStarterPatchIfFresh } from './render/placementStore';
 import { maybeSeedDemoWorld, maybeCaptureShot } from './engine/testHook';
-import { SEASON_INFO } from './data/seasons';
+
 import { CHROME_TUNING } from './data/chrome';
+import { useLocale } from './engine/locale';
+import { SEASON_COPY, SEASON_EMOJI } from './data/i18n';
 import { LIGHT_WARMTH, LONG_SHADOWS } from './data/polish';
 import { theme } from './ui/theme';
 
@@ -133,6 +135,8 @@ function Scene() {
 }
 
 export default function App() {
+  const t = useLocale((s) => s.t());
+  const locale = useLocale((s) => s.locale);
   const selectedPlantId = usePlacementStore((s) => s.selectedPlantId);
   const selectedStructureId = usePlacementStore((s) => s.selectedStructureId);
   const season = usePlacementStore((s) => s.season);
@@ -229,8 +233,8 @@ body[data-magnifier-hit='1'] canvas { cursor: url("data:image/svg+xml,%3Csvg xml
           pointerEvents: 'none',
         }}
       >
-        {'\u{1F41D}'} Meadowlight · {SEASON_INFO[season].emoji} {SEASON_INFO[season].label} ·{' '}
-        {placing ? 'click the meadow to place' : 'pick something to plant, or just wander'}
+        {'\u{1F41D}'} Meadowlight · {SEASON_EMOJI[season]} {SEASON_COPY[locale][season].label} ·{' '}
+        {placing ? t.statusPlace : t.statusWander}
       </div>
     </div>
   );

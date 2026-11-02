@@ -12,12 +12,13 @@ import { SEASONS, type Season } from './seasons';
 /** canonical season order for display (the year's flow) */
 export const SEASON_ORDER: Season[] = SEASONS;
 
-/** tooltip line for a flower chip — derived from the bloom windows */
-export function bloomSeasonsLabel(plant: PlantDef): string {
+/** tooltip line for a flower chip — derived from the bloom windows.
+ *  P4/#58: season names go through the ONE i18n seasonName helper. */
+export function bloomSeasonsLabel(plant: PlantDef, seasonName: (s: Season) => string, copy: { rarely: string; allYear: string; in: string }): string {
   const seasons = SEASON_ORDER.filter((s) => plant.bloom.includes(s));
-  if (seasons.length === 0) return 'blooms rarely — keep tending';
-  if (seasons.length === SEASON_ORDER.length) return 'in bloom all year';
-  return 'in bloom: ' + seasons.join(', ');
+  if (seasons.length === 0) return copy.rarely;
+  if (seasons.length === SEASON_ORDER.length) return copy.allYear;
+  return copy.in + seasons.map(seasonName).join(', ');
 }
 
 /**
@@ -43,10 +44,11 @@ export function plantingsBySeason(): SeasonGroup[] {
   return groups.filter((g) => g.plants.length > 0);
 }
 
-/** badge text for a multi-season flower: its full bloom list */
-export function seasonBadge(plant: PlantDef): string | null {
+/** badge text for a multi-season flower: its full bloom list (abbreviated
+ *  via the localized season names — 2 chars of the LABEL, so SL shows e.g. "Po/Js") */
+export function seasonBadge(plant: PlantDef, seasonName: (s: Season) => string): string | null {
   if (plant.bloom.length <= 1) return null;
   return SEASON_ORDER.filter((s) => plant.bloom.includes(s))
-    .map((s) => s.slice(0, 2))
+    .map((s) => seasonName(s).slice(0, 2))
     .join('/');
 }

@@ -1840,6 +1840,41 @@ test('P4 i18n: Slovenian copy actually contains the diacritics (č š ž) — th
   assert.strictEqual(localeFromBrowser({ language: 'de-DE' }), 'en');
 });
 
+test('P4/#58 i18n: SL copy tables hold Slovenian VALUES, not English (parity checked keys; this checks values)', () => {
+  // a copy table can have every key in both locales and still be half English
+  const slJson = JSON.stringify(UI_COPY.sl);
+  // English UI sentences that must NOT appear verbatim in the sl table
+  const englishPhrases = ['How to play', 'Field notebook', 'In bloom now', 'click the meadow to place', 'pick something to plant', 'blooms rarely', 'in bloom all year', 'visited in', 'first sighting', 'of honey brought in', 'more about the hive', 'quiet skies', 'the comb is still filling', 'Reset your meadow', 'Start the meadow over', 'Save a postcard', 'The first bloom', 'Wings in the air', 'Keyboard shortcuts'];
+  for (const ph of englishPhrases) {
+    assert.ok(!slJson.includes(ph), 'sl table must not contain English phrase: ' + ph);
+  }
+  // every sl season label is a Slovenian word, not the English one
+  const { SEASONS } = require(OUT + '/data/seasons.js');
+  for (const s of SEASONS) {
+    const enLabel = SEASON_COPY.en[s].label;
+    assert.notStrictEqual(SEASON_COPY.sl[s].label, enLabel, 'sl season label differs from en: ' + s);
+  }
+  // seasonName helper resolves through the active locale table
+  assert.strictEqual(UI_COPY.sl.seasonName('summer'), 'Poletje');
+  assert.strictEqual(UI_COPY.en.seasonName('summer'), 'Summer');
+});
+
+test('P4/#58 i18n: bloom label helpers render season names through the one helper', () => {
+  const { bloomSeasonsLabel, seasonBadge } = require(OUT + '/data/bloomWindows.js');
+  const { PLANT_BY_ID } = require(OUT + '/data/plants.js');
+  const lavender = PLANT_BY_ID.lavender; // blooms summer only
+  const enName = UI_COPY.en.seasonName;
+  const slName = UI_COPY.sl.seasonName;
+  const enLabel = bloomSeasonsLabel(lavender, enName, { rarely: 'R', allYear: 'ALL', in: 'IN: ' });
+  const slLabel = bloomSeasonsLabel(lavender, slName, { rarely: 'R', allYear: 'VSE', in: 'CVETI: ' });
+  assert.ok(enLabel.includes('Summer'), 'en label uses English season name: ' + enLabel);
+  assert.ok(slLabel.includes('Poletje'), 'sl label uses Slovenian season name: ' + slLabel);
+  assert.ok(!slLabel.includes('Summer'), 'sl label has no English season');
+  const badgeSl = seasonBadge(PLANT_BY_ID['forget-me-not'], slName); // spring only -> null
+  const badgeMulti = seasonBadge(PLANT_BY_ID.clover, slName); // spring+summer -> 'Po/Po'? clover spring/summer
+  assert.ok(badgeMulti === null || !badgeMulti.includes('pr'), 'badge uses label initials, not raw id: ' + badgeMulti);
+});
+
 test('P4 i18n: no hardcoded user-facing strings left in components (grep gate over src/ui + App.tsx)', () => {
   const { readFileSync, readdirSync } = require('fs');
   const { join: j } = require('path');

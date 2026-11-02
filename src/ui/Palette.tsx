@@ -184,11 +184,11 @@ export function Palette() {
     // (one source: bloomSeasonsLabel reads PLANTS[].bloom) — structures
     // keep their plain tooltip
     const plantDef = e.kind === 'plant' ? PLANTS.find((p) => p.id === e.id) : undefined;
-    const badge = plantDef ? seasonBadge(plantDef) : null;
+    const badge = plantDef ? seasonBadge(plantDef, t.seasonName) : null;
     const tooltip = !enabled
       ? 'keep tending the meadow to unlock this'
       : plantDef
-        ? `${e.name} — ${bloomSeasonsLabel(plantDef)}`
+        ? `${e.name} — ${bloomSeasonsLabel(plantDef, t.seasonName, { rarely: t.bloomRarely, allYear: t.bloomAllYear, in: t.bloomIn })}`
         : e.name;
     return (
       <button
@@ -346,7 +346,7 @@ export function Palette() {
                 data-palette-section={'season:' + g.season}
               >
                 <span style={sectionLabelStyle} data-section={g.season}>
-                  {g.season}
+                  {t.seasonName(g.season)}
                 </span>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {g.entries.map((e) => renderEntry(e))}

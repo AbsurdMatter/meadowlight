@@ -190,9 +190,71 @@ async function checkI18n() {
   await page.close();
 }
 
+
+async function checkI18nOutput() {
+  const { page, errors } = await newPage(browser, url);
+
+  // switch to SL via the real toggle, then scan RENDERED UI text on every
+  // surface for residual English words (the detector checks OUTPUT, not keys)
+  {
+    const r = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.resetWorld();
+      await new Promise((res) => setTimeout(res, 700));
+      document.querySelector('[data-language-toggle]')?.click();
+      await new Promise((res) => setTimeout(res, 500));
+      // open every surface: help panel, hub, season dial is always visible
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j' }));
+      await new Promise((res) => setTimeout(res, 400));
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }));
+      await new Promise((res) => setTimeout(res, 400));
+      const text = document.body.innerText;
+      // residual-English detector: common UI English words that must not
+      // appear in SL mode (allowlisted: brand "Meadowlight", key names)
+      const englishWords = ['\bThe\b', '\bthe meadow\b', '\bHow to play\b', '\bField notebook\b', '\bIn bloom\b', '\bclick the meadow\b', '\bwander\b', '\bSpring\b', '\bSummer\b', '\bAutumn\b', '\bWinter\b', '\bblooms rarely\b', '\bvisited in\b', '\bfirst sighting\b', '\bReset\b', '\bCancel\b', '\bPostcard\b', '\bKeyboard\b', '\bCamera\b', '\bTools\b', '\bCancel\b', '\bSound\b', '\bMagnifying\b'];
+      const hits = [];
+      for (const re of englishWords) {
+        const m = text.match(new RegExp(re, 'g'));
+        if (m) hits.push(re + ' x' + m.length);
+      }
+      // season names in SL must be the SL labels
+      const seasonsOk = ['Pomlad', 'Poletje', 'Jesen', 'Zima'].every((s) => text.includes(s));
+      return { hits, seasonsOk, len: text.length };
+    });
+    rec.record(
+      'i18n.sl-rendered-output-no-residual-english',
+      r.hits.length === 0 && r.seasonsOk,
+      JSON.stringify(r),
+    );
+  }
+
+  // both locales: scan EN for stray Slovenian
+  {
+    const r = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.resetWorld();
+      await new Promise((res) => setTimeout(res, 500));
+      document.querySelector('[data-language-toggle]')?.click(); // to sl
+      await new Promise((res) => setTimeout(res, 300));
+      document.querySelector('[data-language-toggle]')?.click(); // back to en
+      await new Promise((res) => setTimeout(res, 400));
+      const text = document.body.innerText;
+      const slWords = ['\u010d', '\u0161', '\u017e', 'Pomlad', 'Poletje', 'Jesen', 'Zima', 'Travnik', 'dnevnik', 'Sloven'];
+      const hits = slWords.filter((x) => text.includes(x));
+      return { hits };
+    });
+    rec.record('i18n.en-rendered-output-no-stray-slovenian', r.hits.length === 0, JSON.stringify(r));
+  }
+
+  const re = realErrors(errors);
+  rec.record('i18n.output-no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+  await page.close();
+}
+
 for (const check of checks.split(',')) {
   if (check === 'seeds') await checkSeeds();
   else if (check === 'i18n') await checkI18n();
+  else if (check === 'i18n-output') await checkI18nOutput();
   else {
     console.error('[GATE] unknown check: ' + check);
     process.exit(2);

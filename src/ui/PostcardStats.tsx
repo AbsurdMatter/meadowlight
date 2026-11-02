@@ -30,7 +30,7 @@ function statLines(t: import('../data/i18n').UiCopy): StatLine[] {
       label: t.statNaturePlanted,
       value:
         s.items.length === 1
-          ? 'one flower — every meadow starts here'
+          ? t.statOneFlower
           : `${s.items.length} flowers`,
     },
     {
@@ -38,25 +38,25 @@ function statLines(t: import('../data/i18n').UiCopy): StatLine[] {
       label: t.statBeeCarePutUp,
       value:
         s.structures.length === 0
-          ? 'none yet — the meadow manages on its own'
+          ? t.statNoneYet
           : `${s.structures.length} piece${s.structures.length === 1 ? '' : 's'}`,
     },
     {
       key: 'bees',
       label: t.statBeesAbout,
-      value: bees === 0 ? 'quiet skies — bees come with blooms' : `${bees}`,
+      value: bees === 0 ? t.statQuietSkies : `${bees}`,
     },
     {
       key: 'seasons',
       label: t.statSeasonsPassed,
-      value: (s.wildSeasons?.length ?? 0) === 0 ? 'the dial has not turned yet' : `${s.wildSeasons.length}`,
+      value: (s.wildSeasons?.length ?? 0) === 0 ? t.statDialNotTurned : `${s.wildSeasons.length}`,
     },
     {
       key: 'honey',
       label: t.statJarsOfHoney,
       value:
         (s.honeyJars ?? 0) === 0
-          ? 'the comb is still filling'
+          ? t.statCombFilling
           : `${s.honeyJars}`,
     },
   ];
