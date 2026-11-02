@@ -1,9 +1,37 @@
-# ROADMAP.md — Three-Session Plan (voxel-first)
+# ROADMAP.md — Meadowlight: plans & session records
 
 Voxel is core, not a stretch goal. Each session ends with a committable,
 working, beautiful build. Follow AGENTS.md workflow rules; never work ahead.
 
-## Session 1 — Foundations: voxel world + planting
+Structure of this file: **Part I** holds the plans, one section per version
+(sessions inside); **Part II** holds the post-merge records for each session;
+the standing rules and the canonical gate check lists close the file. A
+session's plan states what was intended; its record states what landed and
+what was learned — read the pair together.
+
+## Status at a glance
+
+| Ver | Session | Theme | Status |
+|-----|---------|-------|--------|
+| v0.1 | 1 | Foundations: voxel world + planting | merged |
+| v0.1 | 2 | Ecology: bees, hives, simulation, notebook | merged |
+| v0.1 | 3 | Polish & v0.1, demo-ready | merged (PR #3, 460b97b) |
+| v2 | 4 | Everything voxel, including the chrome | merged (PR #32, f49c462) |
+| v2 | 5 | The living world | merged (PR #35, 7e36213) |
+| v2 | 6 | Depth mechanics | merged (PR #36) |
+| v3 | 7 | Seed & life | merged (PR #37, c30081a) |
+| v3 | 8 | Sharing & the wider door | merged (PR #38, 4827293) — seed codes & i18n deferred to session 10 |
+| v4 | 9 | The meadow others meet (O1–O5) | merged (PR #49, 86d8789) |
+| v4 | 10 | Wider door completed: seeding reds, seed codes, i18n EN/SL, chrome polish, deploy tail | **in progress** (PR #57, kickoff #53) |
+| v5 | — | HUD grouping grammar | design note, pre-planning |
+
+---
+
+# Part I — Plans by version
+
+
+### v0.1 (sessions 1–3) — original plan
+#### Session 1 — Foundations: voxel world + planting
 
 Goal: a warm voxel meadow you can plant flowers into, freeform.
 
@@ -22,7 +50,7 @@ Goal: a warm voxel meadow you can plant flowers into, freeform.
 
 Commit: "session 1: voxel meadow + freeform planting".
 
-## Session 2 — Ecology: bees, hives, simulation, notebook
+#### Session 2 — Ecology: bees, hives, simulation, notebook
 
 Goal: the meadow comes alive and teaches.
 
@@ -53,7 +81,7 @@ Goal: the meadow comes alive and teaches.
 
 Commit: "session 2: ecology simulation + notebook + seasons".
 
-## Session 3 — Polish & completeness
+#### Session 3 — Polish & completeness
 
 Goal: v0.1 done, demo-ready.
 
@@ -78,7 +106,7 @@ Goal: v0.1 done, demo-ready.
 
 Commit: "session 3: polish, audio, postcards — v0.1".
 
-## De-scope order if time runs out
+#### De-scope order if time runs out
 
 1. Ambient audio → move to post-v0.1
 2. Postcard mode → move to post-v0.1
@@ -87,11 +115,286 @@ Commit: "session 3: polish, audio, postcards — v0.1".
 
 Never de-scope: freeform placement, bee simulation, notebook facts, seasons.
 
-# Session post-mortems
+---
 
-## v0.1 (sessions 1–3)
+### v2 — Meadowlight after v0.1 (sessions 4–6)
 
-### Session 1 — Voxel meadow (COMPLETE)
+Goal: v0.1 proved the loop and the process; v2 makes Meadowlight worth
+returning to and worth showing off. Working order by user decision: B → A → C.
+Each session independently shippable; all AGENTS.md rules and CI carry over.
+Deploy goes live at the END of session 6 — the first public look is the
+completed v2.
+
+#### Session 4 (B) — Everything voxel, including the chrome
+
+Theme: the deployed artifact's chrome matches its world. Zero gameplay code.
+
+0. P-panel expansion first (#30): cell-map debug overlay (reads the same live
+   data structures placement queries — never a re-derivation), save-state
+   inspector, reload-current-save, live milestone checklist. Dev/test only.
+1. Voxel design language for all chrome (#16): one shared token/theme module —
+   font stack (Pixelify Sans, self-hosted woff2, no runtime font fetch),
+   sizes, colors, borders — switchable centrally, never hardcoded per panel.
+   Applied to notebook, reset dialog, palette, toasts, onboarding, ? popover.
+2. Postcard stats strip (#18): nature planted, bee care put up, bee count,
+   seasons passed — nature facts, not scores. og:image regenerated from a
+   real-GPU screenshot once new chrome lands.
+3. Embed final polish: verify at odd aspect ratios + iframe config; og tags
+   absolute-URL-ready.
+
+Success test: any dialog next to the meadow looks like one product.
+
+#### Session 5 (A) — The living world
+
+Theme: a second visit looks different from the first. Splittable across two
+nights; units independent.
+
+1. Flower roster expansion (#8) first — unblocks session 6 recipes. Each
+   species: model, bloom season, appeal, EDUCATION.md facts, thumbnail,
+   reachability unit-tested (yearRoundBloom lesson).
+2. Bushes & ambient scatter (#7) on gentler edges — shares the outskirts ring
+   with grass drifts, interleaved not stacked.
+3. Terrain shaping (#31): flatter pond neighborhood (water safely below banks
+   everywhere), much gentler meadow rim; consider the second outer rim concept
+   (hills out there, calmer middle with trees/pond/shrubs/rocks).
+4. Voxel background (#6): graded sky, distant terrain variation, purposeful
+   clouds.
+5. Butterflies & hoverflies (#15): distinct species mapped to real pollinator
+   principles.
+6. Day/night cycle (#13): slow, golden-hour default, fireflies at dusk.
+7. Weather (#14): rain = bees home, glistening flowers; cozy, no fail state.
+
+Perf re-verified on real GPU (session-3 baseline: 93.8fps @ 229 items) — this
+session adds scene content.
+Success test: two screenshots of two visits show visibly different meadows.
+
+#### Session 6 (C) — Depth mechanics
+
+Theme: the educational heart. Needs session 5's flower roster.
+
+1. Garden recipes / companion planting (#9): positive bonuses for companions,
+   neutral for others — antagonism must never read as punishment.
+2. Honey harvesting (#11): comb cells visibly fill; full hive click gives a
+   jar recorded in the notebook. Observation-and-reward, no economy.
+3. Auto-advancing seasons (#12): ~10–15 min/season; save stores season
+   position, paused while away; manual dial + P-harness jump retained.
+
+Verification heaviest of the three: balance traces (companion garden gently
+outperforms random), full loop traces, multi-session save round-trips with
+mid-season saves.
+Success test: a player who understands real companion planting does measurably
+better than one who doesn't.
+
+#### Post-session-6: deploy (user-driven)
+
+Build dist/, upload, point portfolio subdomain, HTTPS. First public look =
+completed v2. (Session 6 landed the bare-minimum Pages workflow + default URL;
+the subdomain/CNAME + og:image origin swap are the documented post-deploy
+steps.)
+
+#### Parked until world + chrome final
+
+#19 mobile/PWA, #20 broader i18n & harness expansion beyond #30's scope.
+
+---
+
+---
+
+### v3 — The meadow grows (proposed, sessions 7–8)
+
+Goal: v2 made the world alive, deep, and public; v3 makes the meadow grow on
+its own and lets meadows travel between people. Same constitution: cozy,
+educational, no fail states, voxel language, one shared source per semantic.
+Session-7 planning refines this against the real deployed meadow.
+
+#### Session 7 — Seed & life (world deepening)
+
+1. Self-seeding (#new): flowers occasionally volunteer a seedling in a nearby
+   plantable cell — rare, capped per region, roster-compatible neighbors;
+   seedlings clearable, never reading as "weeds." Tuning in src/data/; gate:
+   no invasive growth pattern across an accelerated 4-season run (the v2
+   speed control is the verification instrument).
+2. Seasonal wild visitors (#new): extend the butterfly/hoverfly pattern —
+   evening lavender moths, spring queen bumbles on crocus, summer firefly
+   blooms, autumn hoverfly stragglers. Notebook records who visited when.
+   Same trigger-suite rule: conditions force-able from day one; no direct
+   spawn-force masking the natural condition.
+3. Bee lifecycles, gently (#new): hive population breathes with the seasons —
+   colony grows in spring, winter cluster (the EDUCATION.md winter-cluster
+   fact earns its visual). Hard constraint: winter reads as winter, never as
+   loss or decline.
+4. Pond & tree habitat scenery (#new): dragonflies over the pond, pond-edge
+   plants (forget-me-not already in roster), cozy ground detail around trees,
+   and habitat corners — scenery (bush clusters, rocks, a log, fern-like
+   detail) covering the corner fold regions where the hills intrude into the
+   placement box and nothing can be planted (user decision, session 6): the
+   unplantable folds read as intentional wild corners, never empty seams.
+   Scenery first; no placement mechanics in scope. Facts verified, in-file
+   sources.
+5. Night sky & cloud translucency (#new): (a) clouds more translucent —
+   softly veiled, never blocking the view, never gone (the session-5
+   legibility criterion, in reverse); (b) stars at night, composed with the
+   day/night grade through the same palette-lit window logic (ONE shared
+   phase source, epsilon-tolerant boundaries), brightest in winter's long
+   nights. Trigger-first: force-night/evening gates assert star visibility
+   per phase. Eyeball: translucency feel, star density/drift.
+
+Success test: a returning spring visitor finds their meadow changed but
+never diminished — new seedlings they didn't plant, queens on the crocuses,
+the hive waking — and the night sky gives the slow phases something to look at.
+
+#### Session 7 deferred scope (carried, not dropped — the repo is the backlog)
+
+- N1 — natural, seasonally-weighted rain: rain currently toggles/holds
+  via the P panel (the session-5 trigger suite); a natural weather driver
+  is planned v3 work.
+- N2 — pollinator-visit seeding precondition: visitors' presence as a
+  precondition (or gentle boost) to volunteer seeding — the two living
+  systems currently roll independently.
+- N3 — magnifying-glass inspector: an inspect-mode zoom for close reads of
+  small visitors (moth, hoverfly) and the winter cluster; a chrome nicety.
+
+#### Session 8 — Sharing & the wider door
+
+6. Seed codes (#new): a seed string captures species + positions
+   (deterministic from the seeded placement hash, NOT the save — season,
+   jars, notebook stay local). Input at the world's front door: "start from a
+   friend's seed" in the reset/new-meadow flow. Output: gentle "share this
+   meadow's seed" near the postcard. Gate: same seed -> same layout across
+   reloads and machines; unknown-version seed -> fresh world + preserved
+   backup (the corrupt-blob pattern, applied to seeds).
+7. i18n (#19 partially, #20): Slovenian first — the deployed meadow greets
+   its actual audience. All copy through the existing copy modules; no
+   hardcoded strings.
+
+Success test: a friend's meadow grows the same from the seed code, and a
+Slovenian visitor reads every line in their own words.
+
+---
+
+### v4 — The meadow others meet (sessions 9–10)
+
+Theme: the meadow becomes the public portfolio artifact. The v3 door
+(share-ready deploy) opens onto v4's question — what does a FIRST-TIME
+visitor experience, and what does a returning one keep? Four units,
+dependency-ordered; O1–O3 have no interdependencies beyond order and
+can interleave. The v3 tail (CNAME, og:image, README screenshot) rides
+the deploy, not this section.
+
+#### O1 — Onboarding / first-run experience (#39)
+
+Seeded starter patch (a few flowers + a hive already placed, so the
+meadow is alive on frame one), timed notebook nudges, the season dial
+introduced in-fiction. Tutorial lives inside the fiction: the notebook
+"notices" things, never a modal wall of text.
+
+Constraints inherited: the onboarding hint renders ABOVE the palette
+dock, never overlapping it or the corner controls (#6384003544 — the
+anchor is the dock's top edge); one input path (nudges write the same
+state the player's own actions write).
+
+#### O2 — Journal as first-sighting collection (#40)
+
+The unified inspection entry (v3's landing: flowers and wildlife flow
+through the ONE shared kind-enum entry into the ONE card) feeds a
+permanent sighting log — inspecting gains purpose, seasons gain a goal
+("seen in every season"). One source: the fact store + the kind enum;
+the journal adds no new facts and no new state shapes, only a record of
+what the glass has shown.
+
+#### O3 — Audio presence (#41)
+
+Ambient bed, bee hum, rain cued from the N1 weather clock — audio reads
+the same natural-condition sources the visuals do (one clock, one
+truth). Self-hosted assets (the font rule applies to sound). Off by
+default; the existing corner audio toggle stays the single switch.
+
+#### O4 — Touch / mobile (#42)
+
+Pointer→touch translation, tap-to-inspect for the glass (hover has no
+touch equivalent — tap is the inspect affordance), narrow-frame QA.
+The bottom dock is already the mobile pattern (#6384003544 geometry:
+one unwrapped corner row, reserved lanes that never overlap at any
+viewport width). Finishes parked #33.
+
+#### O5 — Keyboard shortcuts (#43, user-specified)
+
+WASD camera / Q-E rotate / R reset (inline confirm modal, never instant
+— Esc dismisses) / I inspector / J journal / ESC cancel-anything.
+Conventions: one input path (keys drive the SAME stores the pointer
+drives — I toggles the glass's magnifierOn, J the hub's open state;
+aria-pressed syncs both ways), keys ignored while typing, held-repeat
+for movement vs single-fire toggles, preventDefault on consumed keys,
+discoverability via O1 or a "?" hint. The ESC semantics table lives in
+one place; the gate asserts I/J/ESC. Pure input translation onto
+existing stores — no new clocks, no new state.
+
+Success test: a stranger opens the deployed link, is greeted by a
+living meadow, learns it in three gentle nudges, and — on a phone,
+one-handed — can plant, inspect, and keep a sightings journal.
+
+---
+
+### v5 — HUD grouping grammar (design note, pre-planning)
+
+Proposed during session 10's fix rounds (user walkthrough against
+game-UX grouping best practices). Consumes and extends #59's
+corner-lane rework; NOT session-10 scope beyond the one exception
+noted below. Standing constraints inherited: cozy pillar (no KPI
+dashboards, minimal top-left HUD), measured-lane discipline (live
+boxes, never eye placement), one input path per interaction, the
+existing chrome gate family as the verifier.
+
+#### The five clusters
+
+1. TIME cluster (top-right): the season dial and the pause/speed row
+   are one semantic family (what season / how fast) — unify into ONE
+   visually bounded container, ONE measured hard box in the lane
+   solver, reset anchored below it, notices below that. EXCEPTION:
+   this unification lands WITH #59's rework (the controls are being
+   re-anchored anyway — do it once).
+2. MEADOW MENU: reset + enter-a-seed are one feature in disguise
+   (the reset confirm modal already houses the seed input). One
+   named entry point, one panel with modal grammar: reset / start
+   from a friend's seed. Destructive actions cluster together, away
+   from play controls.
+3. SHARE cluster (corner row): postcard + seed share + screenshot =
+   the "show your meadow" family, visually grouped.
+4. PREFERENCES cluster (corner row): EN/SL toggle + audio toggle are
+   global settings — grouped (gear popover if it grows).
+5. MODE-EXCLUSIVE dock: palette tools (plant) and the glass
+   (inspect) are mutually exclusive modes by grammar
+   (select-tool-disarms-glass) — the dock should SHOW it: radio-
+   group affordance, plant vs inspect visually distinct, selected
+   state exclusive by construction.
+
+#### Leave alone (explicitly)
+
+World-anchored popups (glass card, hive harvest), journal as one hub
+entry, help panel structure, toast lane discipline, minimal top-left
+status.
+
+#### Success test
+
+A first-time visitor can name what each corner of the screen is FOR
+in one glance; every control sits in a group of its semantic family;
+the chrome gates (hits:[] at 7 viewports, derivation-based) stay
+green through the rework — the grouping change is a re-lane, not a
+redesign, and the voxel chrome language is unchanged.
+
+#### Gate hooks
+
+The chrome family's measured boxes become per-cluster (time-box,
+meadow-menu, share, prefs); a mode-exclusivity check asserts
+glass+tool states are mutually exclusive in the UI affordance, not
+just in the grammar.
+
+
+# Part II — Session records (post-mortems)
+
+### v0.1 (sessions 1–3)
+
+#### Session 1 — Voxel meadow (COMPLETE)
 Delivered: Vite + TS + React + three.js (@react-three/fiber) scaffold; freeform
 voxel terrain with golden-hour lighting; freeform placement with ghost preview
 (zoom on left click, pan on right); six flower species (data in
@@ -109,7 +412,7 @@ slight height jitter (matching terrain) + minimal tilt (a few degrees), applied
 on new placements only, toggleable with F with a UI indicator, persisted in
 localStorage; existing saves never re-randomized.
 
-### Session 2 — Pollinators (post-merge record)
+#### Session 2 — Pollinators (post-merge record)
 Delivered: placement variation (rotation/height/tilt jitter, F toggle with UI
 indicator, persisted), pollinator appeal engine, skep hive + bee bath + bee
 hotel + hedges (milestone-unlocked), bee swarm foraging between placed flowers
@@ -140,7 +443,7 @@ geometry: present + in-viewport + visible), never a proxy like
 innerHTML string-presence or handler invocation — the notebook hub passed
 two proxy "verifications" while invisible below the fold.
 
-### Session 3 — Polish & v0.1 (post-merge record, PR #3, merge 460b97b)
+#### Session 3 — Polish & v0.1 (post-merge record, PR #3, merge 460b97b)
 Delivered: palette regroup (Flora & nature / Bee care) with voxel thumbnails
 rendered from actual models; bee hotel + wild corner with solitary bees and
 rare wool-carder pollinator; postcard capture (composer-aware PNG); ambient
@@ -169,19 +472,20 @@ vision readback disagree, look at the ground truth (the mask) — the cell-map
 overlay (#30) exists because of this; "it never touches the pond" is not the
 same as "harmless" when a structural misalignment is the root cause.
 
-## v2 (sessions 4–6)
 
-### Session 4 — Chrome & tooling (post-merge record, PR #32, merge f49c462)
+### v2 (sessions 4–6)
+
+#### Session 4 — Chrome & tooling (post-merge record, PR #32, merge f49c462)
 Delivered: token/theme module + self-hosted Pixelify Sans (zero runtime font fetch); full chrome restyle (one font/border/palette across notebook, reset, palette, toasts, onboarding, popover, dial, header); typography weight hierarchy from tokens (weightHeading/weightEmphasis/headingStyle); postcard stats strip as organized list (warm, never scores); composed postcard (parchment, honey border, "Greetings from Meadowlight", stats on the card, layout computed from measured font metrics); embed polish verified at 4 odd ratios in iframes; P-panel expansion (#30): cell-map overlay (classified by the exact groundAt()/isBuildable() queries — placement-box AND, not kind alone), save-state inspector, honest reload-from-save (real load path, no save first), live milestone checklist; dev tooling excluded from prod build (lazy dev-gate); WebGL context-leak fix (one shared thumbnail renderer); reload given observable feedback (console + toast) and the <3s autosave test window documented in the tooltip.
 Post-review fixes: reload button was window.location.reload() (beforeunload save overwrote the blob being tested); cell-map overlay leaked into dist and the first classification mislabeled hills plantable (groundAt kind is 'meadow' on all dry land; the placement-box AND is the truth); postcard caption band fixed at 170px clipped the fourth stat on real GPU (headless has no font rasterizer — invisible text cannot fail a pixel check; layout now derived from measureText().actualBoundingBox, unit-tested); "Too many active WebGL contexts" traced NOT to the postcard path but to palette thumbnails creating a renderer each (StrictMode double-mount -> 22 contexts past the ~16 cap; renderer.dispose() does not release the context — the canvas holds it until GC).
 Lessons: measure, don't assume, font metrics in canvas layouts — and when the harness can't rasterize fonts, unit-test the layout math instead; renderer.dispose() does not release a WebGL context — share one renderer per batch, and audit the real suspects before assuming the obvious one; silent success is a bug in dev tooling — a correct no-op reload read as broken (actions need observable feedback); window.location.reload() fires beforeunload -> save(), so a reload button implemented as page reload can never test save integrity; the headless harness's limits are findings to document, not gaps to paper over; user real-GPU review caught all three pre-merge-candidate bugs (clipping, context leak, silent reload) — the eyeball gate is load-bearing.
 
-### Session 5 — The living world (PR #35, merge 7e36213)
+#### Session 5 — The living world (PR #35, merge 7e36213)
 Delivered: flower roster 6->10 (crocus makes all-four-seasons reachable; borage/aster facts verified against sources); terrain shaping #31 (flat pond plateau, water 0.27u below banks everywhere; gentler rim then bowl lift to 0.9 after user composition verdicts; one shared shapedHeight() for oracle + renderer; distant ridge re-anchored to terrain, sunk 4.5u below anchor, hills' own palette after two rounds of floating-boxes fixes — "reads as clouds/mist" was a redesign request, not tuning); placeable Berry Bush + ambient bushlets (seeded per-instance rotation + scale jitter); banded voxel sky + composed clouds; butterflies + hoverflies on the fixed #34 steering with wildDebug telemetry; 12-min day/night cycle (golden-hour default, fireflies at dusk); gentle rain (bees home, petals glisten, audio hushes; appeal byte-identical dry vs wet — no fail state by test); P-panel trigger suite (rain, time-of-day overrides with hold/resume, firefly force) wired through the test hook; corner-overhang placement refusal via the raw cell hit.
 Post-review fixes (the user real-GPU loop caught six): ghost voxel unparked (gated instanced meshes left mounted); ridge anchoring, then ridge bottoms (visual legibility is the acceptance criterion — distant terrain must read as terrain in the hills' language); bush rotation; bees-stuck regression — isDaylight used sunElevation>0.05, reading the golden-hour default (0.82) as night, so the swarm homed from every boot and survived reload while the panel printed day; fixed as the palette's own lit window (dawn 0.22 -> dusk 0.88, epsilon-tolerant, ONE shared source for bees/panel/save — two definitions of "day" is how the panel and the bees disagreed); corner placement — the raycast CLAMPED hits into the placement box, silently misclassifying overhang cells as valid; now the raw cell hit is checked against the same isPlantableCell query the cell-map overlay uses (one source, no divergence). The trigger suite found a behavioral gap on its own: bees never homed at night (rain-homing existed, day/night never touched bee behavior) — fixed per real colonies, count untouched, no punishment.
 Lessons: state semantics need ONE shared definition — the panel said day while bees said night because two modules each defined it (same class as session-4's reload round-trip bug); instrument the RAW query, not a clamped/projection one (the raycast clamp made overlay, ghost, and placement disagree while each was locally "right"); a trigger suite pays for itself by exposing behavioral holes the feature gates can't see (night-homing found while verifying the triggers); gates go stale against feature commits — fix the detector, never bend behavior to a stale detector; the custom OrbitControls re-asserts the camera every frame, so proposal screenshots need a working camera path (an honest environment finding, not a "no difference" shrug); terrain acceptance is the user's composition verdict, not slope numbers; taste-first held through three terrain rounds — proposal screenshots before commit, per change; camera-path tooling is part of the proposal workflow now.
 
-### Session 6 — Depth mechanics (post-merge record, PR #36)
+#### Session 6 — Depth mechanics (post-merge record, PR #36)
 
 Delivered: auto-advancing seasons (save v6 additive seasonProgress, ONE
 advance site shared with the day clock, override dial = P-panel force
@@ -249,92 +553,8 @@ the pixel-font chrome; batch the anchor update with the camera-asserted
 frame); habitat corners — scenery covering the unplantable corner folds
 (session 7's scenery unit, on the v3 roadmap).
 
----
-
-# v2 — Meadowlight after v0.1 (sessions 4–6)
-
-Goal: v0.1 proved the loop and the process; v2 makes Meadowlight worth
-returning to and worth showing off. Working order by user decision: B → A → C.
-Each session independently shippable; all AGENTS.md rules and CI carry over.
-Deploy goes live at the END of session 6 — the first public look is the
-completed v2.
-
-## Session 4 (B) — Everything voxel, including the chrome
-
-Theme: the deployed artifact's chrome matches its world. Zero gameplay code.
-
-0. P-panel expansion first (#30): cell-map debug overlay (reads the same live
-   data structures placement queries — never a re-derivation), save-state
-   inspector, reload-current-save, live milestone checklist. Dev/test only.
-1. Voxel design language for all chrome (#16): one shared token/theme module —
-   font stack (Pixelify Sans, self-hosted woff2, no runtime font fetch),
-   sizes, colors, borders — switchable centrally, never hardcoded per panel.
-   Applied to notebook, reset dialog, palette, toasts, onboarding, ? popover.
-2. Postcard stats strip (#18): nature planted, bee care put up, bee count,
-   seasons passed — nature facts, not scores. og:image regenerated from a
-   real-GPU screenshot once new chrome lands.
-3. Embed final polish: verify at odd aspect ratios + iframe config; og tags
-   absolute-URL-ready.
-
-Success test: any dialog next to the meadow looks like one product.
-
-## Session 5 (A) — The living world
-
-Theme: a second visit looks different from the first. Splittable across two
-nights; units independent.
-
-1. Flower roster expansion (#8) first — unblocks session 6 recipes. Each
-   species: model, bloom season, appeal, EDUCATION.md facts, thumbnail,
-   reachability unit-tested (yearRoundBloom lesson).
-2. Bushes & ambient scatter (#7) on gentler edges — shares the outskirts ring
-   with grass drifts, interleaved not stacked.
-3. Terrain shaping (#31): flatter pond neighborhood (water safely below banks
-   everywhere), much gentler meadow rim; consider the second outer rim concept
-   (hills out there, calmer middle with trees/pond/shrubs/rocks).
-4. Voxel background (#6): graded sky, distant terrain variation, purposeful
-   clouds.
-5. Butterflies & hoverflies (#15): distinct species mapped to real pollinator
-   principles.
-6. Day/night cycle (#13): slow, golden-hour default, fireflies at dusk.
-7. Weather (#14): rain = bees home, glistening flowers; cozy, no fail state.
-
-Perf re-verified on real GPU (session-3 baseline: 93.8fps @ 229 items) — this
-session adds scene content.
-Success test: two screenshots of two visits show visibly different meadows.
-
-## Session 6 (C) — Depth mechanics
-
-Theme: the educational heart. Needs session 5's flower roster.
-
-1. Garden recipes / companion planting (#9): positive bonuses for companions,
-   neutral for others — antagonism must never read as punishment.
-2. Honey harvesting (#11): comb cells visibly fill; full hive click gives a
-   jar recorded in the notebook. Observation-and-reward, no economy.
-3. Auto-advancing seasons (#12): ~10–15 min/season; save stores season
-   position, paused while away; manual dial + P-harness jump retained.
-
-Verification heaviest of the three: balance traces (companion garden gently
-outperforms random), full loop traces, multi-session save round-trips with
-mid-season saves.
-Success test: a player who understands real companion planting does measurably
-better than one who doesn't.
-
-## Post-session-6: deploy (user-driven)
-
-Build dist/, upload, point portfolio subdomain, HTTPS. First public look =
-completed v2. (Session 6 landed the bare-minimum Pages workflow + default URL;
-the subdomain/CNAME + og:image origin swap are the documented post-deploy
-steps.)
-
-## Parked until world + chrome final
-
-#19 mobile/PWA, #20 broader i18n & harness expansion beyond #30's scope.
-
----
-
-## v3 (session 7)
-
-### Session 7 — Seed & life (post-merge record, PR #37, merge c30081a)
+### v3 (sessions 7–8)
+#### Session 7 — Seed & life (post-merge record, PR #37, merge c30081a)
 Delivered: self-seeding (U1 — one seededHash source; worldSeed/seedingEpoch
 join dayPhase/season as named state, save v7 additive with v6 blobs deriving
 a stable per-blob seed; one seeding site riding the season-boundary
@@ -401,78 +621,7 @@ rain, N2 pollinator-visit seeding precondition, N3 magnifying-glass
 inspector; deploy (Pages one-click ready; the user's subdomain, later
 session). The U4 tree proposal resolved as the decided layout (canopy-
 footprint exclusion, cb44aa5).
-
-# v3 — The meadow grows (proposed, sessions 7–8)
-
-Goal: v2 made the world alive, deep, and public; v3 makes the meadow grow on
-its own and lets meadows travel between people. Same constitution: cozy,
-educational, no fail states, voxel language, one shared source per semantic.
-Session-7 planning refines this against the real deployed meadow.
-
-## Session 7 — Seed & life (world deepening)
-
-1. Self-seeding (#new): flowers occasionally volunteer a seedling in a nearby
-   plantable cell — rare, capped per region, roster-compatible neighbors;
-   seedlings clearable, never reading as "weeds." Tuning in src/data/; gate:
-   no invasive growth pattern across an accelerated 4-season run (the v2
-   speed control is the verification instrument).
-2. Seasonal wild visitors (#new): extend the butterfly/hoverfly pattern —
-   evening lavender moths, spring queen bumbles on crocus, summer firefly
-   blooms, autumn hoverfly stragglers. Notebook records who visited when.
-   Same trigger-suite rule: conditions force-able from day one; no direct
-   spawn-force masking the natural condition.
-3. Bee lifecycles, gently (#new): hive population breathes with the seasons —
-   colony grows in spring, winter cluster (the EDUCATION.md winter-cluster
-   fact earns its visual). Hard constraint: winter reads as winter, never as
-   loss or decline.
-4. Pond & tree habitat scenery (#new): dragonflies over the pond, pond-edge
-   plants (forget-me-not already in roster), cozy ground detail around trees,
-   and habitat corners — scenery (bush clusters, rocks, a log, fern-like
-   detail) covering the corner fold regions where the hills intrude into the
-   placement box and nothing can be planted (user decision, session 6): the
-   unplantable folds read as intentional wild corners, never empty seams.
-   Scenery first; no placement mechanics in scope. Facts verified, in-file
-   sources.
-5. Night sky & cloud translucency (#new): (a) clouds more translucent —
-   softly veiled, never blocking the view, never gone (the session-5
-   legibility criterion, in reverse); (b) stars at night, composed with the
-   day/night grade through the same palette-lit window logic (ONE shared
-   phase source, epsilon-tolerant boundaries), brightest in winter's long
-   nights. Trigger-first: force-night/evening gates assert star visibility
-   per phase. Eyeball: translucency feel, star density/drift.
-
-Success test: a returning spring visitor finds their meadow changed but
-never diminished — new seedlings they didn't plant, queens on the crocuses,
-the hive waking — and the night sky gives the slow phases something to look at.
-
-### Session 7 deferred scope (carried, not dropped — the repo is the backlog)
-
-- N1 — natural, seasonally-weighted rain: rain currently toggles/holds
-  via the P panel (the session-5 trigger suite); a natural weather driver
-  is planned v3 work.
-- N2 — pollinator-visit seeding precondition: visitors' presence as a
-  precondition (or gentle boost) to volunteer seeding — the two living
-  systems currently roll independently.
-- N3 — magnifying-glass inspector: an inspect-mode zoom for close reads of
-  small visitors (moth, hoverfly) and the winter cluster; a chrome nicety.
-
-## Session 8 — Sharing & the wider door
-
-6. Seed codes (#new): a seed string captures species + positions
-   (deterministic from the seeded placement hash, NOT the save — season,
-   jars, notebook stay local). Input at the world's front door: "start from a
-   friend's seed" in the reset/new-meadow flow. Output: gentle "share this
-   meadow's seed" near the postcard. Gate: same seed -> same layout across
-   reloads and machines; unknown-version seed -> fresh world + preserved
-   backup (the corrupt-blob pattern, applied to seeds).
-7. i18n (#19 partially, #20): Slovenian first — the deployed meadow greets
-   its actual audience. All copy through the existing copy modules; no
-   hardcoded strings.
-
-Success test: a friend's meadow grows the same from the seed code, and a
-Slovenian visitor reads every line in their own words.
-
-### Session 8 — Sharing & the wider door (post-merge record, PR #38, merge 4827293)
+#### Session 8 — Sharing & the wider door (post-merge record, PR #38, merge 4827293)
 Delivered: unified magnifier inspection (flowers + wildlife + structures
 through ONE kind-enum entry; ownership-first claim rules in
 data/magnifierKinds — isMeshOwnedEntry/isClaimableEntry/meshMayClaim
@@ -507,75 +656,8 @@ read the CLICKED instance, not entry[0] (session-6 lesson held). (10) Honest
 out in checks: a walk that exhausts FAILS with a placement finding, never
 loosens its predicate.
 
-## Carry-overs standing
-
-One shared source per semantic (seed hash joins dayPhase/season as named
-state with exactly one definition); raw-query placement for anything that
-checks cells; trigger-first; save v7 additive; tuning in src/data/;
-taste-first with proposal screenshots for anything visual.
-
-## ROADMAP # v4 — the meadow others meet
-
-Theme: the meadow becomes the public portfolio artifact. The v3 door
-(share-ready deploy) opens onto v4's question — what does a FIRST-TIME
-visitor experience, and what does a returning one keep? Four units,
-dependency-ordered; O1–O3 have no interdependencies beyond order and
-can interleave. The v3 tail (CNAME, og:image, README screenshot) rides
-the deploy, not this section.
-
-### O1 — Onboarding / first-run experience (#39)
-
-Seeded starter patch (a few flowers + a hive already placed, so the
-meadow is alive on frame one), timed notebook nudges, the season dial
-introduced in-fiction. Tutorial lives inside the fiction: the notebook
-"notices" things, never a modal wall of text.
-
-Constraints inherited: the onboarding hint renders ABOVE the palette
-dock, never overlapping it or the corner controls (#6384003544 — the
-anchor is the dock's top edge); one input path (nudges write the same
-state the player's own actions write).
-
-### O2 — Journal as first-sighting collection (#40)
-
-The unified inspection entry (v3's landing: flowers and wildlife flow
-through the ONE shared kind-enum entry into the ONE card) feeds a
-permanent sighting log — inspecting gains purpose, seasons gain a goal
-("seen in every season"). One source: the fact store + the kind enum;
-the journal adds no new facts and no new state shapes, only a record of
-what the glass has shown.
-
-### O3 — Audio presence (#41)
-
-Ambient bed, bee hum, rain cued from the N1 weather clock — audio reads
-the same natural-condition sources the visuals do (one clock, one
-truth). Self-hosted assets (the font rule applies to sound). Off by
-default; the existing corner audio toggle stays the single switch.
-
-### O4 — Touch / mobile (#42)
-
-Pointer→touch translation, tap-to-inspect for the glass (hover has no
-touch equivalent — tap is the inspect affordance), narrow-frame QA.
-The bottom dock is already the mobile pattern (#6384003544 geometry:
-one unwrapped corner row, reserved lanes that never overlap at any
-viewport width). Finishes parked #33.
-
-### O5 — Keyboard shortcuts (#43, user-specified)
-
-WASD camera / Q-E rotate / R reset (inline confirm modal, never instant
-— Esc dismisses) / I inspector / J journal / ESC cancel-anything.
-Conventions: one input path (keys drive the SAME stores the pointer
-drives — I toggles the glass's magnifierOn, J the hub's open state;
-aria-pressed syncs both ways), keys ignored while typing, held-repeat
-for movement vs single-fire toggles, preventDefault on consumed keys,
-discoverability via O1 or a "?" hint. The ESC semantics table lives in
-one place; the gate asserts I/J/ESC. Pure input translation onto
-existing stores — no new clocks, no new state.
-
-Success test: a stranger opens the deployed link, is greeted by a
-living meadow, learns it in three gentle nudges, and — on a phone,
-one-handed — can plant, inspect, and keep a sightings journal.
-
-### Session 9 — v4: the meadow others meet (post-merge record, PR #49, merge 86d8789)
+### v4 (sessions 9–10)
+#### Session 9 — v4: the meadow others meet (post-merge record, PR #49, merge 86d8789)
 Delivered (9 unit commits + 8 user-verification rounds): #44 DAY_CYCLE_SECONDS
 720→360 (6-minute day, every window a phase fraction); #45 snow spawn
 distribution — one seeded `spawnPosition(index, salt, area)` in Rain.tsx shared
@@ -629,9 +711,23 @@ P1 of session 10 (issue #53). #50 outer-hill sky gaps, #51 reset/toast lane,
 #52 vite 6→8 + esbuild advisory, #54 notebook tabs, #55 stem-head gap,
 #56 hive panels ride the backlog.
 
+#### Session 10 — Wider door (in progress — PR #57; record lands at session close)
+
+Kickoff: issue #53 — P1 seeding gate reds, P2 chrome polish (#50/#51),
+P3 seed codes, P4 i18n EN/SL, P5 deploy tail (CNAME, og:image, README).
+The post-merge record is added under this heading at session close, per the
+close sequence.
+
+# Standing rules & canonical references
+### Carry-overs standing
+
+One shared source per semantic (seed hash joins dayPhase/season as named
+state with exactly one definition); raw-query placement for anything that
+checks cells; trigger-first; save v7 additive; tuning in src/data/;
+taste-first with proposal screenshots for anything visual.
 ### Gate runner check lists (canonical, #68 — read the gate, don't trust the list)
 
-`run-all-gates.ps1` lives OUTSIDE the repo (user's local copy). The valid
+`run-all-gates.ps1` is committed to the repo (issue #74) — its --checks lists are enforced against the gate registries by scripts/gate-list-lint.mjs in test:smoke. The valid
 `--checks` names per gate at branch head (verified by reading each script;
 an unknown name now fails clean and lists the valid ones via
 dispatchChecks in scripts/gate-lib.mjs):
@@ -647,57 +743,3 @@ dispatchChecks in scripts/gate-lib.mjs):
   (NOTE: names like rim/resetlane/seedcodes do NOT exist here — the #66 rim
   assertions live in the UNIT gate, scripts/unit-tests.mjs)
 - unit + lint + build: npm run test:smoke (unit-tests + build-health +
-  node --check on EVERY gate script + gate-scope-lint)
-# v5 — HUD grouping grammar (design note, pre-planning)
-
-Proposed during session 10's fix rounds (user walkthrough against
-game-UX grouping best practices). Consumes and extends #59's
-corner-lane rework; NOT session-10 scope beyond the one exception
-noted below. Standing constraints inherited: cozy pillar (no KPI
-dashboards, minimal top-left HUD), measured-lane discipline (live
-boxes, never eye placement), one input path per interaction, the
-existing chrome gate family as the verifier.
-
-## The five clusters
-
-1. TIME cluster (top-right): the season dial and the pause/speed row
-   are one semantic family (what season / how fast) — unify into ONE
-   visually bounded container, ONE measured hard box in the lane
-   solver, reset anchored below it, notices below that. EXCEPTION:
-   this unification lands WITH #59's rework (the controls are being
-   re-anchored anyway — do it once).
-2. MEADOW MENU: reset + enter-a-seed are one feature in disguise
-   (the reset confirm modal already houses the seed input). One
-   named entry point, one panel with modal grammar: reset / start
-   from a friend's seed. Destructive actions cluster together, away
-   from play controls.
-3. SHARE cluster (corner row): postcard + seed share + screenshot =
-   the "show your meadow" family, visually grouped.
-4. PREFERENCES cluster (corner row): EN/SL toggle + audio toggle are
-   global settings — grouped (gear popover if it grows).
-5. MODE-EXCLUSIVE dock: palette tools (plant) and the glass
-   (inspect) are mutually exclusive modes by grammar
-   (select-tool-disarms-glass) — the dock should SHOW it: radio-
-   group affordance, plant vs inspect visually distinct, selected
-   state exclusive by construction.
-
-## Leave alone (explicitly)
-
-World-anchored popups (glass card, hive harvest), journal as one hub
-entry, help panel structure, toast lane discipline, minimal top-left
-status.
-
-## Success test
-
-A first-time visitor can name what each corner of the screen is FOR
-in one glance; every control sits in a group of its semantic family;
-the chrome gates (hits:[] at 7 viewports, derivation-based) stay
-green through the rework — the grouping change is a re-lane, not a
-redesign, and the voxel chrome language is unchanged.
-
-## Gate hooks
-
-The chrome family's measured boxes become per-cluster (time-box,
-meadow-menu, share, prefs); a mode-exclusivity check asserts
-glass+tool states are mutually exclusive in the UI affordance, not
-just in the grammar.
