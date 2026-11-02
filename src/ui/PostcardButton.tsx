@@ -51,26 +51,25 @@ export function PostcardButton() {
     const el = popRef.current;
     if (!el) return;
     const update = () => {
-      // #65 tail round-5: the toast stack is anchored at toastLaneTop (top:
-      // 138) and grows UPWARD (column-reverse), so a live toast's box is
-      // [top, toastLaneTop-ish band], NOT below shareLaneTop. At vpH=500 the
-      // old formula subtracted shareLaneTop (240) from a bottom measured in
-      // viewport coords and clamped by min() into a negative/zero clear —
-      // the popover kept its full height and overlapped the toast card.
-      // Correct clearance: the popover's top edge must sit at or below the
-      // LOWEST live toast card's bottom + gap, i.e. maxHeight shrinks by
-      // (popoverTopTarget - toastBottom) measured from the actual rects.
+      // #65 round-8: the popover opens UPWARD from the corner-row button
+      // (bottom-anchored at the row's top). The toast stack sits in the
+      // 138-lane ABOVE the corner row. Clearing it means the popover's
+      // BOTTOM edge must sit at/above the toast stack's TOP - gap — i.e.
+      // maxHeight shrinks by the overlap of [popoverTop, buttonTop] with
+      // the toast band. Setting `top` below the toast (round 6) pushed the
+      // popover below the fold at every 800px viewport (top 1062).
       const cards = [...document.querySelectorAll('[data-toast]')];
-      const toastBottom = cards.reduce((m, c) => Math.max(m, c.getBoundingClientRect().bottom), 0);
-      // #65 round-6: set the popover's TOP directly below the lowest live
-      // toast (or at the viewport margin), never above it — this is the pair
-      // that actually intersects at vpH=500 (share top 238 vs toast card
-      // bottom in the 138-lane band). maxHeight shrinks from the viewport.
-      const topTarget = toastBottom > 0
-        ? Math.max(8, toastBottom + CHROME_TUNING.shareLaneGap)
-        : 8;
-      el.style.setProperty('--share-top', topTarget.toFixed(1) + 'px');
-      el.style.setProperty('--share-toast-clear', '0px');
+      let toastTop: number | null = null;
+      for (const c of cards) { const t = c.getBoundingClientRect().top; if (toastTop === null || t < toastTop) toastTop = t; }
+      const btn = btnRef.current;
+      const anchorBottom = btn ? btn.getBoundingClientRect().top : window.innerHeight;
+      // popover occupies [anchorBottom - h, anchorBottom]; toast band top is
+      // toastTop. Required: anchorBottom - h <= toastTop - gap  =>  h <=
+      // anchorBottom - toastTop + gap. Shrink maxHeight to that bound.
+      const maxH = toastTop !== null && toastTop !== Infinity
+        ? Math.max(80, anchorBottom - toastTop + CHROME_TUNING.shareLaneGap)
+        : window.innerHeight - 16;
+      el.style.setProperty('--share-max-h', Math.min(maxH, window.innerHeight - 16).toFixed(1) + 'px');
     };
     update();
     const t = setInterval(update, 400);
@@ -173,16 +172,15 @@ export function PostcardButton() {
             // row's top) and is clamped to the viewport top — it can never
             // render off-screen below the fold again. The chrome gate still
             // asserts it never intersects a notice/corner box.
-            // #65 round-6: the popover is anchored to its BUTTON's top edge
-            // (bottom: 100% of the wrapper) — not to a fixed lane top — so at
-            // short viewports its top is already low; what must clear the
-            // toast stack is the TOP edge itself: top = max(8, toastBottom +
-            // gap), computed live and applied as a px top with bottom:auto.
-            top: 'var(--share-top, auto)',
-            bottom: 'auto',
+            // #65 round-8: upward-open posture (bottom-anchored at the row's
+            // top); maxHeight shrinks by the live toast-band overlap so the
+            // popover clears the toast stack from ABOVE at short viewports
+            // while staying on-screen at tall ones.
+            bottom: 'calc(100% + ' + CHROME_TUNING.shareLaneGap + 'px)',
+            top: 'auto',
             right: 0,
             zIndex: 60,
-            maxHeight: 'calc(100vh - 16px - var(--share-toast-clear, 0px))',
+            maxHeight: 'var(--share-max-h, calc(100vh - 16px))',
             overflowY: 'auto',
             padding: theme.spacing.panelPadding,
             borderRadius: theme.border.radiusPanel,

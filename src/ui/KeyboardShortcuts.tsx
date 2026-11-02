@@ -307,7 +307,6 @@ export function KeyboardShortcuts() {
       // free vertical band below the ceiling, measured in BORDER-box px:
       // the panel's getBoundingClientRect().height is border-box, so the
       // band the panel may occupy is floorY - top (both viewport coords).
-      const band = Math.max(0, floorY - top);
       // Round-6/7 (PR #49 comments #6561476001, #6562013898): NO pixel
       // derivation survives cross-platform fonts (headless FreeType vs
       // Windows ClearType render the same woff2 ~42px apart at this
@@ -348,9 +347,15 @@ export function KeyboardShortcuts() {
         : panel.scrollHeight;
       // border-box natural height = unclamped content + all chrome
       const naturalHeight = Math.ceil(unclampedContent + padTop + padBottom + borderY);
-      const laneCeil = Math.ceil(band);
+      // #65 round-8: when the conflict branch fired (top pinned to floorY),
+      // `band` is 0 and the old clamp (naturalHeight > 0 -> maxHeight 0) either
+      // collapsed the panel to nothing or left it unclamped over the corner
+      // row depending on sub-pixel rounding. The shrink must produce a USABLE
+      // band: the panel may occupy [top, floorY + gap], so clamp to the real
+      // distance from the pinned top to the floor, floored at a minimum row.
+      const realBand = Math.max(0, floorY - top + 8);
       // border-box element: css maxHeight == border-box max, no subtraction
-      const cssMaxHeight = naturalHeight > laneCeil ? laneCeil : null;
+      const cssMaxHeight = naturalHeight > realBand ? Math.max(48, Math.ceil(realBand)) : null;
       if (top !== panelTop || cssMaxHeight !== panelMaxHeight) {
         setPanelTop(top);
         setPanelMaxHeight(cssMaxHeight);
