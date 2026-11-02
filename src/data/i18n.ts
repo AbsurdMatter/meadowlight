@@ -132,6 +132,9 @@ export interface UiCopy {
   statBeesAbout: string;
   statSeasonsPassed: string;
   statJarsOfHoney: string;
+  /** #67: postcard facts-learned stat + seed stamp microcopy */
+  statFactsLearned: string;
+  postcardSeedStamp: string;
   postcardSaved: string;
   postcardButton: string;
   /** misc */
@@ -263,6 +266,8 @@ const en: UiCopy = {
   statBeesAbout: 'Bees about',
   statSeasonsPassed: 'Seasons passed',
   statJarsOfHoney: 'Jars of honey brought in',
+  statFactsLearned: 'Facts learned',
+  postcardSeedStamp: 'meadow seed',
   postcardSaved: 'saved ✓',
   postcardButton: '\u{1F4F8} Postcard',
   flowerFallback: 'Flower',
@@ -392,6 +397,8 @@ const sl: UiCopy = {
   statBeesAbout: 'Čebele naokoli',
   statSeasonsPassed: 'Pretekle sezone',
   statJarsOfHoney: 'Prineseni kozarci medu',
+  statFactsLearned: 'Naučena dejstva',
+  postcardSeedStamp: 'seme travnika',
   postcardSaved: 'shranjeno ✓',
   postcardButton: '\u{1F4F8} Razglednica',
   flowerFallback: 'Roža',

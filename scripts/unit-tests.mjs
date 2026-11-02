@@ -155,6 +155,31 @@ test('fallback metrics are generous relative to font size', () => {
   assert.ok(l.fits && l.bottomPadding >= 13);
 });
 
+// ---------- #67: postcard facts stat + seed stamp ----------
+test('#67: caption layout computes the seed stamp box from measured metrics, inside the band', () => {
+  const m = fallbackMetrics(44, 20);
+  const l = computeCaptionLayout(m, 6, {
+    stamp: {
+      cardWidth: 1248, border: 24, padX: 10, padTop: 8, padBottom: 8,
+      labelAscent: 15, labelDescent: 4, gap: 4, codeAscent: 17, codeDescent: 5,
+      stampWidth: 220,
+    },
+  });
+  assert.ok(l.seedStamp, 'stamp box present when stamp metrics given');
+  assert.ok(l.seedStamp.top >= 0 && l.seedStamp.top + l.seedStamp.height <= l.captionH + 0.5, 'stamp vertically inside the caption band');
+  assert.ok(l.seedStamp.width > 0 && l.seedStamp.right > 0, 'stamp box has real size');
+  assert.ok(l.seedStamp.codeBaseline > l.seedStamp.labelBaseline, 'code sits below the label');
+  const none = computeCaptionLayout(m, 6);
+  assert.strictEqual(none.seedStamp, null, 'no stamp without stamp metrics');
+});
+
+test('#67: i18n carries the facts-stat + seed-stamp copy in BOTH locales', () => {
+  assert.ok(UI_COPY.en.statFactsLearned.length > 0 && UI_COPY.sl.statFactsLearned.length > 0, 'statFactsLearned in en+sl');
+  assert.ok(UI_COPY.en.postcardSeedStamp.length > 0 && UI_COPY.sl.postcardSeedStamp.length > 0, 'postcardSeedStamp in en+sl');
+  assert.notStrictEqual(UI_COPY.sl.statFactsLearned, UI_COPY.en.statFactsLearned, 'sl facts label is Slovenian, not English');
+  assert.notStrictEqual(UI_COPY.sl.postcardSeedStamp, UI_COPY.en.postcardSeedStamp, 'sl stamp label is Slovenian, not English');
+});
+
 // ---------- bloom succession (season engine) ----------
 test('each species blooms in at least one season, and bloom flags match data', () => {
   for (const p of PLANTS) {

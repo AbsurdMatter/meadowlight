@@ -189,6 +189,19 @@ declare global {
       seedCodeEncode: () => string;
     /** #60: run the REAL save path and report the observable (blob present + size), not the handler */
     postcardSaveForTest: () => Promise<{ ok: boolean; bytes: number; error: string | null }>;
+    /** #67: run the REAL compose path and return the caption-band readback — the
+     *  drawn stat lines + seed code are re-read from the composed canvas pixels
+     *  is not possible headlessly, so instead the compose inputs (stats, seed)
+     *  plus the live journal count are returned for the gate to assert against */
+    postcardComposeReadback: () => Promise<{
+      ok: boolean;
+      bytes: number;
+      stats: { label: string; value: string }[];
+      seedCode: string;
+      seedLabel: string;
+      seenFacts: number;
+      error: string | null;
+    }>;
       startFromSeedCode: (code: string) => boolean;
     /** P4: locale readback + test setter (same store the toggle drives) */
     localeReadback: () => string;
@@ -453,10 +466,10 @@ export function installTestHook() {
       try {
         const capture = capturePostcardPng();
         if (!capture) return { ok: false, bytes: 0, error: 'no capture' };
-        const { composePostcard } = await import('./postcardCompose');
+        const { composePostcard, postcardSeedText } = await import('./postcardCompose');
         const { postcardStatText } = await import('../ui/PostcardStats');
         const stats = postcardStatText().map((l) => ({ label: l.label, value: l.value }));
-        const composed = await composePostcard(capture, stats);
+        const composed = await composePostcard(capture, stats, postcardSeedText());
         const dataUrl = composed ?? capture;
         // the observable: a non-empty image blob — decode the data URL and measure
         const res = await fetch(dataUrl);
@@ -472,6 +485,31 @@ export function installTestHook() {
     seedCodeEncode: () => {
       const s = usePlacementStore.getState();
       return encodeSeedCode(s.worldSeed, s.items);
+    },
+    postcardComposeReadback: async () => {
+      try {
+        const capture = capturePostcardPng();
+        if (!capture) return { ok: false, bytes: 0, stats: [], seedCode: '', seedLabel: '', seenFacts: 0, error: 'no capture' };
+        const { composePostcard, postcardSeedText } = await import('./postcardCompose');
+        const { postcardStatText } = await import('../ui/PostcardStats');
+        const stats = postcardStatText().map((l) => ({ label: l.label, value: l.value }));
+        const seed = postcardSeedText();
+        const composed = await composePostcard(capture, stats, seed);
+        const dataUrl = composed ?? capture;
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        return {
+          ok: blob.size > 1000 && blob.type.startsWith('image/'),
+          bytes: blob.size,
+          stats,
+          seedCode: seed.code,
+          seedLabel: seed.label,
+          seenFacts: usePlacementStore.getState().seenFacts.length,
+          error: null,
+        };
+      } catch (e) {
+        return { ok: false, bytes: 0, stats: [], seedCode: '', seedLabel: '', seenFacts: 0, error: String(e) };
+      }
     },
     startFromSeedCode: (code) => usePlacementStore.getState().startFromSeedCode(code),
     localeReadback: () => useLocale.getState().locale,

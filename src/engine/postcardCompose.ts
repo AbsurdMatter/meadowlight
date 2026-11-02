@@ -17,6 +17,9 @@
  */
 import { theme } from '../ui/theme';
 import { TYPOGRAPHY } from '../data/typography';
+import { useLocale } from './locale';
+import { encodeSeedCode } from './seedCode';
+import { usePlacementStore } from '../render/placementStore';
 import {
   computeCaptionLayout,
   fallbackMetrics,
@@ -28,6 +31,12 @@ export interface PostcardStat {
   value: string;
 }
 
+/** #67: the seed stamp — microcopy label + the share code, in the heading role */
+export interface PostcardSeed {
+  label: string;
+  code: string;
+}
+
 // the postcard follows the app's typography roles — title in the
 // HEADING role (Jersey 25, session-10 pick), stat lines in the BODY role (Nunito) —
 // one source (data/typography.ts), so the PNG matches the DOM hierarchy
@@ -35,6 +44,8 @@ const FONT_FAMILY = TYPOGRAPHY.body.family + ', monospace';
 const TITLE_FAMILY = TYPOGRAPHY.heading.family + ', monospace';
 const TITLE_SIZE = 44;
 const LINE_SIZE = 20;
+const STAMP_LABEL_SIZE = 13;
+const STAMP_CODE_SIZE = 15;
 
 /** Await the self-hosted faces so fillText uses them, not a fallback.
  *  Race with a timeout: a hung load (offline edge case) must never stall the
@@ -44,6 +55,8 @@ async function ensureFontsLoaded(): Promise<boolean> {
     document.fonts.load(`700 ${TITLE_SIZE}px ${TITLE_FAMILY}`),
     document.fonts.load(`500 ${LINE_SIZE}px ${FONT_FAMILY}`),
     document.fonts.load(`400 ${LINE_SIZE}px ${FONT_FAMILY}`),
+    document.fonts.load(`700 ${STAMP_LABEL_SIZE}px ${FONT_FAMILY}`),
+    document.fonts.load(`700 ${STAMP_CODE_SIZE}px ${TITLE_FAMILY}`),
   ]).then(() => true);
   const timeout = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2000));
   try {
@@ -88,6 +101,7 @@ function measureMetrics(ctx: CanvasRenderingContext2D): CaptionMetrics {
 export async function composePostcard(
   capturePng: string,
   stats: PostcardStat[],
+  seed?: PostcardSeed,
 ): Promise<string | null> {
   const img = await loadImage(capturePng);
   if (!img) return null;
@@ -101,7 +115,36 @@ export async function composePostcard(
   if (!ctx) return null;
 
   const metrics = measureMetrics(ctx);
-  const layout = computeCaptionLayout(metrics, stats.length);
+  // #67: measure the stamp's own fonts and width, pass to the layout so the
+  // stamp box is computed from real metrics, never assumed
+  let stampOpts: Parameters<typeof computeCaptionLayout>[2] extends infer O ? O : never;
+  if (seed) {
+    ctx.font = `700 ${STAMP_LABEL_SIZE}px ${FONT_FAMILY}`;
+    const labelW = ctx.measureText(seed.label.toUpperCase()).width;
+    ctx.font = `700 ${STAMP_CODE_SIZE}px ${TITLE_FAMILY}`;
+    const codeW = ctx.measureText(seed.code).width;
+    const mLabel = ctx.measureText(seed.label.toUpperCase());
+    const mCode = ctx.measureText(seed.code);
+    const fb = fallbackMetrics(STAMP_LABEL_SIZE, STAMP_CODE_SIZE);
+    const num = (v: number | undefined, fbv: number) =>
+      typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : fbv;
+    stampOpts = {
+      stamp: {
+        cardWidth: canvas.width,
+        border,
+        padX: 10,
+        padTop: 8,
+        padBottom: 8,
+        labelAscent: num((mLabel as TextMetrics).actualBoundingBoxAscent, fb.titleAscent),
+        labelDescent: num((mLabel as TextMetrics).actualBoundingBoxDescent, fb.titleDescent),
+        gap: 4,
+        codeAscent: num((mCode as TextMetrics).actualBoundingBoxAscent, fb.lineAscent),
+        codeDescent: num((mCode as TextMetrics).actualBoundingBoxDescent, fb.lineDescent),
+        stampWidth: Math.max(labelW, codeW) + 20,
+      },
+    };
+  }
+  const layout = computeCaptionLayout(metrics, stats.length, stampOpts);
   canvas.height = img.height + border * 2 + layout.captionH;
 
   // parchment card base + honey chunky border (the theme's panel language)
@@ -142,7 +185,46 @@ export async function composePostcard(
     ctx.fillText(s.value, captionX + labelW + 10, y);
   });
 
+  // #67: the seed stamp — a designed signature in the caption band's top-right
+  // corner (postmark/stamp reading, not a debug string): a rotated dashed
+  // frame, the microcopy label in the body role, the share code in the
+  // HEADING role (Jersey 25), both measured and placed by the layout
+  if (seed && layout.seedStamp) {
+    const st = layout.seedStamp;
+    const stampX = canvas.width - border - st.width;
+    const stampY = bandTop + st.top;
+    ctx.save();
+    ctx.translate(stampX + st.width / 2, stampY + st.height / 2);
+    ctx.rotate(-0.06); // a gentle postmark tilt
+    ctx.translate(-(stampX + st.width / 2), -(stampY + st.height / 2));
+    // dashed stamp frame
+    ctx.strokeStyle = theme.color.honeyDark;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    ctx.strokeRect(stampX, stampY, st.width, st.height);
+    ctx.setLineDash([]);
+    // microcopy label (body role, letterspaced caps)
+    ctx.fillStyle = theme.color.textSoft;
+    ctx.font = `700 ${STAMP_LABEL_SIZE}px ${FONT_FAMILY}`;
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(seed.label.toUpperCase(), stampX + 10, bandTop + st.labelBaseline);
+    // the share code (heading role)
+    ctx.fillStyle = theme.color.text;
+    ctx.font = `700 ${STAMP_CODE_SIZE}px ${TITLE_FAMILY}`;
+    ctx.fillText(seed.code, stampX + 10, bandTop + st.codeBaseline);
+    ctx.restore();
+  }
+
   return canvas.toDataURL('image/png');
+}
+
+/** #67: the seed stamp content for the composed card — locale-aware label +
+ * the live share code, read from the stores (never a hook — this runs in the
+ * click-handler path, same rule as #60). */
+export function postcardSeedText(): PostcardSeed {
+  const s = usePlacementStore.getState();
+  const t = useLocale.getState().t();
+  return { label: t.postcardSeedStamp, code: encodeSeedCode(s.worldSeed, s.items) };
 }
 
 function loadImage(src: string): Promise<HTMLImageElement | null> {

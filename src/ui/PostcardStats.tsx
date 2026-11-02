@@ -59,6 +59,12 @@ function statLines(t: import('../data/i18n').UiCopy): StatLine[] {
           ? t.statCombFilling
           : `${s.honeyJars}`,
     },
+    {
+      // #67: the journal's seen-facts count — the collection progress
+      key: 'facts',
+      label: t.statFactsLearned,
+      value: `${s.seenFacts.length}`,
+    },
   ];
 }
 

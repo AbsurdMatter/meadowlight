@@ -357,6 +357,29 @@ async function checkPostcard() {
     r.ok && r.bytes > 1000,
     JSON.stringify(r),
   );
+  // #67: the composed card carries the facts-learned stat matching the live
+  // journal count, and the seed string matching the share code (both locales)
+  for (const loc of ['en', 'sl']) {
+    const rr = await page.evaluate(async (l) => {
+      const w = window.__meadowlight;
+      w.setLocaleForTest(l);
+      return await w.postcardComposeReadback();
+    }, loc);
+    const factsLine = rr.stats.find((s) => /fact/i.test(s.label) || /dejstv/i.test(s.label));
+    const factsOk = !!factsLine && factsLine.value === String(rr.seenFacts);
+    const code = await page.evaluate(() => window.__meadowlight.seedCodeEncode());
+    rec.record(
+      'postcard.facts-stat-matches-journal@' + loc,
+      rr.ok && factsOk,
+      'locale=' + loc + ' factsLine=' + JSON.stringify(factsLine) + ' seenFacts=' + rr.seenFacts,
+    );
+    rec.record(
+      'postcard.seed-stamp-matches-share-code@' + loc,
+      rr.ok && rr.seedCode === code && rr.seedLabel.length > 0,
+      'locale=' + loc + ' seedLabel=' + JSON.stringify(rr.seedLabel) + ' seedCode==shareCode: ' + (rr.seedCode === code),
+    );
+  }
+  await page.evaluate(() => window.__meadowlight.setLocaleForTest('en'));
   const re = realErrors(errors);
   rec.record('postcard.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
   await page.close();

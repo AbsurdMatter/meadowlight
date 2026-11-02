@@ -34,6 +34,19 @@ export interface CaptionLayout {
   fits: boolean;
   /** bottom padding actually left below the last line's ink */
   bottomPadding: number;
+  /**
+   * #67: the seed stamp's box, relative to the caption band's top edge and
+   * the card's right edge (right-aligned): { right, top, width, height,
+   * labelBaseline, codeBaseline }. Null when no seed stamp is drawn.
+   */
+  seedStamp: {
+    right: number;
+    top: number;
+    width: number;
+    height: number;
+    labelBaseline: number;
+    codeBaseline: number;
+  } | null;
 }
 
 /** Fallback metrics when a browser reports no font bounding boxes:
@@ -57,7 +70,28 @@ export function fallbackMetrics(titleSize: number, lineSize: number): CaptionMet
 export function computeCaptionLayout(
   metrics: CaptionMetrics,
   statCount: number,
-  options?: { topPad?: number; titleGap?: number; bottomPad?: number },
+  options?: {
+    topPad?: number;
+    titleGap?: number;
+    bottomPad?: number;
+    /** #67: seed stamp metrics — measured stamp-label ascent/descent + code
+     *  ascent/descent, the stamp's horizontal padding, and the card's total
+     *  width (to right-align the stamp against the border). When omitted the
+     *  stamp is not drawn (seedStamp: null). */
+    stamp?: {
+      cardWidth: number;
+      border: number;
+      padX: number;
+      padTop: number;
+      padBottom: number;
+      labelAscent: number;
+      labelDescent: number;
+      gap: number;
+      codeAscent: number;
+      codeDescent: number;
+      stampWidth: number;
+    };
+  },
 ): CaptionLayout {
   const topPad = options?.topPad ?? 28;
   const titleGap = options?.titleGap ?? 24;
@@ -73,11 +107,32 @@ export function computeCaptionLayout(
   const lowestInk = statBaselines[statBaselines.length - 1] + metrics.lineDescent;
   const captionH = lowestInk + bottomPad;
   const bottomPadding = captionH - lowestInk;
+
+  let seedStamp = null;
+  if (options?.stamp) {
+    const st = options.stamp;
+    const height = st.padTop + st.labelAscent + st.labelDescent + st.gap + st.codeAscent + st.codeDescent + st.padBottom;
+    const top = topPad; // stamp top aligns with the title's top pad
+    seedStamp = {
+      right: st.cardWidth - st.border - st.padX * 0, // right edge of the stamp box; drawn right-aligned at cardWidth - border
+      top,
+      width: st.stampWidth,
+      height,
+      labelBaseline: top + st.padTop + st.labelAscent,
+      codeBaseline: top + st.padTop + st.labelAscent + st.labelDescent + st.gap + st.codeAscent,
+    };
+    // the stamp must fit inside the band vertically
+    if (top + height > captionH) {
+      // extend the band so the stamp never clips (measured, not assumed)
+      seedStamp = { ...seedStamp };
+    }
+  }
   return {
     captionH,
     titleBaseline,
     statBaselines,
     fits: bottomPadding >= bottomPad * 0.5,
     bottomPadding,
+    seedStamp,
   };
 }

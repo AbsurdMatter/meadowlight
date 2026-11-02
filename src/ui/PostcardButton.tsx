@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { capturePostcardPng, downloadPostcard } from '../engine/postcard';
-import { composePostcard } from '../engine/postcardCompose';
+import { composePostcard, postcardSeedText } from '../engine/postcardCompose';
 import { theme, headingStyle } from './theme';
 import { CHROME_TUNING } from '../data/chrome';
 import { PostcardStats, postcardStatText } from './PostcardStats';
@@ -49,7 +49,7 @@ export function PostcardButton() {
       // the user-facing button produces the COMPOSED card (plain capture
       // stays available to the P harness via capturePostcardPng)
       const stats = postcardStatText().map((l) => ({ label: l.label, value: l.value }));
-      const composed = await composePostcard(capture, stats);
+      const composed = await composePostcard(capture, stats, postcardSeedText());
       const ok = downloadPostcard(composed ?? capture);
       setSaved(ok);
       if (ok) setTimeout(() => setSaved(false), 2500);
