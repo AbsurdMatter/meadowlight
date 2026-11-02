@@ -969,14 +969,11 @@ test('#50: the rim ring is deterministic, past outerRadius, varied heights, pond
   const outer = 50; // HILLS.outerRadius
   const env2 = require(OUT + '/data/environment.js');
   const ringW = env2.HILLS.rimRingWidth;
-  const jit = env2.HILLS.rimHeightJitter;
   for (const b of rim) {
     const r = Math.hypot(b.x, b.z);
     assert.ok(r >= outer - 1.2 && r <= outer + ringW + 1.2, 'rim box in the ring band r ' + outer + '..' + (outer + ringW) + ': r=' + r.toFixed(1));
-    assert.ok(b.extraH >= 0 && b.extraH <= jit + 1e-9, 'varied heights in the tuned band: ' + b.extraH.toFixed(2));
+    assert.strictEqual(b.extraH, 0, '#66: rim boxes carry NO extra height — they share the hills profile');
   }
-  const hs = rim.map((b) => b.extraH);
-  assert.ok(Math.max(...hs) - Math.min(...hs) > 1.5, 'heights genuinely varied, not a uniform wall');
   // the hills' own layout is UNCHANGED by the rim ring (the ring's RNG is a
   // separate sequence — no second layout, and the first is byte-stable)
   assert.ok(hillsBoxesReadback().length > 2000, 'hills layout intact');
@@ -1006,13 +1003,6 @@ test('#50: camera-sweep survey — no horizon-direction ray from any in-bounds c
   const { shapedHeight } = env;
   const all = [...hillsBoxesReadback(), ...rimBoxesReadback()].map((b) => {
     const h = shapedHeight(b.x, b.z);
-    if ('extraH' in b) {
-      // rim blocks anchor by their TOP (renderer-mirrored geometry)
-      const top = h + HILLS.rimTopLift + b.extraH;
-      const boxH = top - (h - 8);
-      const yC = h - 8 + boxH / 2;
-      return { x: b.x, z: b.z, half: b.half, top: yC + boxH / 2, bottom: yC - boxH / 2 };
-    }
     const extraDepth = Math.max(0, h - shapedHeight(0, 0)) + 4;
     const boxH = HILLS.boxHeight + extraDepth;
     const yC = h - boxH * 0.55;
@@ -1061,9 +1051,32 @@ test('#50: camera-sweep survey — no horizon-direction ray from any in-bounds c
     }
     return false;
   };
-  let gaps = 0;
+  let gaps = 0, overRim = 0;
   // The orbit target can pan within ±16u (panTargetLimit), so survey targets
   // on a small grid too — a panned camera changes the ray geometry.
+  // #66: an unblocked horizon-band ray is NOT automatically a "through-rim"
+  // gap. With the ring complete at the hills' own height, low-camera rays
+  // legitimately fly OVER the rim tops (that IS the restored sky-above-rim
+  // look #66 asks for). A through-gap ray is one that crosses the rim
+  // annulus (r >= 50) at or below the local rim-top envelope — i.e. it
+  // slipped through a horizontal hole in the ring. That count must be 0;
+  // the over-the-top count is allowed (and is what #66's sky-above-rim
+  // check below relies on).
+  const rimGeoms = rimBoxesReadback().map((b) => {
+    const h = shapedHeight(b.x, b.z);
+    const extraDepth = Math.max(0, h - shapedHeight(0, 0)) + 4;
+    const boxH = HILLS.boxHeight + extraDepth;
+    const yC = h - boxH * 0.55;
+    return { x: b.x, z: b.z, half: b.half, top: yC + boxH / 2 };
+  });
+  const blockedPoint = (x, y, z) => {
+    const c = grid.get(gk(x, z));
+    if (!c) return false;
+    for (const b of c) {
+      if (Math.abs(x - b.x) <= b.half && Math.abs(z - b.z) <= b.half && y <= b.top && y >= b.bottom) return true;
+    }
+    return false;
+  };
   for (const tx of [-16, 0, 16]) {
     for (const tz of [-16, 0, 16]) {
       for (let aDeg = 0; aDeg < 360; aDeg += 6) {
@@ -1079,16 +1092,27 @@ test('#50: camera-sweep survey — no horizon-direction ray from any in-bounds c
               // that is 14.4°, so the screen spans elevations -39.4°..+10.6°
               const axisDown = 90 - (polar * 180) / Math.PI;
               const deMin = -axisDown - 25 + 1, deMax = -axisDown + 25;
-              // horizon band: only rays above -12° can show sky above the
-              // bowl wall (below that the ray is inside the 44u meadow bowl
-              // or its wall — terrain by construction, never sky)
               // horizon band: rays above -8° (the sky band above the bowl
               // wall); below that the ray is inside the 44u bowl or its wall
               for (let de = Math.max(-8, Math.ceil(deMin)); de <= Math.min(10, deMax); de += 2) {
                 const aa = a + Math.PI + (da * Math.PI) / 180;
                 const ee = (de * Math.PI) / 180;
                 const dx = Math.cos(aa) * Math.cos(ee), dy = Math.sin(ee), dz = Math.sin(aa) * Math.cos(ee);
-                if (!blocked(camX, camY, camZ, dx, dy, dz)) gaps++;
+                let cxp = null, czp = null, hit = false;
+                for (let t = 0.5; t < 110; t += 0.3) {
+                  const x = camX + dx * t, y = camY + dy * t, z = camZ + dz * t;
+                  if (cxp === null && Math.hypot(x, z) >= 50) { cxp = x; czp = z; }
+                  if (blockedPoint(x, y, z)) { hit = true; break; }
+                }
+                if (hit) continue;
+                if (cxp === null) { overRim++; continue; }
+                const tCross = Math.hypot(cxp - camX, czp - camZ) / Math.hypot(dx, dz);
+                const yCross = camY + dy * tCross;
+                let maxTop = -1e9;
+                for (const b of rimGeoms) {
+                  if (Math.abs(cxp - b.x) <= b.half + 3 && Math.abs(czp - b.z) <= b.half + 3 && b.top > maxTop) maxTop = b.top;
+                }
+                if (yCross <= maxTop + 0.05) gaps++; else overRim++;
               }
             }
           }
@@ -1096,7 +1120,32 @@ test('#50: camera-sweep survey — no horizon-direction ray from any in-bounds c
       }
     }
   }
-  assert.strictEqual(gaps, 0, 'no sky-visible ray in the -20..+10° horizon band from any in-bounds camera direction (gaps: ' + gaps + ')');
+  assert.strictEqual(gaps, 0, '#50 acceptance: no sky-through-rim ray through a ring gap in the horizon band (gaps: ' + gaps + ', over-the-top rays allowed: ' + overRim + ')');
+  assert.ok(overRim > 0, '#66: over-the-rim sky rays exist in the sweep (sky above the rim is visible, not a raised wall)');
+
+  // #66 acceptance: sky visible ABOVE the rim at the resting camera
+  // (default position [16,12,20], App.tsx) and a gentle orbit — silhouette
+  // elevation per azimuth fan vs the screen-top elevation (fov 50)
+  const rp = [16, 12, 20];
+  const rdist = Math.hypot(rp[0], rp[1], rp[2]);
+  const rpolar = Math.acos(rp[1] / rdist);
+  const rtheta = Math.atan2(rp[0], rp[2]);
+  const screenTop = (rpolar * 180) / Math.PI - 90 + 25;
+  let aboveCount = 0, aboveTot = 0;
+  for (const orbit of [0, 0.6, 1.2]) {
+    for (let da = -35; da <= 35; da += 5) {
+      const aa = rtheta + orbit + (da * Math.PI) / 180;
+      let sil = null;
+      for (let de = -20; de <= 25; de += 0.25) {
+        const ee = (de * Math.PI) / 180;
+        const dx = Math.cos(aa) * Math.cos(ee), dy = Math.sin(ee), dz = Math.sin(aa) * Math.cos(ee);
+        if (blocked(rp[0], rp[1], rp[2], dx, dy, dz)) { sil = de; break; }
+      }
+      aboveTot++;
+      if (sil !== null && screenTop > sil + 0.5) aboveCount++;
+    }
+  }
+  assert.ok(aboveCount > 0 && aboveCount >= aboveTot / 2, '#66 acceptance: sky visible above the rim at resting camera (' + aboveCount + '/' + aboveTot + ' fan rays)');
 });
 
 // ---------- session 7 U4: habitat-corner scenery ----------

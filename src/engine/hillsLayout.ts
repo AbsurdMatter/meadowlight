@@ -41,7 +41,7 @@ export interface HillsBox {
  * reads them too — no second layout.
  */
 export interface RimBox extends HillsBox {
-  /** extra height above the hills' own boxHeight (varied, 0..rimHeightJitter) */
+  /** reserved — #66: rim boxes use the hills' own height rule (no extraH) */
   extraH: number;
 }
 
@@ -61,7 +61,7 @@ export function rimBoxes(): RimBox[] {
       const jx = x + (rng() - 0.5) * step * HILLS.jitter;
       const jz = z + (rng() - 0.5) * step * HILLS.jitter;
       const size = step * (HILLS.minSize + rng() * (HILLS.maxSize - HILLS.minSize));
-      const extraH = rng() * HILLS.rimHeightJitter;
+      const extraH = 0; // #66: no extra height — the ring shares the hills' profile
       rng(); // color pick parity with the renderer's draw
       boxes.push({ x: jx, z: jz, half: size / 2, extraH });
     }

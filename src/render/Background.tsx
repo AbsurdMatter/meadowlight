@@ -112,10 +112,12 @@ function Hills() {
         mesh.setColorAt(i, color);
         i++;
     }
-    // #50 (session 10): the extra outer rim ring — rim blocks of VARIED
-    // heights past outerRadius, from the same shared layout source
-    // (rimBoxes()), same palette + fog logic, terrain-anchored. No horizontal
-    // direction shows sky through the rim.
+    // #50/#66 (session 10): the extra outer rim ring — additional hills-lattice
+    // boxes past outerRadius from the same shared layout source (rimBoxes()),
+    // rendered with the HILLS' OWN anchor rule (same crest math as the loop
+    // above), so the original ring and the gap-filler read one height profile.
+    // The #50 gap closure is horizontal coverage; #66 restored the approved
+    // rim height (no rimTopLift).
     const rngRim = makeRng(20261050);
     for (const box of rimBoxes()) {
         rngRim(); rngRim(); rngRim(); rngRim(); // layout consumed: jx, jz, size, extraH
@@ -123,14 +125,10 @@ function Hills() {
         const jz = box.z;
         const size = box.half * 2;
         const h = backgroundHeight(jx, jz);
-        // #50: rim blocks anchor by their TOP (h + rimTopLift + extraH), not
-        // the hills' 0.55-crest rule — the ring must clear the horizon rays
-        // from the lowest allowed camera. The box still extends deep below
-        // ground so no bottom edge can show.
-        const top = h + HILLS.rimTopLift + box.extraH;
-        const boxH = top - (h - 8);
+        const extraDepth = Math.max(0, h - backgroundHeight(0, 0)) + 4;
+        const boxH = HILLS.boxHeight + extraDepth;
         mat.makeScale(size, boxH, size);
-        mat.setPosition(jx, h - 8 + boxH / 2, jz);
+        mat.setPosition(jx, h - boxH * 0.55, jz);
         mesh.setMatrixAt(i, mat);
         const local = Math.hypot(jx, jz);
         const base = hills[Math.floor(rngRim() * hills.length)];
