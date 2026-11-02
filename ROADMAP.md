@@ -628,3 +628,57 @@ seasons on the session-9 world seed (red on the base commit, quarantined) —
 P1 of session 10 (issue #53). #50 outer-hill sky gaps, #51 reset/toast lane,
 #52 vite 6→8 + esbuild advisory, #54 notebook tabs, #55 stem-head gap,
 #56 hive panels ride the backlog.
+
+# v5 — HUD grouping grammar (design note, pre-planning)
+
+Proposed during session 10's fix rounds (user walkthrough against
+game-UX grouping best practices). Consumes and extends #59's
+corner-lane rework; NOT session-10 scope beyond the one exception
+noted below. Standing constraints inherited: cozy pillar (no KPI
+dashboards, minimal top-left HUD), measured-lane discipline (live
+boxes, never eye placement), one input path per interaction, the
+existing chrome gate family as the verifier.
+
+## The five clusters
+
+1. TIME cluster (top-right): the season dial and the pause/speed row
+   are one semantic family (what season / how fast) — unify into ONE
+   visually bounded container, ONE measured hard box in the lane
+   solver, reset anchored below it, notices below that. EXCEPTION:
+   this unification lands WITH #59's rework (the controls are being
+   re-anchored anyway — do it once).
+2. MEADOW MENU: reset + enter-a-seed are one feature in disguise
+   (the reset confirm modal already houses the seed input). One
+   named entry point, one panel with modal grammar: reset / start
+   from a friend's seed. Destructive actions cluster together, away
+   from play controls.
+3. SHARE cluster (corner row): postcard + seed share + screenshot =
+   the "show your meadow" family, visually grouped.
+4. PREFERENCES cluster (corner row): EN/SL toggle + audio toggle are
+   global settings — grouped (gear popover if it grows).
+5. MODE-EXCLUSIVE dock: palette tools (plant) and the glass
+   (inspect) are mutually exclusive modes by grammar
+   (select-tool-disarms-glass) — the dock should SHOW it: radio-
+   group affordance, plant vs inspect visually distinct, selected
+   state exclusive by construction.
+
+## Leave alone (explicitly)
+
+World-anchored popups (glass card, hive harvest), journal as one hub
+entry, help panel structure, toast lane discipline, minimal top-left
+status.
+
+## Success test
+
+A first-time visitor can name what each corner of the screen is FOR
+in one glance; every control sits in a group of its semantic family;
+the chrome gates (hits:[] at 7 viewports, derivation-based) stay
+green through the rework — the grouping change is a re-lane, not a
+redesign, and the voxel chrome language is unchanged.
+
+## Gate hooks
+
+The chrome family's measured boxes become per-cluster (time-box,
+meadow-menu, share, prefs); a mode-exclusivity check asserts
+glass+tool states are mutually exclusive in the UI affordance, not
+just in the grammar.
