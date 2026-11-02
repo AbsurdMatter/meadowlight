@@ -162,6 +162,9 @@ export interface UiCopy {
   hubGuestBook: string;
   hiveMore: string;
   hiveJarLine: (n: number) => string;
+  /** #76: hive popup action lines (were hardcoded English) */
+  hiveHarvest: string;
+  hiveStillWorking: string;
   combFull: string;
   combFilling: string;
   combSettling: string;
@@ -295,6 +298,8 @@ const en: UiCopy = {
   cardFirstSighting: 'a first sighting — the notebook will remember it',
   hubGuestBook: 'Who stopped by, and when — the meadow keeps its own guest book.',
   hiveMore: 'more about the hive',
+  hiveHarvest: '\u{1F36B} bring a jar in',
+  hiveStillWorking: 'the bees are still working \u{1F42B}',
   hiveJarLine: (n) => `${n} jar${n === 1 ? '' : 's'} of honey brought in so far`,
   combFull: 'The comb is full and heavy — golden to the brim. \u{1F36B}',
   combFilling: 'The comb is filling — you can see it warming through the straw.',
@@ -430,6 +435,8 @@ const sl: UiCopy = {
   cardFirstSighting: 'prvo videnje — dnevnik si bo zapomnil',
   hubGuestBook: 'Kdo se je ustavil in kdaj — travnik vodi svojo knjigo gostov.',
   hiveMore: 'več o panju',
+  hiveHarvest: '\u{1F36B} prinesi kozarec',
+  hiveStillWorking: '\u010debele \u0161e delajo \u{1F42B}',
   hiveJarLine: (n) => `${n} ${n === 1 ? 'kozarec' : n <= 4 ? `${n} kozarci` : `${n} kozarcev`} medu prinesenega doslej`,
   combFull: 'Sato je polno in težko — zlato do vrha. \u{1F36B}',
   combFilling: 'Sato se polni — skozi slamo se vidi, kako se greje.',

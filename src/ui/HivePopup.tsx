@@ -155,11 +155,11 @@ export function HivePopup() {
           }}
           style={btnStyle(true)}
         >
-          {'\u{1F36B}'} bring a jar in
+          {t.hiveHarvest}
         </button>
       ) : (
         <div style={{ fontSize: theme.font.smallSize, opacity: 0.75, marginTop: 8 }}>
-          the bees are still working {'\u{1F42B}'}
+          {t.hiveStillWorking}
         </div>
       )}
       <button

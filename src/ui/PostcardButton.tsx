@@ -51,10 +51,21 @@ export function PostcardButton() {
     const el = popRef.current;
     if (!el) return;
     const update = () => {
+      // #65 tail round-5: the toast stack is anchored at toastLaneTop (top:
+      // 138) and grows UPWARD (column-reverse), so a live toast's box is
+      // [top, toastLaneTop-ish band], NOT below shareLaneTop. At vpH=500 the
+      // old formula subtracted shareLaneTop (240) from a bottom measured in
+      // viewport coords and clamped by min() into a negative/zero clear —
+      // the popover kept its full height and overlapped the toast card.
+      // Correct clearance: the popover's top edge must sit at or below the
+      // LOWEST live toast card's bottom + gap, i.e. maxHeight shrinks by
+      // (popoverTopTarget - toastBottom) measured from the actual rects.
       const cards = [...document.querySelectorAll('[data-toast]')];
-      const bottom = cards.reduce((m, c) => Math.max(m, c.getBoundingClientRect().bottom), 0);
-      const cornerTop = btnRef.current ? btnRef.current.getBoundingClientRect().top : window.innerHeight;
-      const clear = Math.max(0, Math.min(bottom + CHROME_TUNING.shareLaneGap, cornerTop) - CHROME_TUNING.shareLaneTop);
+      const toastBottom = cards.reduce((m, c) => Math.max(m, c.getBoundingClientRect().bottom), 0);
+      const popRect = el.getBoundingClientRect();
+      const clear = toastBottom > 0
+        ? Math.max(0, popRect.top - (toastBottom + CHROME_TUNING.shareLaneGap))
+        : 0;
       el.style.setProperty('--share-toast-clear', clear.toFixed(1) + 'px');
     };
     update();

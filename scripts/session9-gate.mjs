@@ -254,7 +254,7 @@ async function checkChrome() {
     rec.record(
       'chrome.reset-anchored-under-time-row@' + width + 'x' + height,
       geo.reset !== null && geo.reset.top >= geo.corners.timeRow.bottom && Math.abs(geo.reset.top - geo.corners.timeRow.bottom) <= 10,
-      (geo.reset !== null && Math.abs(geo.reset.top - (geo.corners.timeRow.bottom + 8)) < 2 ? '' : 'FAILED predicate: anchor gap — ') +
+      (geo.reset !== null && Math.abs(geo.reset.top - (geo.corners.timeRow.bottom + 8)) < 2 ? '' : 'WARN anchor gap deviates from +8 spec — ') +
       'resetTop=' + (geo.reset ? geo.reset.top : null) + ' timeRowBottom=' + geo.corners.timeRow.bottom + ' gap=' + (geo.reset ? (geo.reset.top - geo.corners.timeRow.bottom).toFixed(1) : 'n/a'),
     );
     rec.record(
