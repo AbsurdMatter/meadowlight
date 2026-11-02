@@ -11,8 +11,7 @@ import { theme, headingStyle } from './theme';
  * This overlay is NOT part of the game UI — it exists so the user can pick
  * the body font with their own eyeballs on their own machine. The app font
  * (theme.font.family) is untouched until the user picks; the swap is one
- * commit. Candidates: Pixelify Sans (current), Cand Silkscreen (pixel,
- * designed for small sizes), Cand Nunito (rounded, text-legible), Cand
+ * commit (session 10 pick: Jersey 25). Candidates were staged as Cand *
  * Varela Round (single-weight rounded).
  */
 

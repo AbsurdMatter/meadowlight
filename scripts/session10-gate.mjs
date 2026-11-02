@@ -264,7 +264,7 @@ async function checkFonts() {
     await document.fonts.ready;
     const probe = 'čšžČŠŽ';
     const out = {};
-    for (const fam of ['Silkscreen', 'Nunito']) {
+    for (const fam of ['Jersey 25', 'Nunito']) {
       out[fam + ' 400'] = document.fonts.check('400 16px ' + fam, probe);
       out[fam + ' 700'] = document.fonts.check('700 16px ' + fam, probe);
     }
@@ -275,9 +275,9 @@ async function checkFonts() {
       c.font = `${weight} 32px ${family}`;
       return c.measureText(text).width;
     }
-    const wHead = widthOf('Silkscreen', 700, probe);
+    const wHead = widthOf('Jersey 25', 700, probe);
     const wBody = widthOf('Nunito', 700, probe);
-    out['widths'] = { silkscreen700: wHead, nunito700: wBody };
+    out['widths'] = { jersey25_700: wHead, nunito700: wBody };
     // candidate faces (preview overlay): which carry the diacritics
     out['candidates'] = {};
     const fams = ['Cand Jersey 25', 'Cand Pixelify', 'Cand Press Start 2P', 'Cand VT323', 'Cand Handjet', 'Cand DotGothic16', 'Cand Jersey 10', 'Cand Jersey 15', 'Cand Jersey 20', 'Cand Tektur', 'Cand Kode Mono', 'Cand Sixtyfour'];
@@ -313,8 +313,8 @@ async function checkFonts() {
     }
     return out;
   });
-  const slHeadingOk = r['Silkscreen 700'] === true;
-  rec.record('fonts.heading-face-carries-sl-diacritics', slHeadingOk, JSON.stringify(r['Silkscreen 400']) + '/' + JSON.stringify(r['Silkscreen 700']) + ' widths ' + JSON.stringify(r.widths));
+  const slHeadingOk = r['Jersey 25 700'] === true && r['Jersey 25 400'] === true;
+  rec.record('fonts.heading-face-carries-sl-diacritics', slHeadingOk, 'Jersey25 400=' + JSON.stringify(r['Jersey 25 400']) + ' 700=' + JSON.stringify(r['Jersey 25 700']) + ' widths ' + JSON.stringify(r.widths));
   rec.record('fonts.candidates-diacritic-coverage', true, JSON.stringify(r.candidates));
   // #64 acceptance: every glyph of the test line, both weights, in the
   // candidate's OWN single face (per-glyph width == candidate face, not the

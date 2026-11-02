@@ -28,8 +28,8 @@ export interface PostcardStat {
   value: string;
 }
 
-// round 5: the postcard follows the app's typography roles — title in the
-// HEADING role (Silkscreen 700), stat lines in the BODY role (Nunito) —
+// the postcard follows the app's typography roles — title in the
+// HEADING role (Jersey 25, session-10 pick), stat lines in the BODY role (Nunito) —
 // one source (data/typography.ts), so the PNG matches the DOM hierarchy
 const FONT_FAMILY = TYPOGRAPHY.body.family + ', monospace';
 const TITLE_FAMILY = TYPOGRAPHY.heading.family + ', monospace';

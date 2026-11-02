@@ -8,7 +8,7 @@
  * Design language ("everything voxel, including the chrome"):
  *   - the two font ROLES live in src/data/typography.ts (typography as
  *     data, round 5): BODY = Nunito 400/500/700 (self-hosted woff2 in
- *     public/fonts), HEADINGS = Silkscreen 400/700 — pixel identity where
+ *     public/fonts), HEADINGS = Jersey 25 (session-10 pick) — display face where
  *     short labels read best, legible rounded body for long copy. The
  *     embed never fetches anything at runtime; @font-face is in index.html
  *   - chunky borders (2-3px), small radii (voxels have none, but 4-6px keeps
@@ -21,7 +21,7 @@ export const theme = {
   font: {
     /** BODY stack — Nunito, bundled, so it works offline/file:// */
     family: TYPOGRAPHY.body.family,
-    /** HEADING stack — Silkscreen titles/labels (see typography.ts) */
+    /** HEADING stack — Jersey 25 titles/labels (see typography.ts) */
     familyHeading: TYPOGRAPHY.heading.family,
     bodySize: 14,
     smallSize: 12,
@@ -88,7 +88,7 @@ export const panelStyle: React.CSSProperties = {
 
 /**
  * Heading preset — the ONE way panels express hierarchy: the HEADING font
- * role (Silkscreen 700, self-hosted — see data/typography.ts), themed
+ * role (Jersey 25, self-hosted — see data/typography.ts), themed
  * color, tight letter spacing. Section labels, fact titles, dialog headings
  * all use this; body copy stays in the body role (Nunito 400/500).
  */
