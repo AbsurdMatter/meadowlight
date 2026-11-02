@@ -295,7 +295,15 @@ export function KeyboardShortcuts() {
       const cornerRow = document.querySelector('[data-corner-row]');
       const cornerBox = corner ? corner.getBoundingClientRect() : cornerRow ? cornerRow.getBoundingClientRect() : null;
       const floorY = (cornerBox ? cornerBox.top : window.innerHeight) - 8;
-      const top = Math.max(minTop, ceiling); // never above the ceiling
+      // #65 round-6: the solver's conflict branch must actually FIRE at short
+      // viewports. top = max(minTop, ceiling) can exceed floorY (ceiling above
+      // the floor) — then band clamps to 0 and the panel renders at `top`
+      // with unclamped height, overlapping the corner row (panel bottom
+      // 378.39 vs cornerRow top 368 at 360x500). Pin top to the floor and
+      // let the height clamp do the shrinking: top = min(max(minTop, ceiling),
+      // floorY) when the band would be negative.
+      const topRaw = Math.max(minTop, ceiling); // never above the ceiling
+      const top = topRaw <= floorY ? topRaw : Math.max(minTop, floorY);
       // free vertical band below the ceiling, measured in BORDER-box px:
       // the panel's getBoundingClientRect().height is border-box, so the
       // band the panel may occupy is floorY - top (both viewport coords).

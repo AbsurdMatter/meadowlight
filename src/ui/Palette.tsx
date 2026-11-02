@@ -315,10 +315,16 @@ export function Palette() {
         // frames; at narrow frames the corner row WRAPS (two rows), so the
         // reserved lane is the wrapped row's HEIGHT and the dock bounds
         // itself to the tab column + scrollable body
-        right: narrow ? 'auto' : CHROME_TUNING.cornerLane,
+        // #65 round-6: at narrow widths the dock must also clear the corner
+        // controls HORIZONTALLY — with right:'auto' the dock's maxWidth
+        // (100vw - 2*inset) lets it run under the corner row at 700 (dock
+        // 220 wide vs cornerTop 712 = overlap). Reserve the corner lane
+        // width on the right at ALL widths; the bottom offset already
+        // stacks the dock above the wrapped corner rows.
+        right: CHROME_TUNING.cornerLane,
         width: narrow ? CHROME_TUNING.narrowDockWidth : 'fit-content',
         maxWidth: narrow
-          ? `calc(100vw - ${CHROME_TUNING.dockInset * 2}px)`
+          ? `calc(100vw - ${CHROME_TUNING.cornerLane + CHROME_TUNING.dockInset * 2}px)`
           : `calc(100vw - ${CHROME_TUNING.cornerLane + CHROME_TUNING.dockInset + CHROME_TUNING.dockMaxWidthExtra}px)`,
         display: 'flex',
         flexWrap: narrow ? 'wrap' : 'nowrap',

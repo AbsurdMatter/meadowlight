@@ -62,11 +62,15 @@ export function PostcardButton() {
       // (popoverTopTarget - toastBottom) measured from the actual rects.
       const cards = [...document.querySelectorAll('[data-toast]')];
       const toastBottom = cards.reduce((m, c) => Math.max(m, c.getBoundingClientRect().bottom), 0);
-      const popRect = el.getBoundingClientRect();
-      const clear = toastBottom > 0
-        ? Math.max(0, popRect.top - (toastBottom + CHROME_TUNING.shareLaneGap))
-        : 0;
-      el.style.setProperty('--share-toast-clear', clear.toFixed(1) + 'px');
+      // #65 round-6: set the popover's TOP directly below the lowest live
+      // toast (or at the viewport margin), never above it — this is the pair
+      // that actually intersects at vpH=500 (share top 238 vs toast card
+      // bottom in the 138-lane band). maxHeight shrinks from the viewport.
+      const topTarget = toastBottom > 0
+        ? Math.max(8, toastBottom + CHROME_TUNING.shareLaneGap)
+        : 8;
+      el.style.setProperty('--share-top', topTarget.toFixed(1) + 'px');
+      el.style.setProperty('--share-toast-clear', '0px');
     };
     update();
     const t = setInterval(update, 400);
@@ -169,15 +173,16 @@ export function PostcardButton() {
             // row's top) and is clamped to the viewport top — it can never
             // render off-screen below the fold again. The chrome gate still
             // asserts it never intersects a notice/corner box.
-            bottom: 'calc(100% + ' + CHROME_TUNING.shareLaneGap + 'px)',
-            top: 'auto',
+            // #65 round-6: the popover is anchored to its BUTTON's top edge
+            // (bottom: 100% of the wrapper) — not to a fixed lane top — so at
+            // short viewports its top is already low; what must clear the
+            // toast stack is the TOP edge itself: top = max(8, toastBottom +
+            // gap), computed live and applied as a px top with bottom:auto.
+            top: 'var(--share-top, auto)',
+            bottom: 'auto',
             right: 0,
             zIndex: 60,
-            // #65 tail: clamp the popover's TOP to clear the live toast
-            // stack (its lowest card's bottom + gap) when toasts are up —
-            // at short viewports the upward popover otherwise overlaps the
-            // notice lane. maxHeight keeps it inside the viewport regardless.
-            maxHeight: 'calc(100vh - ' + CHROME_TUNING.shareLaneTop + 'px - var(--share-toast-clear, 0px))',
+            maxHeight: 'calc(100vh - 16px - var(--share-toast-clear, 0px))',
             overflowY: 'auto',
             padding: theme.spacing.panelPadding,
             borderRadius: theme.border.radiusPanel,
