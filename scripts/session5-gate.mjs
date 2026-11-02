@@ -92,12 +92,12 @@ async function checkRoster(browser) {
       w.clear();
       // #80: locale-agnostic — the palette chip names come from
       // PLANT_NAME_COPY[locale] (SL run renders Sivka/Detelja/...), so match
-      // by the data-palette-thumb key, never by English text
+      // by the data-palette-entry key (the chip's real attribute), never by English text
       const ids = ['lavender','clover','poppy','sunflower','thyme','forget-me-not','crocus','borage','cosmos','aster'];
       const missing = [];
       let inViewport = 0;
       for (const id of ids) {
-        const btn = document.querySelector('button[data-palette-thumb="plant:' + id + '"]');
+        const btn = document.querySelector('button[data-palette-entry="plant:' + id + '"]');
         if (!btn) { missing.push(id); continue; }
         const rect = btn.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0 && rect.bottom > 0) inViewport++;
@@ -267,7 +267,7 @@ async function checkBushes(browser) {
       w.clear();
       // palette button exists and is not locked
       // #80: locale-agnostic — Berry Bush renders as Grmičevje under SL
-      const btn = document.querySelector('button[data-palette-thumb="structure:bush"]');
+      const btn = document.querySelector('button[data-palette-entry="structure:bush"]');
       const paletteOk = !!btn && !btn.disabled && btn.getBoundingClientRect().width > 0;
       // place flowers + hive, then a bush; appeal is internal, so observe the
       // bee count proxy: beesForHive scales with appeal
@@ -689,7 +689,10 @@ async function checkTriggers(browser) {
   // the forced-override flag is module memory (testForced) — never persisted;
   // after reload it is null by construction. The observable contract: the
   // SAVED blob carries no precip/force field at all.
-  const savedKeys = Object.keys(JSON.parse(localStorage.getItem('meadowlight.world.v2') || '{}'));
+  // #80 round-7: localStorage is a BROWSER global — read the save blob inside
+  // page.evaluate, never in node scope (the round-6 version crashed here and
+  // every check after it never ran)
+  const savedKeys = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('meadowlight.world.v2') || '{}')));
   const precipKeys = savedKeys.filter((k) => /rain|precip|force/i.test(k));
   rec.record('triggers.rain-does-not-persist', precipKeys.length === 0,
     JSON.stringify({ rainAfterReload: resumed.rain.count, savedPrecipKeys: precipKeys, note: 'natural rain (N1) allowed; the save must carry no precip/force field' }));
