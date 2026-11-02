@@ -730,6 +730,49 @@ async function checkKeys() {
   await page.waitForTimeout(200);
   const j3 = await page.evaluate(() => window.__meadowlight.hubOpenReadback());
   rec.record('keys.esc-cancels-hub', j2 && !j3, 'hubOpen after ESC: ' + j3);
+  // #62 sequence-aware: open the share panel, close it with Esc, THEN the
+  // hub must still close on Esc (a stray panel state must not eat the hub's
+  // Esc later in the same session)
+  {
+    await page.keyboard.press('j'); // hub open
+    await page.waitForTimeout(200);
+    const hubBefore = await page.evaluate(() => window.__meadowlight.hubOpenReadback());
+    // open the share panel via its real button, close via Esc
+    await page.evaluate(() => {
+      document.querySelector('[data-seed-share-button]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await page.waitForTimeout(250);
+    const shareOpen = await page.evaluate(() => window.__meadowlight.sharePanelOpenReadback());
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    const shareAfterEsc = await page.evaluate(() => window.__meadowlight.sharePanelOpenReadback());
+    rec.record('keys.esc-closes-share-panel', shareOpen && !shareAfterEsc, 'sharePanelOpen ' + shareOpen + ' -> ' + shareAfterEsc + ' after ESC');
+    // hub still open at this point (share panel outranked it) — Esc now closes the hub
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    const hubAfter = await page.evaluate(() => window.__meadowlight.hubOpenReadback());
+    rec.record('keys.esc-closes-hub-after-share-panel-sequence', hubBefore && !hubAfter, 'hubOpen ' + hubBefore + ' -> ' + hubAfter + ' (share panel opened+Esc-closed earlier in the session)');
+    // X button closes the share panel too
+    await page.evaluate(() => {
+      document.querySelector('[data-seed-share-button]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await page.waitForTimeout(250);
+    await page.evaluate(() => {
+      document.querySelector('[data-seed-share-close]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await page.waitForTimeout(250);
+    const shareAfterX = await page.evaluate(() => window.__meadowlight.sharePanelOpenReadback());
+    rec.record('keys.share-panel-x-closes', !shareAfterX, 'sharePanelOpen after X click: ' + shareAfterX);
+    // click-outside closes the share panel
+    await page.evaluate(() => {
+      document.querySelector('[data-seed-share-button]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await page.waitForTimeout(250);
+    await page.mouse.click(40, 300); // far from the corner panel
+    await page.waitForTimeout(250);
+    const shareAfterOutside = await page.evaluate(() => window.__meadowlight.sharePanelOpenReadback());
+    rec.record('keys.share-panel-click-outside-closes', !shareAfterOutside, 'sharePanelOpen after outside click: ' + shareAfterOutside);
+  }
   // keys ignored while typing (focus an input)
   const typed = await page.evaluate(() => {
     const w = window.__meadowlight;

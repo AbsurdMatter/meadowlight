@@ -154,6 +154,8 @@ declare global {
     audioIsRunning: () => boolean;
     /** O5 (v4, #43): readbacks for the keyboard gate */
     hubOpenReadback: () => boolean;
+    /** #61/#62: share-panel + hint-panel open readbacks (the Esc-close surfaces) */
+    sharePanelOpenReadback: () => boolean;
     modalOpenReadback: () => boolean;
     /** P3: open/close the reset confirm modal (the same modal R opens) */
     setModalOpenForTest: (open: boolean) => void;
@@ -421,6 +423,7 @@ export function installTestHook() {
     terrainHeightAt: (x, z) => groundAt(x, z).height,
     audioIsRunning: () => audioRunning(),
     hubOpenReadback: () => usePlacementStore.getState().hubOpen,
+    sharePanelOpenReadback: () => usePlacementStore.getState().sharePanelOpen,
     modalOpenReadback: () => usePlacementStore.getState().modalOpen,
     setModalOpenForTest: (open) => usePlacementStore.getState().setModalOpen(open),
     toastsReadback: () => usePlacementStore.getState().toasts,
