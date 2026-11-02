@@ -104,6 +104,8 @@ export function KeyboardShortcuts() {
   const t = useLocale((s) => s.t());
   const keys = useRef<KeyState>(emptyKeyState());
   const [hintOpen, setHintOpen] = useState(false);
+  const hintOpenRef = useRef(false);
+  useEffect(() => { hintOpenRef.current = hintOpen; }, [hintOpen]);
 
   useEffect(() => {
     // share the key state with the in-Canvas translation (one ref, two
@@ -153,12 +155,16 @@ export function KeyboardShortcuts() {
           hubOpen: s.hubOpen,
           hivePopupOpen: s.hivePopup !== null,
           glassArmed: s.magnifierOn,
+          sharePanelOpen: s.sharePanelOpen,
+          hintPanelOpen: hintOpenRef.current,
         });
         if (esc === 'close-modal') s.setModalOpen(false);
         else if (esc === 'close-notebook') s.closeNotebook();
         else if (esc === 'close-hub') usePlacementStore.setState({ hubOpen: false });
         else if (esc === 'close-hive-popup') s.closeHivePopup();
         else if (esc === 'disarm-glass') usePlacementStore.setState({ magnifierOn: false, magnifierEntry: null });
+        else if (esc === 'close-share-panel') s.setSharePanelOpen(false);
+        else if (esc === 'close-hint-panel') setHintOpen(false);
         return;
       }
     };

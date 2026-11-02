@@ -1664,18 +1664,27 @@ test('O5: held keys drive the key state; toggles are single-fire', () => {
   assert.ok(!isTypingTarget(null), 'null target is not typing');
 });
 
-test('O5: the ESC semantics table — cancel-anything, one order, one place', () => {
-  const open = { modalOpen: false, notebookOpen: false, hubOpen: false, hivePopupOpen: false, glassArmed: false };
+test('O5/#62: the ESC semantics table — cancel-anything, one order, one place', () => {
+  const open = { modalOpen: false, notebookOpen: false, hubOpen: false, hivePopupOpen: false, glassArmed: false, sharePanelOpen: false, hintPanelOpen: false };
   assert.strictEqual(escActionFor(open), null, 'nothing open = ESC does nothing');
   assert.strictEqual(escActionFor({ ...open, glassArmed: true }), 'disarm-glass', 'armed glass disarms');
   assert.strictEqual(escActionFor({ ...open, hivePopupOpen: true }), 'close-hive-popup');
-  assert.strictEqual(escActionFor({ ...open, hubOpen: true }), 'close-hub');
+  assert.strictEqual(escActionFor({ ...open, hubOpen: true }), 'close-hub', 'hub closes (#62 regression guard)');
   assert.strictEqual(escActionFor({ ...open, notebookOpen: true }), 'close-notebook');
-  // the modal wins over everything (it blocks input — cancel it first)
+  assert.strictEqual(escActionFor({ ...open, sharePanelOpen: true }), 'close-share-panel', 'share panel closes on Esc (#61)');
+  assert.strictEqual(escActionFor({ ...open, hintPanelOpen: true }), 'close-hint-panel', 'hint panel closes on Esc');
+  // modal wins over everything (it blocks input — cancel it first); the
+  // share panel outranks the hub so a stray open panel never steals Esc
+  // from the surface the user actually means (#62's suspected mechanism)
   assert.strictEqual(
-    escActionFor({ modalOpen: true, notebookOpen: true, hubOpen: true, hivePopupOpen: true, glassArmed: true }),
+    escActionFor({ modalOpen: true, notebookOpen: true, hubOpen: true, hivePopupOpen: true, glassArmed: true, sharePanelOpen: true, hintPanelOpen: true }),
     'close-modal',
     'the modal is first in the cancel order',
+  );
+  assert.strictEqual(
+    escActionFor({ ...open, hubOpen: true, sharePanelOpen: true }),
+    'close-share-panel',
+    'share panel outranks hub: a stray open panel must not eat the hub Esc',
   );
 });
 

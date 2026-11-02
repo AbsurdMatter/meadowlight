@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { capturePostcardPng, downloadPostcard } from '../engine/postcard';
 import { composePostcard } from '../engine/postcardCompose';
 import { theme, headingStyle } from './theme';
@@ -20,9 +20,26 @@ import { useLocale } from '../engine/locale';
  */
 export function PostcardButton() {
   const t = useLocale((s) => s.t());
+  const popRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  // #61 close grammar: click-outside closes the share panel (same pattern as
+  // the help popover); Esc closes it via the ESC semantics table
+  useEffect(() => {
+    const shown = usePlacementStore.getState().sharePanelOpen;
+    if (!shown) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (popRef.current && !popRef.current.contains(target) && btnRef.current && !btnRef.current.contains(target)) {
+        usePlacementStore.getState().setSharePanelOpen(false);
+      }
+    };
+    window.addEventListener('pointerdown', onDown);
+    return () => window.removeEventListener('pointerdown', onDown);
+  });
   const [saved, setSaved] = useState(false);
   const [stats, setStats] = useState(false);
-  const [seedShown, setSeedShown] = useState(false);
+  const seedShown = usePlacementStore((s) => s.sharePanelOpen);
+  const setSeedShown = usePlacementStore((s) => s.setSharePanelOpen);
   const [seedCopied, setSeedCopied] = useState(false);
   const onClick = async () => {
     try {
@@ -73,6 +90,7 @@ export function PostcardButton() {
       </button>
       {stats && <PostcardStats />}
       <button
+        ref={btnRef}
         onClick={async () => {
           const s = usePlacementStore.getState();
           const code = encodeSeedCode(s.worldSeed, s.items);
@@ -111,6 +129,7 @@ export function PostcardButton() {
       </button>
       {seedShown && (
         <div
+          ref={popRef}
           data-seed-share-popover
           style={{
             position: 'absolute',
@@ -129,7 +148,17 @@ export function PostcardButton() {
             pointerEvents: 'auto',
           }}
         >
-          <div style={{ ...headingStyle(theme.font.bodySize), marginBottom: 6 }}>{t.seedShareHeading}</div>
+          <div style={{ ...headingStyle(theme.font.bodySize), marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{t.seedShareHeading}</span>
+            <button
+              data-seed-share-close
+              onClick={() => setSeedShown(false)}
+              aria-label={t.seedShareHeading}
+              style={{ border: 'none', background: 'transparent', color: theme.color.textSoft, fontSize: 16, cursor: 'pointer', fontFamily: theme.font.family }}
+            >
+              ×
+            </button>
+          </div>
           <div
             data-seed-code
             style={{

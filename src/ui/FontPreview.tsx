@@ -23,7 +23,7 @@ interface Cand {
   note: string;
   weights: string;
   /** the woff2 urls to register imperatively (see FONT_FACE_BYTES) */
-  faces: { url: string; weight: string }[];
+  faces: { url: string; weight: string; range?: string }[];
   /** the probe family name used for the imperative FontFace registration */
   probe: string;
 }
@@ -38,31 +38,37 @@ interface Cand {
  * under suffixed probe families and renders with those. The visual result is
  * identical either way — the same woff2 bytes.
  */
-const FONT_FACE_BYTES: Record<string, { url: string; weight: string }[]> = {
-  'jersey-25': [{ url: '/fonts/jersey-25-latin-ext-400-normal.woff2', weight: '400' }],
+const EXT_RANGE = 'U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF';
+// #64: each candidate registers BOTH subsets under the probe family — the
+// latin file first with NO range (so it owns ASCII), the latin-ext file with
+// the diacritic range — so every glyph of the test line renders in this one
+// face. A single latin-ext-only registration would make ASCII fall through
+// to whatever follows the family in the stack = mixed faces.
+const FONT_FACE_BYTES: Record<string, { url: string; weight: string; range?: string }[]> = {
+  'jersey-25': [{ url: '/fonts/jersey-25-latin-400-normal.woff2', weight: '400' }, { url: '/fonts/jersey-25-latin-ext-400-normal.woff2', weight: '400', range: EXT_RANGE }],
   'pixelify-sans': [
-    { url: '/fonts/pixelify-sans-latin-ext-400-normal.woff2', weight: '400' },
-    { url: '/fonts/pixelify-sans-latin-ext-700-normal.woff2', weight: '700' },
+    { url: '/fonts/pixelify-sans-latin-400-normal.woff2', weight: '400' }, { url: '/fonts/pixelify-sans-latin-ext-400-normal.woff2', weight: '400', range: EXT_RANGE },
+    { url: '/fonts/pixelify-sans-latin-700-normal.woff2', weight: '700' }, { url: '/fonts/pixelify-sans-latin-ext-700-normal.woff2', weight: '700', range: EXT_RANGE },
   ],
-  'press-start-2p': [{ url: '/fonts/press-start-2p-latin-ext-400-normal.woff2', weight: '400' }],
-  'vt323': [{ url: '/fonts/vt323-latin-ext-400-normal.woff2', weight: '400' }],
+  'press-start-2p': [{ url: '/fonts/press-start-2p-latin-400-normal.woff2', weight: '400' }, { url: '/fonts/press-start-2p-latin-ext-400-normal.woff2', weight: '400', range: EXT_RANGE }],
+  'vt323': [{ url: '/fonts/vt323-latin-400-normal.woff2', weight: '400' }, { url: '/fonts/vt323-latin-ext-400-normal.woff2', weight: '400', range: EXT_RANGE }],
   'handjet': [
-    { url: '/fonts/handjet-latin-ext-400-normal.woff2', weight: '400' },
-    { url: '/fonts/handjet-latin-ext-700-normal.woff2', weight: '700' },
+    { url: '/fonts/handjet-latin-400-normal.woff2', weight: '400' }, { url: '/fonts/handjet-latin-ext-400-normal.woff2', weight: '400', range: EXT_RANGE },
+    { url: '/fonts/handjet-latin-700-normal.woff2', weight: '700' }, { url: '/fonts/handjet-latin-ext-700-normal.woff2', weight: '700', range: EXT_RANGE },
   ],
-  'dotgothic16': [{ url: '/fonts/dotgothic16-latin-ext-400-normal.woff2', weight: '400' }],
-  'jersey-10': [{ url: '/fonts/jersey-10-latin-ext-400-normal.woff2', weight: '400' }],
-  'jersey-15': [{ url: '/fonts/jersey-15-latin-ext-400-normal.woff2', weight: '400' }],
-  'jersey-20': [{ url: '/fonts/jersey-20-latin-ext-400-normal.woff2', weight: '400' }],
+  'dotgothic16': [{ url: '/fonts/dotgothic16-latin-400-normal.woff2', weight: '400' }, { url: '/fonts/dotgothic16-latin-ext-400-normal.woff2', weight: '400', range: EXT_RANGE }],
+  'jersey-10': [{ url: '/fonts/jersey-10-latin-400-normal.woff2', weight: '400' }, { url: '/fonts/jersey-10-latin-ext-400-normal.woff2', weight: '400', range: EXT_RANGE }],
+  'jersey-15': [{ url: '/fonts/jersey-15-latin-400-normal.woff2', weight: '400' }, { url: '/fonts/jersey-15-latin-ext-400-normal.woff2', weight: '400', range: EXT_RANGE }],
+  'jersey-20': [{ url: '/fonts/jersey-20-latin-400-normal.woff2', weight: '400' }, { url: '/fonts/jersey-20-latin-ext-400-normal.woff2', weight: '400', range: EXT_RANGE }],
   'tektur': [
-    { url: '/fonts/tektur-latin-ext-400-normal.woff2', weight: '400' },
-    { url: '/fonts/tektur-latin-ext-700-normal.woff2', weight: '700' },
+    { url: '/fonts/tektur-latin-400-normal.woff2', weight: '400' }, { url: '/fonts/tektur-latin-ext-400-normal.woff2', weight: '400', range: EXT_RANGE },
+    { url: '/fonts/tektur-latin-700-normal.woff2', weight: '700' }, { url: '/fonts/tektur-latin-ext-700-normal.woff2', weight: '700', range: EXT_RANGE },
   ],
   'kode-mono': [
-    { url: '/fonts/kode-mono-latin-ext-400-normal.woff2', weight: '400' },
-    { url: '/fonts/kode-mono-latin-ext-700-normal.woff2', weight: '700' },
+    { url: '/fonts/kode-mono-latin-400-normal.woff2', weight: '400' }, { url: '/fonts/kode-mono-latin-ext-400-normal.woff2', weight: '400', range: EXT_RANGE },
+    { url: '/fonts/kode-mono-latin-700-normal.woff2', weight: '700' }, { url: '/fonts/kode-mono-latin-ext-700-normal.woff2', weight: '700', range: EXT_RANGE },
   ],
-  'sixtyfour': [{ url: '/fonts/sixtyfour-latin-ext-400-normal.woff2', weight: '400' }],
+  'sixtyfour': [{ url: '/fonts/sixtyfour-latin-400-normal.woff2', weight: '400' }, { url: '/fonts/sixtyfour-latin-ext-400-normal.woff2', weight: '400', range: EXT_RANGE }],
 };
 
 const CANDIDATES: Cand[] = [
@@ -157,7 +163,10 @@ function Sample({ family }: { family: string }) {
  *  family first (works in every environment, same woff2 bytes), then the
  *  CSS @font-face family (the path the real app uses) as fallback */
 function probeStack(c: Cand): string {
-  return `'${c.probe}', ${c.family}`;
+  // #64: the stack is the candidate family ONLY (+ generic sans fallback) —
+  // never the app's own faces — so a mixed sample line cannot be misread as
+  // the candidate's look.
+  return `'${c.probe}', ${c.family}, sans-serif`;
 }
 
 export function FontPreview() {
@@ -174,7 +183,7 @@ export function FontPreview() {
           try {
             const buf = await (await fetch(f.url)).arrayBuffer();
             if (cancelled) return;
-            const ff = new FontFace(c.probe, buf, { weight: f.weight });
+            const ff = new FontFace(c.probe, buf, { weight: f.weight, unicodeRange: f.range });
             await ff.load();
             document.fonts.add(ff);
           } catch {

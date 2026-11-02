@@ -280,14 +280,59 @@ async function checkFonts() {
     out['widths'] = { silkscreen700: wHead, nunito700: wBody };
     // candidate faces (preview overlay): which carry the diacritics
     out['candidates'] = {};
-    for (const fam of ['Cand Jersey 25', 'Cand Pixelify', 'Cand Press Start 2P', 'Cand VT323', 'Cand Handjet', 'Cand DotGothic16', 'Cand Jersey 10', 'Cand Jersey 15', 'Cand Jersey 20', 'Cand Tektur', 'Cand Kode Mono', 'Cand Sixtyfour']) {
-      out['candidates'][fam] = document.fonts.check('400 16px ' + fam, probe);
+    const fams = ['Cand Jersey 25', 'Cand Pixelify', 'Cand Press Start 2P', 'Cand VT323', 'Cand Handjet', 'Cand DotGothic16', 'Cand Jersey 10', 'Cand Jersey 15', 'Cand Jersey 20', 'Cand Tektur', 'Cand Kode Mono', 'Cand Sixtyfour'];
+    for (const fam of fams) {
+      out['candidates'][fam] = {
+        '400': document.fonts.check('400 16px ' + fam, probe),
+        '700': document.fonts.check('700 16px ' + fam, probe),
+        'ascii': document.fonts.check('400 16px ' + fam, 'Meadow'),
+      };
+    }
+    // #64 per-glyph, per-weight width consistency: every glyph of the test
+    // line measured in the candidate face must come from ONE face — compare
+    // each glyph's width in the candidate vs in the known fallback (Nunito):
+    // a per-glyph fallback shows a width jump to the fallback's metric.
+    function width(family, weight, ch) {
+      const c = document.createElement('canvas').getContext('2d');
+      c.font = weight + ' 32px ' + family;
+      return c.measureText(ch).width;
+    }
+    const glyphs = ['\u010d', '\u0161', '\u017e', '\u010c', '\u0160', '\u017d', 'A', 'z'];
+    out['perGlyph'] = {};
+    for (const fam of fams) {
+      const entry = {};
+      for (const w of ['400', '700']) {
+        entry[w] = {};
+        for (const g of glyphs) {
+          const cand = width(fam, w, g);
+          const fallback = width('Nunito', w, g);
+          entry[w][g] = { cand, fallback, sameFace: Math.abs(cand - fallback) < 0.01 };
+        }
+      }
+      out['perGlyph'][fam] = entry;
     }
     return out;
   });
   const slHeadingOk = r['Silkscreen 700'] === true;
   rec.record('fonts.heading-face-carries-sl-diacritics', slHeadingOk, JSON.stringify(r['Silkscreen 400']) + '/' + JSON.stringify(r['Silkscreen 700']) + ' widths ' + JSON.stringify(r.widths));
   rec.record('fonts.candidates-diacritic-coverage', true, JSON.stringify(r.candidates));
+  // #64 acceptance: every glyph of the test line, both weights, in the
+  // candidate's OWN single face (per-glyph width == candidate face, not the
+  // fallback's metric). Candidates documented as lacking \u010d (dotgothic16,
+  // sixtyfour) are expected-fail on \u010d and are listed, not hidden.
+  const expectedLackC = { 'Cand DotGothic16': true, 'Cand Sixtyfour': true };
+  let perGlyphFails = [];
+  for (const [fam, weights] of Object.entries(r.perGlyph)) {
+    for (const [w, glyphs] of Object.entries(weights)) {
+      for (const [g, m] of Object.entries(glyphs)) {
+        if (!m.sameFace) {
+          if (g === '\u010d' && expectedLackC[fam]) continue; // documented lack
+          perGlyphFails.push(fam + ' ' + w + ' ' + g);
+        }
+      }
+    }
+  }
+  rec.record('fonts.each-glyph-single-face-both-weights', perGlyphFails.length === 0, 'perGlyphFails=' + JSON.stringify(perGlyphFails));
 
   const re = realErrors(errors);
   rec.record('fonts.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
