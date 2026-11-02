@@ -989,6 +989,18 @@ test('lifecycle: NO DECLINE FRAMING — every surface line is winter-safe (the c
 test('#50: the rim ring is deterministic, past outerRadius, varied heights, pond-excluded', () => {
   const rim = rimBoxesReadback();
   assert.ok(rim.length > 100, 'the rim ring has real blocks: ' + rim.length);
+  // #66 eyeball follow-up: the renderer's instanced buffer is sized from the
+  // SAME layout (hills + rim counted exactly) — assert the OLD area/step^2
+  // estimate could under-size it (three.js drops instances past the instance
+  // count silently; that under-count was the through-rim gap source), i.e.
+  // the real layout count is what the renderer now uses
+  {
+    const hillsN = hillsBoxesReadback().length;
+    const envC = require(OUT + '/data/environment.js');
+    const inner = envC.HILLS.innerRadius, outer = envC.HILLS.outerRadius + envC.HILLS.rimRingWidth, step = envC.HILLS.step;
+    const est = Math.floor((Math.PI * (outer * outer - inner * inner)) / (step * step));
+    assert.ok(hillsN + rim.length < est, 'old area estimate (' + est + ') over-counted the real layout (' + (hillsN + rim.length) + ') — the old buffer was too SMALL for the real draw order, dropping trailing rim boxes');
+  }
   const a = rimBoxesReadback();
   assert.deepStrictEqual(rim, a, 'rim layout is deterministic (same call = same boxes)');
   const outer = 50; // HILLS.outerRadius

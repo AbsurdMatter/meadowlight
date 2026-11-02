@@ -63,13 +63,12 @@ function isPondBandCell(x: number, z: number): boolean {
 function Hills() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
 
-  const count = useMemo(() => {
-    const inner = HILLS.innerRadius;
-    const outer = HILLS.outerRadius + HILLS.rimRingWidth;
-    const step = HILLS.step;
-    const area = Math.PI * (outer * outer - inner * inner);
-    return Math.floor(area / (step * step));
-  }, []);
+  // #66 eyeball follow-up: the instanced buffer must fit the REAL layout —
+  // hillsBoxes() + rimBoxes() counted exactly (the old area/step^2 estimate
+  // under-counted and three.js silently dropped every box past `count`,
+  // which is where the visible through-rim gaps on the elongated edges
+  // came from). One source: the same hillsLayout the loop draws.
+  const count = useMemo(() => hillsBoxes().length + rimBoxes().length, []);
 
   useEffect(() => {
     const mesh = meshRef.current;
