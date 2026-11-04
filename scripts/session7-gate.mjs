@@ -419,16 +419,34 @@ async function checkTimeControlsUI() {
   const pausedUI = await page.evaluate(async () => {
     const w = window.__meadowlight;
     w.timeSetPaused(true);
-    // the row re-renders on its 1s interval and the opacity then takes a
-    // 0.25s transition — the old 1300ms wait could sample BEFORE the
-    // transition started (chip present, opacity still "1"). Wait past
-    // tick + transition with margin, and read the opacity BEFORE unpausing.
-    await new Promise((r) => setTimeout(r, 2200));
+    // #84 (detector fix): the row re-renders on its OWN 1s interval, so the
+    // paused style lands up to 1s after the call and the 0.25s opacity
+    // transition runs after that. A FIXED wait samples wherever that
+    // interval phase happens to be — the FAIL read chip:true with
+    // rowOpacity:"1", i.e. sampled at the transition's start value. Poll
+    // the computed opacity until it settles below the dim threshold
+    // (5s deadline), then read chip + rects + inline opacity in that
+    // settled state and BEFORE unpausing (wait past tick+transition, read
+    // before mutating — the session-7 canon).
+    let row = null;
+    let rowOpacity = null;
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 100));
+      row = document.querySelector('[data-time-row]');
+      rowOpacity = row ? getComputedStyle(row).opacity : null;
+      if (rowOpacity !== null && parseFloat(rowOpacity) < 0.7) break;
+    }
     const chip = document.querySelector('[data-paused-chip]');
-    const row = document.querySelector('[data-time-row]');
     const chipRect = chip ? chip.getBoundingClientRect() : null;
-    const rowOpacity = row ? getComputedStyle(row).opacity : null;
-    const pausedSnapshot = { chip: !!chip, rowOpacity };
+    const pausedSnapshot = {
+      chip: !!chip,
+      rowOpacity,
+      // world-vs-detector fork: inline opacity is the semantic the component
+      // writes; computed is the visible value — a FAIL with inline "0.55"
+      // but computed "1" is a timing read, inline "1" is a world regression
+      rowInlineOpacity: row ? row.style.opacity : null,
+    };
     // the decided observable also includes the INVERSE: running shows no chip
     w.timeSetPaused(false);
     await new Promise((r) => setTimeout(r, 2200));
