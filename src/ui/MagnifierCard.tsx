@@ -121,9 +121,15 @@ export function MagnifierCard() {
   // O2 (v4, #40): the journal records what the glass SHOWS — the card is
   // the one inspection surface, so the sighting rides the card render (the
   // same single write path the store exposes; idempotent per season).
+  // #85 round-2: the write is debounced on entry STABILITY (250ms) — one
+  // inspection records exactly the subject that STAYED under the pointer;
+  // a transient entry flip (creature crossing dead-on mid-hover) writes
+  // nothing, so the journal never gains a second record from one inspection.
   const recordSighting = usePlacementStore((s) => s.recordSighting);
   useEffect(() => {
-    if (entry) recordSighting(entry);
+    if (!entry) return;
+    const t = window.setTimeout(() => recordSighting(entry), 250);
+    return () => window.clearTimeout(t);
   }, [entry, recordSighting]);
   if (!magnifierOn || !entry || !content) return null;
   return (
