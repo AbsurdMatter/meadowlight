@@ -375,6 +375,20 @@ export function KeyboardShortcuts() {
       const panel = panelRef.current;
       if (panel) ro.observe(panel);
     }
+    // #65 round-10: the panel's floor is the LIVE corner box, but the row only
+    // wraps (moving the box) after fonts load / button widths settle — AFTER
+    // the panel may already have placed. Observe the corner wrapper too, so
+    // place() re-runs with a fresh floorY whenever the corner box moves
+    // (the stale-floorY residue: panel∩cornerRow@360x500 while 360x800 and
+    // 1280x500 were fixed by the exact clamp alone).
+    let roCorner: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      const cornerEl = document.querySelector('[data-corner-controls]') ?? document.querySelector('[data-corner-row]');
+      if (cornerEl) {
+        roCorner = new ResizeObserver(() => place());
+        roCorner.observe(cornerEl);
+      }
+    }
     let fontsHooked = false;
     const hookFonts = () => {
       if (fontsHooked) return;
@@ -386,6 +400,7 @@ export function KeyboardShortcuts() {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', place);
       ro?.disconnect();
+      roCorner?.disconnect();
     };
   }, [hintOpen, toastCount, panelMaxWidth, panelMaxHeight, panelTop]);
 

@@ -51,23 +51,27 @@ export function PostcardButton() {
     const el = popRef.current;
     if (!el) return;
     const update = () => {
-      // #65 round-9: the popover opens UPWARD from the corner-row button
-      // (bottom-anchored: it occupies [anchorBottom - h, anchorBottom]). The
-      // toast stack sits ABOVE the corner row, so the edge that can collide
-      // is the popover's TOP against the LOWEST live card's BOTTOM — the
-      // round-8 formula used the stack's top (toastTop) with a +gap, which
-      // over-allows exactly when cards extend low in the lane (share top=238
-      // while toast#0 still covers it at vpH=500). Correct bound, measured
-      // from live rects: top >= maxCardBottom + gap  =>  h <= anchorBottom -
-      // maxCardBottom - gap; and the viewport top pins h <= anchorBottom - 8.
-      const cards = [...document.querySelectorAll('[data-toast]')];
-      let toastBottom: number | null = null;
-      for (const c of cards) { const b = c.getBoundingClientRect().bottom; if (toastBottom === null || b > toastBottom) toastBottom = b; }
-      const btn = btnRef.current;
-      const anchorBottom = btn ? btn.getBoundingClientRect().top : window.innerHeight;
-      const maxH = toastBottom !== null
-        ? Math.max(80, Math.min(anchorBottom - toastBottom - CHROME_TUNING.shareLaneGap, anchorBottom - 8))
-        : window.innerHeight - 16;
+      // #65 round-10: CONVERGE on the rendered rect instead of a one-shot
+      // formula. The popover opens UPWARD from the corner-row button
+      // (bottom-anchored: [anchorBottom - h, anchorBottom]). Start from the
+      // generous viewport cap, then while the RENDERED popover still
+      // intersects a live toast card or pokes above the viewport top, shrink
+      // maxHeight by the measured overlap + 1 and re-read (getBoundingClientRect
+      // reflows synchronously). The round-9 formula moved share top 238 ->
+      // 280.4 but still landed on toast#0 at the 500-height viewports —
+      // the rendered rect is the only truth that survives wrap/font timing.
+      let maxH = window.innerHeight - 16;
+      for (let k = 0; k < 16; k++) {
+        el.style.setProperty('--share-max-h', maxH.toFixed(1) + 'px');
+        const r = el.getBoundingClientRect();
+        let worst = 8 - r.top; // viewport-top overflow (positive = pokes out)
+        for (const c of document.querySelectorAll('[data-toast]')) {
+          const b = c.getBoundingClientRect();
+          worst = Math.max(worst, b.bottom - r.top); // positive = toast overlap
+        }
+        if (worst <= 0.5 && r.bottom <= window.innerHeight + 0.5) break;
+        maxH = Math.max(60, maxH - worst - 1);
+      }
       el.style.setProperty('--share-max-h', Math.min(maxH, window.innerHeight - 16).toFixed(1) + 'px');
     };
     update();
