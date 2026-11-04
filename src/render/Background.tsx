@@ -114,25 +114,20 @@ function Hills() {
         mesh.setColorAt(i, color);
         i++;
     }
-    // #50/#66 (session 10): the extra outer rim ring — additional hills-lattice
-    // boxes past outerRadius from the same shared layout source (rimBoxes()),
-    // rendered with the HILLS' OWN anchor rule (same crest math as the loop
-    // above), so the original ring and the gap-filler read one height profile.
-    // The #50 gap closure is horizontal coverage; #66 restored the approved
-    // rim height (no rimTopLift).
+    // #83 redesign (accepted round-3 proposal): the outer rim ring — square
+    // 6x6-voxel cuboids from the same shared layout source (rimBoxes()), which
+    // now carries each block's full rendered geometry (top/bottom), so
+    // renderer, sweep and tests read ONE source. Square footprints mean no
+    // long axis to look between at glancing angles; tops rise outward.
     const rngRim = makeRng(20261050);
     for (const box of rimBoxes()) {
-        rngRim(); rngRim(); rngRim(); rngRim(); // layout consumed: jx, jz, size, extraH
-        const jx = box.x;
-        const jz = box.z;
+        rngRim(); rngRim(); rngRim(); rngRim(); // layout consumed: jx, jz, extraH, spare
         const size = box.half * 2;
-        const h = backgroundHeight(jx, jz);
-        const extraDepth = Math.max(0, h - backgroundHeight(0, 0)) + 4;
-        const boxH = HILLS.boxHeight + extraDepth;
+        const boxH = box.top - box.bottom;
         mat.makeScale(size, boxH, size);
-        mat.setPosition(jx, h - boxH * 0.55, jz);
+        mat.setPosition(box.x, (box.top + box.bottom) / 2, box.z);
         mesh.setMatrixAt(i, mat);
-        const local = Math.hypot(jx, jz);
+        const local = Math.hypot(box.x, box.z);
         const base = hills[Math.floor(rngRim() * hills.length)];
         const t = THREE.MathUtils.clamp(
           (local - HILLS.fogBlendStart) / (HILLS.fogBlendEnd - HILLS.fogBlendStart),

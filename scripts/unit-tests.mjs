@@ -101,7 +101,7 @@ const { advanceColony, colonyIntensity: colonyIntensityExport, colonyReadback: c
 const { SEEDING_TUNING, SEEDING_FACTS } = require(OUT + '/data/seeding.js');
 const { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, FIREFLY_SUMMER_TUNING, HOVERFLY_AUTUMN_TUNING, isEarlySpring } = require(OUT + '/data/seasonalVisitors.js');
 const { isPlantableCell, groundAt: groundAtReadback } = require(OUT + '/engine/ground.js');
-const { hillsCover: hillsCoverReadback, rimBoxes: rimBoxesReadback, hillsBoxes: hillsBoxesReadback, hillsInstanceCapacity: hillsInstanceCapacityReadback } = require(OUT + '/engine/hillsLayout.js');
+const { hillsCover: hillsCoverReadback, rimBoxes: rimBoxesReadback, hillsBoxes: hillsBoxesReadback, ridgeBoxes: ridgeBoxesReadback, hillsInstanceCapacity: hillsInstanceCapacityReadback, ridgeInstanceCapacity: ridgeInstanceCapacityReadback } = require(OUT + '/engine/hillsLayout.js');
 const { seasonWindows, precipReadback, tickPrecipScheduleForTest, nextWindowAfter } = require(OUT + '/engine/rainSchedule.js');
 const { wasVisitedThisSeason, withVisit, visitedParents } = require(OUT + '/engine/visits.js');
 const { resolveWildlifeHit, nextWildlifeEntry, wildlifeOvertakesMeshClaim } = require(OUT + '/engine/magnifierHit.js');
@@ -985,94 +985,96 @@ test('lifecycle: NO DECLINE FRAMING — every surface line is winter-safe (the c
   assert.ok(rb.target <= 0.08, 'midwinter target is the cluster');
 });
 
-// ---------- session 10 #50: the outer rim ring (no sky through the rim) ----------
-test('#50: the rim ring is deterministic, past outerRadius, varied heights, pond-excluded', () => {
+// ---------- #83 redesign: the outer rim ring (square blocks, new band) ----------
+test('#83: the rim ring is deterministic, square world-unit footprints, in the new band, pond-excluded, boundary-safe', () => {
   const rim = rimBoxesReadback();
+  const env = require(OUT + '/data/environment.js');
+  const { HILLS, LAKE } = env;
+  const inner = HILLS.hillsOuterRadius - 2; // rim owns cell centers r > hillsOuter-2 (seam overlap)
+  const outer = HILLS.hillsOuterRadius + HILLS.rimRingWidth;
+  const foot = HILLS.rimFootprintVoxels * HILLS.step;
   assert.ok(rim.length > 100, 'the rim ring has real blocks: ' + rim.length);
-  // #66 eyeball follow-up: the renderer's instanced buffer is sized from the
-  // SAME layout (hills + rim counted exactly) — assert the OLD area/step^2
-  // estimate could under-size it (three.js drops instances past the instance
-  // count silently; that under-count was the through-rim gap source), i.e.
-  // the real layout count is what the renderer now uses
-  {
-    const hillsN = hillsBoxesReadback().length;
-    const envC = require(OUT + '/data/environment.js');
-    const inner = envC.HILLS.innerRadius, outer = envC.HILLS.outerRadius + envC.HILLS.rimRingWidth, step = envC.HILLS.step;
-    const est = Math.floor((Math.PI * (outer * outer - inner * inner)) / (step * step));
-    assert.ok(hillsN + rim.length < est, 'old area estimate (' + est + ') over-counted the real layout (' + (hillsN + rim.length) + ') — the old buffer was too SMALL for the real draw order, dropping trailing rim boxes');
-  }
-  const a = rimBoxesReadback();
-  assert.deepStrictEqual(rim, a, 'rim layout is deterministic (same call = same boxes)');
-  const outer = 50; // HILLS.outerRadius
-  const env2 = require(OUT + '/data/environment.js');
-  const ringW = env2.HILLS.rimRingWidth;
+  const again = rimBoxesReadback();
+  assert.deepStrictEqual(rim, again, 'rim layout is deterministic (same call = same boxes)');
+  // overlap canon in BOTH plan axes: footprint >= rimStep*(1+rimJitter)
+  assert.ok(foot >= HILLS.rimStep * (1 + HILLS.rimJitter), 'overlap canon: footprint ' + foot + ' >= rimStep*(1+rimJitter) = ' + (HILLS.rimStep * (1 + HILLS.rimJitter)).toFixed(2));
+  let minFootInner = Infinity;
+  const pondOuter = Math.hypot(LAKE.center[0], LAKE.center[1]) + LAKE.radius + LAKE.shoreWidth;
   for (const b of rim) {
     const r = Math.hypot(b.x, b.z);
-    assert.ok(r >= outer - 1.2 && r <= outer + ringW + 1.2, 'rim box in the ring band r ' + outer + '..' + (outer + ringW) + ': r=' + r.toFixed(1));
-    assert.strictEqual(b.extraH, 0, '#66: rim boxes carry NO extra height — they share the hills profile');
+    assert.ok(r > inner - 1.2 && r <= outer + 1.2, 'rim box center in the band r ' + inner + '..' + outer + ': r=' + r.toFixed(1));
+    assert.ok(Math.abs(b.half * 2 - foot) < 1e-9, 'rim footprint is square ' + foot + 'u x ' + foot + 'u (world units, every radius): got ' + (b.half * 2).toFixed(2));
+    assert.ok(b.extraH >= -1e-9 && b.extraH <= HILLS.rimMaxExtraH * 1.25 + 1e-9, 'extraH within the MODERATE profile range: ' + b.extraH.toFixed(2));
+    assert.ok(b.top > b.bottom, 'top above bottom (sunk skirt)');
+    assert.ok(Math.hypot(b.x - LAKE.center[0], b.z - LAKE.center[1]) > LAKE.radius + LAKE.shoreWidth, 'no rim block in the pond band');
+    // binding boundary: no rim footprint closer to the meadow center than the pond outer edge
+    const dx = Math.abs(b.x) > b.half ? Math.abs(b.x) - b.half : 0;
+    const dz = Math.abs(b.z) > b.half ? Math.abs(b.z) - b.half : 0;
+    minFootInner = Math.min(minFootInner, Math.hypot(dx, dz));
   }
-  // the hills' own layout is UNCHANGED by the rim ring (the ring's RNG is a
-  // separate sequence — no second layout, and the first is byte-stable)
-  assert.ok(hillsBoxesReadback().length > 2000, 'hills layout intact');
-  // rim boxes never cover the pond band or the meadow
-  for (const b of rim) {
-    assert.ok(Math.hypot(b.x - 36, b.z + 14) > 8 + 1.2, 'no rim block in the pond');
-    assert.ok(Math.hypot(b.x, b.z) > 21.5 - 2, 'no rim block inside the meadow');
-  }
-  // hillsCover now includes the rim: a point covered only by a rim box is unplantable terrain
-  const rimOnly = rim.find((b) => Math.hypot(b.x, b.z) > 50.5);
+  assert.ok(minFootInner >= pondOuter - 0.01, 'rim innermost footprint ' + minFootInner.toFixed(2) + 'u >= pond outer edge ' + pondOuter.toFixed(2) + 'u — nothing rim-made inside the meadow/pond constraint');
+  // hillsCover includes the rim: a rim-covered point is unplantable terrain
+  const rimOnly = rim.find((b) => Math.hypot(b.x, b.z) > inner + 5);
   if (rimOnly) {
     assert.ok(hillsCoverReadback(rimOnly.x, rimOnly.z), 'rim-covered point reads as terrain (hillsCover includes the ring)');
     assert.ok(!isPlantableCell(rimOnly.x, rimOnly.z), 'rim-covered point is unplantable');
   }
+  // the outer ridge band: same square world-unit lattice, further out
+  const ridge = ridgeBoxesReadback();
+  assert.ok(ridge.length > 50, 'ridge band has blocks: ' + ridge.length);
+  for (const b of ridge) {
+    const r = Math.hypot(b.x, b.z);
+    assert.ok(r > outer - 1.2 && r <= HILLS.ridgeOuterRadius + 1.2, 'ridge box in r ' + outer + '..' + HILLS.ridgeOuterRadius + ': r=' + r.toFixed(1));
+    assert.ok(Math.abs(b.half * 2 - foot) < 1e-9, 'ridge footprint square ' + foot + 'u — no rectangles in plan');
+  }
 });
 
 test('#83 invariant: the instanced buffer capacity >= the instance count for the distant families (#66 class, encoded)', () => {
-  // The renderer (Background.tsx) sizes the Hills mesh from
-  // hillsInstanceCapacity() — the ONE shared source. Assert the invariant
-  // that was missing when #66 shipped: capacity >= the real draw order
-  // (hillsBoxes + rimBoxes), counted exactly, never estimated.
+  // The renderer sizes the Hills mesh from hillsInstanceCapacity() and the
+  // ridge mesh from ridgeInstanceCapacity() — the ONE shared sources. Assert
+  // capacity >= the real draw order, counted exactly, never estimated.
   const cap = hillsInstanceCapacityReadback();
   const drawn = hillsBoxesReadback().length + rimBoxesReadback().length;
   assert.ok(cap >= drawn, 'hills buffer capacity ' + cap + ' >= drawn instances ' + drawn);
-  assert.strictEqual(cap, drawn, 'capacity is counted exactly from the layout, not estimated');
+  assert.strictEqual(cap, drawn, 'hills capacity is counted exactly from the layout, not estimated');
+  const rcap = ridgeInstanceCapacityReadback();
+  const rdrawn = ridgeBoxesReadback().length;
+  assert.strictEqual(rcap, rdrawn, 'ridge capacity counted exactly: ' + rcap);
   // and prove the class existed: the pre-#66 area/step^2 estimate under-counts
-  // the real draw order, which is exactly what silently truncated the rim
+  // the real layout — the truncation class this invariant guards (the render
+  // path also self-checks with a gate-visible console.error per family)
   const env = require(OUT + '/data/environment.js');
-  const est = Math.floor((Math.PI * (env.HILLS.outerRadius ** 2 - env.HILLS.innerRadius ** 2)) / (env.HILLS.step ** 2));
-  assert.ok(est < drawn, 'pre-#66 area estimate (' + est + ') under-counts the real layout (' + drawn + ') — the truncation class this invariant guards (render path also self-checks with a gate-visible console.error per family)');
+  const est = Math.floor((Math.PI * (env.HILLS.hillsOuterRadius ** 2 - env.HILLS.innerRadius ** 2)) / (env.HILLS.step ** 2));
+  assert.ok(est < drawn, 'pre-#66 area estimate (' + est + ') under-counts the real layout (' + drawn + ')');
 });
 
-test('#83: the rim/hills annulus footprint is continuous — no seam slots at the ring boundary', () => {
-  // The #83 hole class: rimBoxes() used to iterate a lattice phase-offset from
-  // hillsBoxes() (origin -outer vs -outerRadius; rimRingWidth is not a
-  // multiple of step), leaving uncovered diagonal slivers at the r=outerRadius
-  // cutoff — vertical sky-through slots in the rim. Scan the annulus footprint
-  // on a fine polar grid: every point must be covered by a hills or rim box,
-  // except the pond band (the Lake family draws there). Scan to just inside the
-  // ring's outer edge (the r>~63.4 fringe past the last cell reach is the
-  // designed open horizon, covered by the ridge/fog and the sweep's
-  // over-the-top allowance).
+test('#83: the rebuilt annulus footprint is continuous — no seam slots at the hills/rim/ridge boundaries', () => {
+  // The #83 hole classes: (a) lattice-phase seams at family boundaries, (b)
+  // elongated blocks leaking at glancing short-end views. The redesign puts
+  // hills (r<=hillsOuterRadius, dense 1.6 lattice, overlaps the rim's inner
+  // bound by > a diagonal cell), the square rim (centers r in
+  // (hillsOuterRadius, +rimRingWidth]) and the square ridge (out to
+  // ridgeOuterRadius) on ONE phase-aligned world lattice. Scan the annulus
+  // footprint on a fine polar grid: every point must be covered by a meadow,
+  // hills, rim or ridge box, except the pond band (the Lake family draws
+  // there). The fringe beyond the outermost cell reach is the designed open
+  // horizon (sky above the rim — the sweep's over-the-top allowance).
   const env = require(OUT + '/data/environment.js');
   const { HILLS, LAKE } = env;
   const { MEADOW_SIZE } = require(OUT + '/engine/terrain.js');
-  // the meadow bowl's own grid (Meadow.tsx renders it: n=44 cells of
-  // MEADOW_SIZE/44, half = step*1.02/2) covers the inner edge of the annulus
-  const all = [...hillsBoxesReadback(), ...rimBoxesReadback()];
+  const all = [...hillsBoxesReadback(), ...rimBoxesReadback(), ...ridgeBoxesReadback()];
   const n = 44, mstep = MEADOW_SIZE / n;
   for (let ix = 0; ix < n; ix++) for (let iz = 0; iz < n; iz++) {
     all.push({ x: -MEADOW_SIZE / 2 + (ix + 0.5) * mstep, z: -MEADOW_SIZE / 2 + (iz + 0.5) * mstep, half: (mstep * 1.02) / 2 });
   }
   const cov = (x, z) => all.some((b) => Math.abs(x - b.x) <= b.half && Math.abs(z - b.z) <= b.half);
-  // the pond's shore band (incl. the corner-test exclusion reach and the
-  // lake sub-piece fringe) is drawn by the Lake family, not hills/rim
   const inPondBand = (x, z) =>
     Math.hypot(x - LAKE.center[0], z - LAKE.center[1]) <= LAKE.radius + LAKE.shoreWidth + 3.5;
   let gaps = 0;
   const samples = [];
   for (let aDeg = 0; aDeg < 360; aDeg += 0.25) {
     const a = (aDeg * Math.PI) / 180;
-    for (let r = HILLS.innerRadius; r <= HILLS.outerRadius + HILLS.rimRingWidth - 1.0; r += 0.1) {
+    for (let r = HILLS.innerRadius; r <= HILLS.ridgeOuterRadius - HILLS.rimStep; r += 0.1) {
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       if (inPondBand(x, z)) continue;
       if (!cov(x, z)) {
@@ -1081,88 +1083,55 @@ test('#83: the rim/hills annulus footprint is continuous — no seam slots at th
       }
     }
   }
-  assert.strictEqual(gaps, 0, 'uncovered footprint points in the rim annulus (the #83 seam class): ' + JSON.stringify(samples));
+  assert.strictEqual(gaps, 0, 'uncovered footprint points in the rebuilt annulus (the #83 seam/leak class): ' + JSON.stringify(samples));
 });
 
-test('#50: camera-sweep survey — no horizon-direction ray from any in-bounds camera escapes to sky', () => {
-  // geometric survey over the shared layout (supporting evidence; the user's
-  // eyeball is acceptance): from camera positions across the allowed orbit
-  // (distance 9..34, polar 0.3..1.32, target origin), cast screen-fan rays
-  // (±35° azimuth, elevations from -20° to +10° — the band where a horizon
-  // would show) and assert every ray is blocked by hills OR the rim ring.
-  // Rays below -20° hit the meadow floor / bowl wall by construction (the
-  // meadow is a 44u square bowl inside the ring) and are not sky windows.
+test('#50/#83: extended camera-sweep survey — through-view continuity at the exact hole vantages', () => {
+  // The old survey's blindness: its [-8,+10] elevation band only exists at
+  // polar ~1.32, and seam-threading rays need lower elevations; the user's
+  // glancing poses were never sampled. The extended survey casts the exact
+  // poses that showed the holes PLUS the orbit grid, over the FULL screen
+  // fan down to -45 deg, and classifies leaks by the through-view invariant:
+  // a ray leaks iff it passes a point inside the rim band that is ABOVE local
+  // terrain yet covered by NO block footprint (sky through the rim). Rays
+  // that stay covered but fly above all tops are over-the-top (sky above the
+  // rim — allowed, and asserted present).
   const env = require(OUT + '/data/environment.js');
-  const { HILLS, CAMERA_BOUNDS } = env;
-  const { shapedHeight } = env;
-  const all = [...hillsBoxesReadback(), ...rimBoxesReadback()].map((b) => {
+  const { HILLS, LAKE, CAMERA_BOUNDS, shapedHeight } = env;
+  const { MEADOW_SIZE } = require(OUT + '/engine/terrain.js');
+  // full rendered geometry, one source: hills (heights via the shared oracle),
+  // rim + ridge (layout carries top/bottom), meadow slab
+  const all = [];
+  for (const b of hillsBoxesReadback()) {
     const h = shapedHeight(b.x, b.z);
     const extraDepth = Math.max(0, h - shapedHeight(0, 0)) + 4;
     const boxH = HILLS.boxHeight + extraDepth;
     const yC = h - boxH * 0.55;
-    return { x: b.x, z: b.z, half: b.half, top: yC + boxH / 2, bottom: yC - boxH / 2 };
-  });
-  // the DistantRidge ring (Sky.tsx): 96 boxes at r 50..62, w 9..15, crest
-  // h = boxHeight + 1.2 + rng*1.4 + rangeBoost above local ground, 4.5u skirt
-  // below — reconstructed from the renderer's own RNG seed so the survey
-  // matches what renders
-  {
-    let s = 60221;
-    const rr = () => { s = (s * 1664525 + 1013904223) % 4294967296; return s / 4294967296; };
-    for (let i = 0; i < 96; i++) {
-      const a = (i / 96) * Math.PI * 2 + rr() * 0.06;
-      const r = 50 + rr() * 12;
-      const x = Math.cos(a) * r, z = Math.sin(a) * r;
-      const ground = shapedHeight(x, z);
-      const rangeBoost = Math.max(0, Math.cos(a * 2 + 0.8)) * 1.1;
-      const h = HILLS.boxHeight + 1.2 + rr() * 1.4 + rangeBoost;
-      const w = 9 + rr() * 6;
-      const skirt = 4.5, total = h + skirt;
-      all.push({ x, z, half: w / 2, top: ground - skirt + total, bottom: ground - skirt });
-    }
+    all.push({ x: b.x, z: b.z, half: b.half, top: yC + boxH / 2, bottom: yC - boxH / 2 });
   }
-  // spatial index for speed
+  for (const b of [...rimBoxesReadback(), ...ridgeBoxesReadback()]) {
+    all.push({ x: b.x, z: b.z, half: b.half, top: b.top, bottom: b.bottom });
+  }
+  const n = 44, mstep = MEADOW_SIZE / n;
+  all.push({ x: 0, z: 0, half: (MEADOW_SIZE / 2) * 1.02, top: shapedHeight(0, 0) - 0.7, bottom: -9.4 });
+  // spatial index
   const grid = new Map();
-  const gk = (x, z) => Math.floor(x / 2) + ':' + Math.floor(z / 2);
+  const gk = (x, z) => Math.floor(x / 4) + ':' + Math.floor(z / 4);
   for (const b of all) {
-    for (let gx = Math.floor((b.x - b.half) / 2); gx <= Math.floor((b.x + b.half) / 2); gx++) {
-      for (let gz = Math.floor((b.z - b.half) / 2); gz <= Math.floor((b.z + b.half) / 2); gz++) {
+    for (let gx = Math.floor((b.x - b.half) / 4); gx <= Math.floor((b.x + b.half) / 4); gx++) {
+      for (let gz = Math.floor((b.z - b.half) / 4); gz <= Math.floor((b.z + b.half) / 4); gz++) {
         const k = gx + ':' + gz;
         if (!grid.has(k)) grid.set(k, []);
         grid.get(k).push(b);
       }
     }
   }
-  const blocked = (camX, camY, camZ, dx, dy, dz) => {
-    for (let t = 0.5; t < 110; t += 0.3) {
-      const x = camX + dx * t, y = camY + dy * t, z = camZ + dz * t;
-      const c = grid.get(gk(x, z));
-      if (c) {
-        for (const b of c) {
-          if (Math.abs(x - b.x) <= b.half && Math.abs(z - b.z) <= b.half && y <= b.top && y >= b.bottom) return true;
-        }
-      }
-    }
+  const covered = (x, z) => {
+    const c = grid.get(gk(x, z));
+    if (!c) return false;
+    for (const b of c) if (Math.abs(x - b.x) <= b.half && Math.abs(z - b.z) <= b.half) return true;
     return false;
   };
-  let gaps = 0, overRim = 0;
-  // The orbit target can pan within ±16u (panTargetLimit), so survey targets
-  // on a small grid too — a panned camera changes the ray geometry.
-  // #66: an unblocked horizon-band ray is NOT automatically a "through-rim"
-  // gap. With the ring complete at the hills' own height, low-camera rays
-  // legitimately fly OVER the rim tops (that IS the restored sky-above-rim
-  // look #66 asks for). A through-gap ray is one that crosses the rim
-  // annulus (r >= 50) at or below the local rim-top envelope — i.e. it
-  // slipped through a horizontal hole in the ring. That count must be 0;
-  // the over-the-top count is allowed (and is what #66's sky-above-rim
-  // check below relies on).
-  const rimGeoms = rimBoxesReadback().map((b) => {
-    const h = shapedHeight(b.x, b.z);
-    const extraDepth = Math.max(0, h - shapedHeight(0, 0)) + 4;
-    const boxH = HILLS.boxHeight + extraDepth;
-    const yC = h - boxH * 0.55;
-    return { x: b.x, z: b.z, half: b.half, top: yC + boxH / 2 };
-  });
   const blockedPoint = (x, y, z) => {
     const c = grid.get(gk(x, z));
     if (!c) return false;
@@ -1171,51 +1140,77 @@ test('#50: camera-sweep survey — no horizon-direction ray from any in-bounds c
     }
     return false;
   };
-  for (const tx of [-16, 0, 16]) {
-    for (const tz of [-16, 0, 16]) {
-      for (let aDeg = 0; aDeg < 360; aDeg += 6) {
-        const a = (aDeg * Math.PI) / 180;
-        for (const dist of [CAMERA_BOUNDS.minDistance, 22, CAMERA_BOUNDS.maxDistance]) {
-          for (const polar of [CAMERA_BOUNDS.minPolarAngle, 0.9, CAMERA_BOUNDS.maxPolarAngle]) {
-            const camY = dist * Math.cos(polar);
-            const ch = dist * Math.sin(polar);
-            const camX = tx + ch * Math.cos(a), camZ = tz + ch * Math.sin(a);
-            for (let da = -35; da <= 35; da += 7) {
-              // vertical fov 50° around the view axis: the axis points down
-              // by (90° - polar) — at the lowest allowed camera (polar 1.32)
-              // that is 14.4°, so the screen spans elevations -39.4°..+10.6°
-              const axisDown = 90 - (polar * 180) / Math.PI;
-              const deMin = -axisDown - 25 + 1, deMax = -axisDown + 25;
-              // horizon band: rays above -8° (the sky band above the bowl
-              // wall); below that the ray is inside the 44u bowl or its wall
-              for (let de = Math.max(-8, Math.ceil(deMin)); de <= Math.min(10, deMax); de += 2) {
-                const aa = a + Math.PI + (da * Math.PI) / 180;
-                const ee = (de * Math.PI) / 180;
-                const dx = Math.cos(aa) * Math.cos(ee), dy = Math.sin(ee), dz = Math.sin(aa) * Math.cos(ee);
-                let cxp = null, czp = null, hit = false;
-                for (let t = 0.5; t < 110; t += 0.3) {
-                  const x = camX + dx * t, y = camY + dy * t, z = camZ + dz * t;
-                  if (cxp === null && Math.hypot(x, z) >= 50) { cxp = x; czp = z; }
-                  if (blockedPoint(x, y, z)) { hit = true; break; }
-                }
-                if (hit) continue;
-                if (cxp === null) { overRim++; continue; }
-                const tCross = Math.hypot(cxp - camX, czp - camZ) / Math.hypot(dx, dz);
-                const yCross = camY + dy * tCross;
-                let maxTop = -1e9;
-                for (const b of rimGeoms) {
-                  if (Math.abs(cxp - b.x) <= b.half + 3 && Math.abs(czp - b.z) <= b.half + 3 && b.top > maxTop) maxTop = b.top;
-                }
-                if (yCross <= maxTop + 0.05) gaps++; else overRim++;
-              }
-            }
-          }
+  const blockedRay = (cx, cy, cz, dx, dy, dz) => {
+    for (let t = 0.5; t < 170; t += 0.25) {
+      if (blockedPoint(cx + dx * t, cy + dy * t, cz + dz * t)) return true;
+    }
+    return false;
+  };
+  const bandInner = HILLS.hillsOuterRadius - 8; // include the hills/rim seam band
+  const bandOuter = HILLS.ridgeOuterRadius - HILLS.rimStep; // inside guaranteed coverage; beyond is the designed open horizon
+  // camera poses: the orbit grid PLUS the exact poses that showed the holes
+  const poses = [];
+  for (const tx of [-16, 0, 16]) for (const tz of [-16, 0, 16]) {
+    for (let aDeg = 0; aDeg < 360; aDeg += 6) {
+      const a = (aDeg * Math.PI) / 180;
+      for (const dist of [CAMERA_BOUNDS.minDistance, 22, CAMERA_BOUNDS.maxDistance]) {
+        for (const polar of [CAMERA_BOUNDS.minPolarAngle, 0.9, CAMERA_BOUNDS.maxPolarAngle]) {
+          poses.push({ tx, tz, a, dist, polar });
         }
       }
     }
   }
-  assert.strictEqual(gaps, 0, '#50 acceptance: no sky-through-rim ray through a ring gap in the horizon band (gaps: ' + gaps + ', over-the-top rays allowed: ' + overRim + ')');
-  assert.ok(overRim > 0, '#66: over-the-rim sky rays exist in the sweep (sky above the rim is visible, not a raised wall)');
+  const exact = [
+    { name: 'resting [16,12,20] fov50', pos: [16, 12, 20] },
+    { name: 'glancing-low dist34 polar1.32 az0', pos: [34 * Math.sin(1.32), 34 * Math.cos(1.32), 0] },
+    { name: 'glancing dist30 polar1.0 az135', pos: [30 * Math.sin(1.0) * Math.cos(2.356), 30 * Math.cos(1.0), 30 * Math.sin(1.0) * Math.sin(2.356)] },
+  ];
+  let leaks = 0, overTop = 0, blocked = 0, total = 0;
+  const leakSamples = [];
+  function cast(camX, camY, camZ, a, polar, label) {
+    const axisDown = 90 - (polar * 180) / Math.PI;
+    for (let da = -35; da <= 35; da += 7) {
+      for (let de = Math.max(-45, Math.ceil(-axisDown - 25)); de <= Math.min(10, Math.floor(-axisDown + 25)); de += 2) {
+        const aa = a + Math.PI + (da * Math.PI) / 180;
+        const ee = (de * Math.PI) / 180;
+        const dx = Math.cos(aa) * Math.cos(ee), dy = Math.sin(ee), dz = Math.sin(aa) * Math.cos(ee);
+        let hit = false, planGap = false, gapPt = null, inBand = false;
+        for (let t = 0.5; t < 170; t += 0.25) {
+          const x = camX + dx * t, y = camY + dy * t, z = camZ + dz * t;
+          const rr = Math.hypot(x, z);
+          if (rr > bandOuter) break;
+          if (rr >= bandInner && rr <= bandOuter && y > shapedHeight(x, z) - 0.5 && !covered(x, z)) {
+            planGap = true;
+            if (!gapPt) gapPt = { x: +x.toFixed(1), z: +z.toFixed(1), y: +y.toFixed(1), r: +rr.toFixed(1) };
+          }
+          if (rr >= bandInner) inBand = true;
+          if (blockedPoint(x, y, z)) { hit = true; break; }
+        }
+        total++;
+        if (hit) { blocked++; continue; }
+        if (!inBand) continue;
+        if (planGap) {
+          leaks++;
+          if (leakSamples.length < 8) leakSamples.push({ pose: label, da, de, gap: gapPt });
+        } else {
+          overTop++; // covered at every band point but above all tops: sky ABOVE the rim (allowed)
+        }
+      }
+    }
+  }
+  for (const p of poses) {
+    const camY = p.dist * Math.cos(p.polar);
+    const ch = p.dist * Math.sin(p.polar);
+    cast(p.tx + ch * Math.cos(p.a), camY, p.tz + ch * Math.sin(p.a), p.a, p.polar, 'orbit');
+  }
+  for (const e of exact) {
+    const dist = Math.hypot(e.pos[0], e.pos[1], e.pos[2]);
+    const polar = Math.acos(e.pos[1] / dist);
+    const az = Math.atan2(e.pos[2], e.pos[0]);
+    cast(e.pos[0], e.pos[1], e.pos[2], az, polar, e.name);
+  }
+  assert.strictEqual(leaks, 0, '#83 acceptance: no through-view leak in the extended sweep (leaks: ' + leaks + ', samples: ' + JSON.stringify(leakSamples) + ')');
+  assert.ok(overTop > 0, '#66 acceptance: sky above the rim still exists in the sweep (over-the-top rays: ' + overTop + ' of ' + total + ')');
 
   // #66 acceptance: sky visible ABOVE the rim at the resting camera
   // (default position [16,12,20], App.tsx) and a gentle orbit — silhouette
@@ -1233,7 +1228,7 @@ test('#50: camera-sweep survey — no horizon-direction ray from any in-bounds c
       for (let de = -20; de <= 25; de += 0.25) {
         const ee = (de * Math.PI) / 180;
         const dx = Math.cos(aa) * Math.cos(ee), dy = Math.sin(ee), dz = Math.sin(aa) * Math.cos(ee);
-        if (blocked(rp[0], rp[1], rp[2], dx, dy, dz)) { sil = de; break; }
+        if (blockedRay(rp[0], rp[1], rp[2], dx, dy, dz)) { sil = de; break; }
       }
       aboveTot++;
       if (sil !== null && screenTop > sil + 0.5) aboveCount++;

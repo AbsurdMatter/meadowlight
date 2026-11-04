@@ -100,16 +100,48 @@ export const HILLS = {
   fogBlendEnd: 50,
   fogBlendStrength: 0.55,
   /**
-   * #50/#66 (session 10): the EXTRA outer rim ring — additional hills-lattice
-   * boxes just past outerRadius so no horizontal direction shows sky through
-   * the rim. #66: the ring uses the HILLS' OWN height rule (crest =
-   * h + 0.45*boxH, same as the original ring) — the gap closure is purely
-   * horizontal (more boxes), never height. Rendered from the SAME shared
-   * hillsLayout source (rimBoxes()), so original ring and gap-filler read one
-   * height profile.
+   * #50/#66 (session 10): the extra outer rim ring. #83 redesign (accepted
+   * round-3 proposal, MODERATE height variant): the rim is rebuilt from
+   * SQUARE 6x6-voxel cuboids on the world-unit lattice (rimStep), so no
+   * block has a long axis to look between at glancing angles. The hills
+   * family extends outward to hillsOuterRadius (owns cell centers r <= 58,
+   * same lattice phase/seed) and seals the seam from the inside; the rim
+   * owns cell centers r in (hillsOuterRadius, hillsOuterRadius+rimRingWidth]
+   * = (58, 88] — 5 rows across the 30u band. Boundary is binding: no rim
+   * footprint comes closer to the meadow center than the pond outer edge
+   * (49.23u) — measured rim innermost footprint 51.5u. Overlap canon in
+   * BOTH plan axes: footprint 9.6 >= rimStep*(1+rimJitter) = 6.6, so jitter
+   * can never open a through-gap. Heights: extraH in [rimMinExtraH,
+   * rimMaxExtraH] biased taller toward the outer edge (0.7+0.5t) — the
+   * accepted MODERATE profile (measured visible tops 3.42/7.04/10.04).
+   * Blocks sunk rimSkirt below ground (no under-gaps). The outer ridge is
+   * the same square lattice out to ridgeOuterRadius (all-square plan).
    */
-  /** how far past outerRadius the extra rim ring extends (world units) */
-  rimRingWidth: 14,
+  /** how far the hills family extends outward (cell centers r <= this). 60,
+   *  not the proposed 58: the 1.6-lattice diagonal interstices at r~58-60
+   *  would otherwise leave sub-voxel slivers between the dense hills
+   *  lattice and the sparser rim lattice — hills must overlap the rim's
+   *  inner bound by more than a diagonal cell (step*sqrt2). The binding
+   *  footprint constraint is unaffected (rim innermost >= pond edge). */
+  hillsOuterRadius: 60,
+  /** rim band width past hillsOuterRadius (world units) — 5 rows at rimStep */
+  rimRingWidth: 30,
+  /** world-unit lattice spacing for the rim/ridge families (hills-aligned phase) */
+  rimStep: 6,
+  /** rim/ridge block footprint in voxels (voxel = step) — square in plan */
+  rimFootprintVoxels: 6,
+  /** jitter fraction of rimStep (overlap canon: foot >= rimStep*(1+rimJitter)) */
+  rimJitter: 0.1,
+  /** MODERATE height profile base/range for rim blocks (above local ground) */
+  rimMinExtraH: 1.2,
+  rimMaxExtraH: 3.0,
+  /** rim/ridge block bottoms sink this far below local ground */
+  rimSkirt: 5,
+  /** the outer ridge band: cell centers r in (hillsOuter+rimRingWidth, ridgeOuterRadius] */
+  ridgeOuterRadius: 100,
+  /** ridge height range (above local ground) */
+  ridgeMinExtraH: 2.5,
+  ridgeMaxExtraH: 4.5,
 };
 
 /**
