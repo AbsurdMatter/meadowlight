@@ -9,7 +9,7 @@ import type { Size } from '@react-three/fiber';
 import { beeDebug } from '../render/BeeSwarm';
 import { wildDebug } from '../render/WildPollinators';
 import { fireflyDebug } from '../render/Fireflies';
-import { setDayPhase } from './dayCycle';
+import { setDayPhase, isDaylight } from './dayCycle';
 import { encodeSeedCode } from './seedCode';
 import { useLocale } from './locale';
 import { precipitationVisual } from './weather';
@@ -146,6 +146,10 @@ declare global {
     tickPrecipScheduleForTest: (worldSeed: number, ordinal: number, season: string) => void;
     setFireflyForce: (v: boolean | null) => void;
     dayPhaseReadback: () => number;
+    /** #81: the ONE shared lit-window predicate at the live phase — the same
+     *  isDaylight(dayPhase()) the bees, the P panel, and the save all read
+     *  (dawn 0.22 .. dusk 0.88); the readback the gate's night check names */
+    daylightReadback: () => boolean;
     rainDebug: () => unknown;
     rareBeeCount: () => number;
     capturePostcard: () => string | null;
@@ -437,6 +441,7 @@ export function installTestHook() {
     tickPrecipScheduleForTest: (worldSeed, ordinal, season) => tickPrecipScheduleForTest(worldSeed, ordinal, season as never),
     setFireflyForce,
     dayPhaseReadback: () => dayPhase(),
+    daylightReadback: () => isDaylight(dayPhase()),
     rainDebug: () => ({ ...rainDebug }),
     rareBeeCount: () => rareBeeDebug.count,
     capturePostcard: () => capturePostcardPng(),

@@ -635,21 +635,34 @@ async function checkTriggers(browser) {
 
   // B. forced night: bees home, sky dark; saved dayPhase survives reload
   await page.evaluate(() => window.__meadowlight.setDayPhase(0.97));
-  await page.waitForTimeout(3000);
-  const night = await page.evaluate(() => ({
-    bees: window.__meadowlight.beeDebug(),
-    rain: window.__meadowlight.rainDebug(),
-  }));
-  // #80: assert the actual contract — forced night 0.97 is outside the lit
-  // window (0.22..0.88), so isDaylight is false and bees must home: homing >
-  // foraging (or no bees at all). Evidence names phase + daylight verdict.
+  // #81 (detector fix): the forced phase holds the override clock and 0.97
+  // is outside the lit window, so the bees' own predicate reads night — but
+  // a bee flips to homing only when it next PICKS a target (arrive -> rest ->
+  // home); mid-trip bees finish their trip first. A fixed 3s wait can sample
+  // mid-transition (homing 0 / foraging 5 while the swarm is visibly home
+  // later) — poll past the settle instead of sampling a fixed instant.
+  let night = null;
+  const nightDeadline = Date.now() + 12000;
+  while (Date.now() < nightDeadline) {
+    await page.waitForTimeout(500);
+    night = await page.evaluate(() => ({
+      bees: window.__meadowlight.beeDebug(),
+      rain: window.__meadowlight.rainDebug(),
+    }));
+    if (night.bees.count === 0 || night.bees.homing > night.bees.foraging) break;
+  }
+  // #81: assert the actual contract with the REAL readbacks — forced night
+  // 0.97 is outside the lit window (0.22..0.88), so daylightReadback (the ONE
+  // shared isDaylight predicate the bees read) is false and bees must home:
+  // homing > foraging (or no bees at all). The old probe hardcoded
+  // daylightAtNight: null (no writer existed for that name).
   const nightVerdict = await page.evaluate(() => ({
     phase: window.__meadowlight.dayPhaseReadback?.() ?? null,
-    daylightAtNight: null, // lit-window contract asserted by homing>foraging; 0.97 is outside 0.22..0.88 by definition
+    daylightAtNight: window.__meadowlight.daylightReadback?.() ?? null,
   }));
   rec.record('triggers.forced-night-bees-home',
     night.bees.count === 0 || night.bees.homing > night.bees.foraging,
-    JSON.stringify({ homing: night.bees.homing, foraging: night.bees.foraging, count: night.bees.count, phase0_97: 0.97, daylightAtNight: nightVerdict.daylightAtNight }));
+    JSON.stringify({ homing: night.bees.homing, foraging: night.bees.foraging, count: night.bees.count, phase: nightVerdict.phase, daylightAtNight: nightVerdict.daylightAtNight }));
 
   // C. natural rain at night (N1: no force-rain input path — sweep the
   // season progress to a schedule window; deterministic per world seed)
