@@ -71,7 +71,18 @@ export function NudgeSystem() {
     if (onboardingDismissed) return;
     const tick = () => {
       const s = usePlacementStore.getState();
-      if (s.modalOpen || s.notebook) return; // never interrupt an open surface
+      // never interrupt an open surface — the guard covers EVERY open
+      // surface, not just modal/notebook (#86: a nudge landing mid-sequence
+      // opened the notebook card over the open hub; the card outranks the
+      // hub in the ESC order and ate the hub's own Esc)
+      if (
+        s.modalOpen ||
+        s.notebook ||
+        s.hubOpen ||
+        s.sharePanelOpen ||
+        s.hintOpen ||
+        s.hivePopup
+      ) return;
       const t = scaledElapsed();
       for (const n of NUDGES) {
         if (s.nudgesShown.includes(n.id)) continue;

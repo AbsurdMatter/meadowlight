@@ -759,6 +759,11 @@ async function checkJournal() {
 async function checkKeys() {
   const { page, errors } = await newPage(browser, url);
   await freshWorld(page);
+  // #86 (detector fix, named): pin the fixture — dismiss the boot onboarding
+  // so the timed notebook nudges stay off during the key checks (a nudge
+  // opening a card mid-sequence outranks the hub in the ESC table and eats
+  // the hub's Esc; the session5/6 gates pin this via a seeded save)
+  await page.evaluate(() => window.__meadowlight.dismissOnboardingForTest());
   // #71: Space toggles pause from a FRESH world — no mouse click on the
   // pause button first (the old gap: Space was unbound, so only the
   // button's click path worked). Assert both directions: pause -> resume.
@@ -816,8 +821,16 @@ async function checkKeys() {
     // hub still open at this point (share panel outranked it) — Esc now closes the hub
     await page.keyboard.press('Escape');
     await page.waitForTimeout(250);
-    const hubAfter = await page.evaluate(() => window.__meadowlight.hubOpenReadback());
-    rec.record('keys.esc-closes-hub-after-share-panel-sequence', hubBefore && !hubAfter, 'hubOpen ' + hubBefore + ' -> ' + hubAfter + ' (share panel opened+Esc-closed earlier in the session)');
+    const after2 = await page.evaluate(() => ({
+      hub: window.__meadowlight.hubOpenReadback(),
+      // name any surface that could have eaten this Esc (ESC table order:
+      // modal > notebook card > share > hint > hub)
+      modal: window.__meadowlight.modalOpenReadback(),
+      share: window.__meadowlight.sharePanelOpenReadback(),
+      notebookCard: !!document.getElementById('notebook-card'),
+      hintPanel: !!document.querySelector('[data-shortcut-hint-panel]'),
+    }));
+    rec.record('keys.esc-closes-hub-after-share-panel-sequence', hubBefore && !after2.hub, 'hubOpen ' + hubBefore + ' -> ' + after2.hub + ' (share panel opened+Esc-closed earlier in the session); surfaces at 2nd Esc: ' + JSON.stringify(after2));
     // X button closes the share panel too
     await page.evaluate(() => {
       document.querySelector('[data-seed-share-button]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));

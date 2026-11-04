@@ -161,6 +161,10 @@ declare global {
     modalOpenReadback: () => boolean;
     /** P3: open/close the reset confirm modal (the same modal R opens) */
     setModalOpenForTest: (open: boolean) => void;
+    /** #86 (detector support): dismiss the boot onboarding in gate fixtures
+     *  so the timed notebook nudges stay off during key-sequence checks
+     *  (same fixture pinning the session5/6 gates do via a seeded save) */
+    dismissOnboardingForTest: () => void;
     toastsReadback: () => { id: number; title: string; body: string }[];
     dismissAllToastsForTest: () => void;
     /** O2 (v4, #40): the journal readback (the store reads the saved blob) */
@@ -444,6 +448,7 @@ export function installTestHook() {
     toastSeasonTitleReadback: () => useLocale.getState().t().toastSeasonDriftsIn,
     modalOpenReadback: () => usePlacementStore.getState().modalOpen,
     setModalOpenForTest: (open) => usePlacementStore.getState().setModalOpen(open),
+    dismissOnboardingForTest: () => usePlacementStore.getState().dismissOnboarding(),
     toastsReadback: () => usePlacementStore.getState().toasts,
     dismissAllToastsForTest: () => usePlacementStore.getState().dismissAllToastsForTest(),
     journalReadback: () => usePlacementStore.getState().journal,
