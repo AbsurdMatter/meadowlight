@@ -51,23 +51,22 @@ export function PostcardButton() {
     const el = popRef.current;
     if (!el) return;
     const update = () => {
-      // #65 round-8: the popover opens UPWARD from the corner-row button
-      // (bottom-anchored at the row's top). The toast stack sits in the
-      // 138-lane ABOVE the corner row. Clearing it means the popover's
-      // BOTTOM edge must sit at/above the toast stack's TOP - gap — i.e.
-      // maxHeight shrinks by the overlap of [popoverTop, buttonTop] with
-      // the toast band. Setting `top` below the toast (round 6) pushed the
-      // popover below the fold at every 800px viewport (top 1062).
+      // #65 round-9: the popover opens UPWARD from the corner-row button
+      // (bottom-anchored: it occupies [anchorBottom - h, anchorBottom]). The
+      // toast stack sits ABOVE the corner row, so the edge that can collide
+      // is the popover's TOP against the LOWEST live card's BOTTOM — the
+      // round-8 formula used the stack's top (toastTop) with a +gap, which
+      // over-allows exactly when cards extend low in the lane (share top=238
+      // while toast#0 still covers it at vpH=500). Correct bound, measured
+      // from live rects: top >= maxCardBottom + gap  =>  h <= anchorBottom -
+      // maxCardBottom - gap; and the viewport top pins h <= anchorBottom - 8.
       const cards = [...document.querySelectorAll('[data-toast]')];
-      let toastTop: number | null = null;
-      for (const c of cards) { const t = c.getBoundingClientRect().top; if (toastTop === null || t < toastTop) toastTop = t; }
+      let toastBottom: number | null = null;
+      for (const c of cards) { const b = c.getBoundingClientRect().bottom; if (toastBottom === null || b > toastBottom) toastBottom = b; }
       const btn = btnRef.current;
       const anchorBottom = btn ? btn.getBoundingClientRect().top : window.innerHeight;
-      // popover occupies [anchorBottom - h, anchorBottom]; toast band top is
-      // toastTop. Required: anchorBottom - h <= toastTop - gap  =>  h <=
-      // anchorBottom - toastTop + gap. Shrink maxHeight to that bound.
-      const maxH = toastTop !== null && toastTop !== Infinity
-        ? Math.max(80, anchorBottom - toastTop + CHROME_TUNING.shareLaneGap)
+      const maxH = toastBottom !== null
+        ? Math.max(80, Math.min(anchorBottom - toastBottom - CHROME_TUNING.shareLaneGap, anchorBottom - 8))
         : window.innerHeight - 16;
       el.style.setProperty('--share-max-h', Math.min(maxH, window.innerHeight - 16).toFixed(1) + 'px');
     };

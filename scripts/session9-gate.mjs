@@ -257,10 +257,19 @@ async function checkChrome() {
       (geo.reset !== null && Math.abs(geo.reset.top - (geo.corners.timeRow.bottom + 8)) < 2 ? '' : 'WARN anchor gap deviates from +8 spec — ') +
       'resetTop=' + (geo.reset ? geo.reset.top : null) + ' timeRowBottom=' + geo.corners.timeRow.bottom + ' gap=' + (geo.reset ? (geo.reset.top - geo.corners.timeRow.bottom).toFixed(1) : 'n/a'),
     );
+    // #65 round-9: name the failing predicate(s) — the check asserts ALL
+    // THREE (popover present, in-viewport, zero intersections with toasts /
+    // corners / reset / help), and a FAIL must say which one broke
+    const shareHits = geo.hits.filter((h) => h.startsWith('share'));
+    const shareFails = [];
+    if (geo.share === null) shareFails.push('shareMissing');
+    if (geo.shareInViewport !== true) shareFails.push('shareInViewport');
+    if (shareHits.length > 0) shareFails.push('shareHits=' + shareHits.join(','));
     rec.record(
       'chrome.share-lane-no-intersection@' + width + 'x' + height,
-      geo.share !== null && !geo.hits.some((h) => h.startsWith('share')) && geo.shareInViewport === true,
-      'share=' + JSON.stringify(geo.share) + ' shareInViewport=' + geo.shareInViewport + ' shareHits=' + JSON.stringify(geo.hits.filter((h) => h.startsWith('share'))),
+      geo.share !== null && shareHits.length === 0 && geo.shareInViewport === true,
+      'share=' + JSON.stringify(geo.share) + ' shareInViewport=' + geo.shareInViewport +
+        (shareFails.length > 0 ? ' FAILED predicates: ' + shareFails.join(' | ') : ' all predicates pass'),
     );
     rec.record(
       'chrome.reset-lane-no-intersection@' + width + 'x' + height,

@@ -347,15 +347,16 @@ export function KeyboardShortcuts() {
         : panel.scrollHeight;
       // border-box natural height = unclamped content + all chrome
       const naturalHeight = Math.ceil(unclampedContent + padTop + padBottom + borderY);
-      // #65 round-8: when the conflict branch fired (top pinned to floorY),
-      // `band` is 0 and the old clamp (naturalHeight > 0 -> maxHeight 0) either
-      // collapsed the panel to nothing or left it unclamped over the corner
-      // row depending on sub-pixel rounding. The shrink must produce a USABLE
-      // band: the panel may occupy [top, floorY + gap], so clamp to the real
-      // distance from the pinned top to the floor, floored at a minimum row.
-      const realBand = Math.max(0, floorY - top + 8);
+      // #65 round-9: the clamp must be EXACT, not approximate — the round-8
+      // `+8` slack plus ceil() let the panel's bottom land up to 8px past
+      // floorY (panel bottom 668.39 vs cornerRow top 668 at 360x800 — zero
+      // clearance, and cappedAtLane=false at 360). floorY is already
+      // cornerTop - 8, so the panel may occupy [top, floorY] exactly:
+      // clamp to floor(realBand) so the rendered bottom never exceeds
+      // floorY on any rasterizer (fractional rows round DOWN, never over).
+      const realBand = Math.max(0, floorY - top);
       // border-box element: css maxHeight == border-box max, no subtraction
-      const cssMaxHeight = naturalHeight > realBand ? Math.max(48, Math.ceil(realBand)) : null;
+      const cssMaxHeight = naturalHeight > realBand ? Math.max(48, Math.floor(realBand)) : null;
       if (top !== panelTop || cssMaxHeight !== panelMaxHeight) {
         setPanelTop(top);
         setPanelMaxHeight(cssMaxHeight);

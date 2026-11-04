@@ -124,8 +124,15 @@ export function Palette() {
   // the dock collapses to its tab column only; the tab body scrolls
   // horizontally INSIDE the dock's own bounded box. One unwrapped row,
   // reserved lanes, never overlapping the corner controls at any width.
+  // #65 round-9: the narrow test is INCLUSIVE at the boundary — at exactly
+  // narrowDockBelow (700) the wide-mode right lane (cornerLane 460) leaves
+  // only 240px while the unwrapped corner row is itself ~460px wide, so the
+  // dock (220px) and the corner box overlap at the bottom-right (five
+  // identical touch dumps: dock 220x121 vs cornerTop 712). The narrow stack
+  // (right:auto + live corner height as bottom offset) is the mode that is
+  // provably clear at 360/480, so the boundary belongs to it.
   const [narrow, setNarrow] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth < CHROME_TUNING.narrowDockBelow : false,
+    typeof window !== 'undefined' ? window.innerWidth <= CHROME_TUNING.narrowDockBelow : false,
   );
   // #65: the corner lane is the LIVE measured corner-controls height — re-read
   // whenever the wrapper resizes (wrap changes its height) or the window does
@@ -137,7 +144,7 @@ export function Palette() {
   });
   useEffect(() => {
     const onResize = () => {
-      setNarrow(window.innerWidth < CHROME_TUNING.narrowDockBelow);
+      setNarrow(window.innerWidth <= CHROME_TUNING.narrowDockBelow); // #65 round-9: inclusive boundary (see above)
       read(); // #65 tail: wrap changes the corner height at 480/700 — re-read on every resize
     };
     window.addEventListener('resize', onResize);
