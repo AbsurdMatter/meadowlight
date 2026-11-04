@@ -1677,12 +1677,20 @@ test('wildlife hit: the hit carries its along-ray distance for claim comparison 
   assert.ok(Math.abs(hit.along - 30) < 1e-9, 'along = distance along the ray to the winner, got ' + hit.along);
 });
 
-test('#85: wildlife overtakes a mesh claim only when nearer along the ray', () => {
-  const hit = { kind: 'hivebee', along: 5, perpSq: 0.01 };
-  assert.strictEqual(wildlifeOvertakesMeshClaim(hit, 10), true, 'creature nearer along the ray than the mesh claim wins');
-  assert.strictEqual(wildlifeOvertakesMeshClaim(hit, 3), false, 'creature behind the mesh claim loses (the flower in front owns the card)');
-  assert.strictEqual(wildlifeOvertakesMeshClaim(hit, null), true, 'no live mesh claim — the resolver claims freely');
+test('#85: wildlife overtakes a mesh claim only when ON the creature AND nearer along the ray', () => {
+  const onCreature = { kind: 'hivebee', along: 5, perpSq: 0.01 }; // ray through the body
+  assert.strictEqual(wildlifeOvertakesMeshClaim(onCreature, 10), true, 'dead-on creature nearer along the ray than the mesh claim wins');
+  assert.strictEqual(wildlifeOvertakesMeshClaim(onCreature, 3), false, 'creature behind the mesh claim loses (the flower in front owns the card)');
+  assert.strictEqual(wildlifeOvertakesMeshClaim(onCreature, null), true, 'no live mesh claim — the resolver claims freely');
   assert.strictEqual(wildlifeOvertakesMeshClaim(null, 10), false, 'a miss never overtakes a mesh-owned entry');
+  // round 2: containment boundary — a creature BESIDE the ray (perp 0.27u,
+  // within the glass reach but outside the body) never displaces a mesh
+  // claim, even when nearer along the ray than the claim bar
+  const beside = { kind: 'hivebee', along: 5, perpSq: 0.27 * 0.27 };
+  assert.strictEqual(wildlifeOvertakesMeshClaim(beside, 10), false, 'creature 0.27u off-ray beside the hovered flower must NOT steal the entry (the 857e4f4 overcorrection)');
+  assert.strictEqual(wildlifeOvertakesMeshClaim(beside, null), false, 'containment is required even with no live mesh claim bar');
+  const atEdge = { kind: 'hivebee', along: 5, perpSq: 0.2 * 0.2 };
+  assert.strictEqual(wildlifeOvertakesMeshClaim(atEdge, 10), true, 'perp exactly at the containment radius still counts as on-creature');
 });
 
 test('entry decision: a MISS KEEPS the current visitor entry (no null-wipe)', () => {

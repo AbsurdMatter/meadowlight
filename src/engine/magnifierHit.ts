@@ -91,19 +91,32 @@ export function resolveWildlifeHit(
 }
 
 /**
- * #85: the symmetric claim rule (#6384878002) extended to wildlife. When a
- * creature is hit, it may overtake a MESH-OWNED entry (flower/structure)
- * iff it is nearer ALONG the pointer ray than the live mesh claim bar —
- * hovering a bee sitting in front of a flower shows the BEE, not the flower
- * behind it. Mesh-vs-mesh ownership is unchanged, and on a MISS the
- * mesh-owned entry is never touched (the resolver's miss path keeps that
- * rule absolutely).
+ * #85 round 2: on-creature containment radius — the overtake requires the
+ * pointer ray to pass THROUGH the creature's body, not merely within the
+ * glass's reach beside it. ~a hivebee body half-diagonal (0.22/0.3 box ->
+ * 0.19); a creature 0.27u off-ray sitting next to a hovered flower must NOT
+ * steal the flower's entry (the round-1 overcorrection).
+ */
+export const WILDLIFE_CONTAINMENT_RADIUS = 0.2;
+
+/**
+ * #85: the symmetric claim rule (#6384878002) extended to wildlife — but
+ * with REAL on-creature containment. When a creature is hit, it may overtake
+ * a MESH-OWNED entry (flower/structure) only if BOTH hold: the ray passes
+ * through the creature's body (perpSq <= containment radius^2 — the creature
+ * is actually under the pointer), AND the creature is nearer ALONG the ray
+ * than the live mesh claim bar. Hovering a bee dead-on in front of a flower
+ * shows the BEE; a creature merely beside the ray never displaces a mesh
+ * claim. Mesh-vs-mesh ownership is unchanged, and on a MISS the mesh-owned
+ * entry is never touched (the resolver's miss path keeps that rule
+ * absolutely).
  */
 export function wildlifeOvertakesMeshClaim(
   hit: WildlifeHit | null,
   claimBar: number | null,
 ): boolean {
   if (!hit) return false;
+  if (hit.perpSq > WILDLIFE_CONTAINMENT_RADIUS * WILDLIFE_CONTAINMENT_RADIUS) return false;
   return claimBar === null || hit.along < claimBar;
 }
 
