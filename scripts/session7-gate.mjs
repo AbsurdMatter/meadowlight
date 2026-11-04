@@ -428,16 +428,23 @@ async function checkTimeControlsUI() {
     // (5s deadline), then read chip + rects + inline opacity in that
     // settled state and BEFORE unpausing (wait past tick+transition, read
     // before mutating — the session-7 canon).
+    // #84 round 2: the poll must require BOTH observables of the paused
+    // render — the chip element present AND the computed opacity settled —
+    // because the check that ran before this one paused+unpaused the world:
+    // a stale dimmed opacity from the previous pause can read < 0.7 at the
+    // first 100ms sample, before the row's next 1s tick rendered the new
+    // paused state (chip still absent => the 2d014fc chip:false FAIL).
     let row = null;
     let rowOpacity = null;
+    let chip = null;
     const deadline = Date.now() + 5000;
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 100));
       row = document.querySelector('[data-time-row]');
       rowOpacity = row ? getComputedStyle(row).opacity : null;
-      if (rowOpacity !== null && parseFloat(rowOpacity) < 0.7) break;
+      chip = document.querySelector('[data-paused-chip]');
+      if (chip && rowOpacity !== null && parseFloat(rowOpacity) < 0.7) break;
     }
-    const chip = document.querySelector('[data-paused-chip]');
     const chipRect = chip ? chip.getBoundingClientRect() : null;
     const pausedSnapshot = {
       chip: !!chip,
