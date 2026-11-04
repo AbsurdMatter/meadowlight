@@ -63,6 +63,12 @@ async function newPage() {
     // restarts the calendar at progress 0; pinning 0.5 makes the fixture's
     // bloom window explicit and immune to boot-phase residue
     w.setSeasonProgressForTest(0.5);
+    // #82 round 2 (detector fix): pin the DAY PHASE as well — the clock boots
+    // at GOLDEN_HOUR 0.82 and drifts at 1x (360s/day), so dusk (0.88) arrives
+    // ~21.6s after boot and bees legitimately home at night. The sampling
+    // window must not cross dusk (the 857e4f4 run's all-home/0-foraging FAIL
+    // signature); setDayPhase(0.5) = noon, and the override HOLDS the clock.
+    w.setDayPhase(0.5);
     return n;
   });
   // #82 (detector fix): sample until the swarm settles instead of a fixed
@@ -111,6 +117,9 @@ async function newPage() {
     w.clear();
     w.placeStructure('hive', 0, 0);
     w.setSeason('summer'); // foraging season but ZERO flowers
+    // #82 round 2: pin the day phase here too — the wander check must not
+    // race dusk either (same boot-drift mechanism as check 1)
+    w.setDayPhase(0.5);
   });
   await page.waitForTimeout(6000);
   const mid = await page.evaluate(() => window.__meadowlight.beeDebug());
