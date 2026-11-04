@@ -213,6 +213,9 @@ async function checkChrome() {
         reset: resetBox,
         share: shareBox,
         toastCount: toastCards.length,
+        // #65 round-11: raw toast card rects in the dump — a share∩toast FAIL
+        // now prints the actual card bottom vs the popover top, measured live
+        toastBoxes: toastCards,
         hits,
         helpInViewport: help.top >= 0 && help.bottom <= innerHeight && help.left >= 0 && help.right <= innerWidth,
         // #65: the share popover opens UPWARD from the corner row — it must
