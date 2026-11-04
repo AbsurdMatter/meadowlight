@@ -1043,6 +1043,47 @@ test('#83 invariant: the instanced buffer capacity >= the instance count for the
   assert.ok(est < drawn, 'pre-#66 area estimate (' + est + ') under-counts the real layout (' + drawn + ') — the truncation class this invariant guards (render path also self-checks with a gate-visible console.error per family)');
 });
 
+test('#83: the rim/hills annulus footprint is continuous — no seam slots at the ring boundary', () => {
+  // The #83 hole class: rimBoxes() used to iterate a lattice phase-offset from
+  // hillsBoxes() (origin -outer vs -outerRadius; rimRingWidth is not a
+  // multiple of step), leaving uncovered diagonal slivers at the r=outerRadius
+  // cutoff — vertical sky-through slots in the rim. Scan the annulus footprint
+  // on a fine polar grid: every point must be covered by a hills or rim box,
+  // except the pond band (the Lake family draws there). Scan to just inside the
+  // ring's outer edge (the r>~63.4 fringe past the last cell reach is the
+  // designed open horizon, covered by the ridge/fog and the sweep's
+  // over-the-top allowance).
+  const env = require(OUT + '/data/environment.js');
+  const { HILLS, LAKE } = env;
+  const { MEADOW_SIZE } = require(OUT + '/engine/terrain.js');
+  // the meadow bowl's own grid (Meadow.tsx renders it: n=44 cells of
+  // MEADOW_SIZE/44, half = step*1.02/2) covers the inner edge of the annulus
+  const all = [...hillsBoxesReadback(), ...rimBoxesReadback()];
+  const n = 44, mstep = MEADOW_SIZE / n;
+  for (let ix = 0; ix < n; ix++) for (let iz = 0; iz < n; iz++) {
+    all.push({ x: -MEADOW_SIZE / 2 + (ix + 0.5) * mstep, z: -MEADOW_SIZE / 2 + (iz + 0.5) * mstep, half: (mstep * 1.02) / 2 });
+  }
+  const cov = (x, z) => all.some((b) => Math.abs(x - b.x) <= b.half && Math.abs(z - b.z) <= b.half);
+  // the pond's shore band (incl. the corner-test exclusion reach and the
+  // lake sub-piece fringe) is drawn by the Lake family, not hills/rim
+  const inPondBand = (x, z) =>
+    Math.hypot(x - LAKE.center[0], z - LAKE.center[1]) <= LAKE.radius + LAKE.shoreWidth + 3.5;
+  let gaps = 0;
+  const samples = [];
+  for (let aDeg = 0; aDeg < 360; aDeg += 0.25) {
+    const a = (aDeg * Math.PI) / 180;
+    for (let r = HILLS.innerRadius; r <= HILLS.outerRadius + HILLS.rimRingWidth - 1.0; r += 0.1) {
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (inPondBand(x, z)) continue;
+      if (!cov(x, z)) {
+        gaps++;
+        if (samples.length < 8) samples.push({ a: aDeg, r: +r.toFixed(1), x: +x.toFixed(1), z: +z.toFixed(1) });
+      }
+    }
+  }
+  assert.strictEqual(gaps, 0, 'uncovered footprint points in the rim annulus (the #83 seam class): ' + JSON.stringify(samples));
+});
+
 test('#50: camera-sweep survey — no horizon-direction ray from any in-bounds camera escapes to sky', () => {
   // geometric survey over the shared layout (supporting evidence; the user's
   // eyeball is acceptance): from camera positions across the allowed orbit

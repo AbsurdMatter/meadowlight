@@ -52,9 +52,19 @@ export function rimBoxes(): RimBox[] {
   const step = HILLS.step;
   const inner = HILLS.outerRadius;
   const outer = HILLS.outerRadius + HILLS.rimRingWidth;
+  // #83: the rim ring iterates the HILLS-ALIGNED lattice (origin
+  // -outerRadius, the same phase hillsBoxes() uses), extended to cover the
+  // full ring extent. The ring's own origin (-outer) is offset from the
+  // hills' by rimRingWidth, which is NOT a multiple of step — the two
+  // lattices interleaved at the r=outerRadius cutoff and left uncovered
+  // diagonal slivers (sky-through slots, 47 measured seam clusters) where no
+  // box of either family reached. One phase lattice keeps the
+  // minSize >= 1+jitter overlap guarantee across the seam.
+  const origin = -HILLS.outerRadius;
+  const lo = origin + Math.floor((-outer - origin) / step) * step; // <= -outer, same phase
   const boxes: RimBox[] = [];
-  for (let x = -outer; x <= outer; x += step) {
-    for (let z = -outer; z <= outer; z += step) {
+  for (let x = lo; x <= outer; x += step) {
+    for (let z = lo; z <= outer; z += step) {
       const r = Math.hypot(x, z);
       if (r < inner || r > outer) continue;
       if (isPondBandCell(x, z)) continue;
