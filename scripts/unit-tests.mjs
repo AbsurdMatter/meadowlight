@@ -104,7 +104,7 @@ const { isPlantableCell, groundAt: groundAtReadback } = require(OUT + '/engine/g
 const { hillsCover: hillsCoverReadback, rimBoxes: rimBoxesReadback, hillsBoxes: hillsBoxesReadback } = require(OUT + '/engine/hillsLayout.js');
 const { seasonWindows, precipReadback, tickPrecipScheduleForTest, nextWindowAfter } = require(OUT + '/engine/rainSchedule.js');
 const { wasVisitedThisSeason, withVisit, visitedParents } = require(OUT + '/engine/visits.js');
-const { resolveWildlifeHit, nextWildlifeEntry } = require(OUT + '/engine/magnifierHit.js');
+const { resolveWildlifeHit, nextWildlifeEntry, wildlifeOvertakesMeshClaim } = require(OUT + '/engine/magnifierHit.js');
 const { MAGNIFIER_WILDLIFE } = require(OUT + '/data/magnifierWildlife.js');
 const { MAGNIFIER_KINDS } = require(OUT + '/data/magnifierKinds.js');
 const { starterPatchFor } = require(OUT + '/engine/starterPatch.js');
@@ -1606,6 +1606,26 @@ test('wildlife hit: MOVES — the hit uses the CURRENT position, not a stale cap
   const hit = resolveWildlifeHit(cam, frame2, 1.1);
   assert.ok(hit, 'after the creature moves under the pointer, the SAME function hits');
   assert.strictEqual(hit.kind, 'lavendermoth');
+});
+
+test('wildlife hit: the hit carries its along-ray distance for claim comparison (#85)', () => {
+  const cam = { camX: 0, camY: 0, camZ: 0, dirX: 0, dirY: 0, dirZ: -1 };
+  const two = [
+    { kind: 'butterfly', x: 0.9, y: 0, z: -4 }, // near camera but off-axis
+    { kind: 'queenbumble', x: 0.05, y: 0, z: -30 }, // far but dead-on
+  ];
+  const hit = resolveWildlifeHit(cam, two, 1.1);
+  assert.ok(hit);
+  assert.strictEqual(hit.kind, 'queenbumble');
+  assert.ok(Math.abs(hit.along - 30) < 1e-9, 'along = distance along the ray to the winner, got ' + hit.along);
+});
+
+test('#85: wildlife overtakes a mesh claim only when nearer along the ray', () => {
+  const hit = { kind: 'hivebee', along: 5, perpSq: 0.01 };
+  assert.strictEqual(wildlifeOvertakesMeshClaim(hit, 10), true, 'creature nearer along the ray than the mesh claim wins');
+  assert.strictEqual(wildlifeOvertakesMeshClaim(hit, 3), false, 'creature behind the mesh claim loses (the flower in front owns the card)');
+  assert.strictEqual(wildlifeOvertakesMeshClaim(hit, null), true, 'no live mesh claim — the resolver claims freely');
+  assert.strictEqual(wildlifeOvertakesMeshClaim(null, 10), false, 'a miss never overtakes a mesh-owned entry');
 });
 
 test('entry decision: a MISS KEEPS the current visitor entry (no null-wipe)', () => {

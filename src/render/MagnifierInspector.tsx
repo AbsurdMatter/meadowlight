@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { usePlacementStore } from './placementStore';
 import { allWildlife } from './magnifierProbes';
 import { MAGNIFIER_TUNING } from '../data/magnifier';
-import { resolveWildlifeHit } from '../engine/magnifierHit';
+import { resolveWildlifeHit, wildlifeOvertakesMeshClaim } from '../engine/magnifierHit';
 import type { MagnifierEntry } from '../data/magnifierKinds';
 import { isMeshOwnedEntry, claimDistanceReadback } from '../data/magnifierKinds';
 
@@ -124,11 +124,12 @@ export function MagnifierResolver() {
     if (!inside.current) return; // pointer off-canvas: nothing to resolve
     // THE ONE OWNERSHIP RULE (#6384690070, third instance of the hit/miss
     // asymmetry class): a flower or structure entry is owned by its mesh's
-    // pointer-over/pointer-out pair — the resolver never overwrites a
-    // mesh-owned entry, in ANY branch. The resolver's visitor lock claims
-    // only null/visitor entries (isClaimableEntry). Stated once in
-    // data/magnifierKinds, consulted by every writer — no special cases.
-    if (isMeshOwnedEntry(s.magnifierEntry)) return;
+    // pointer-over/pointer-out pair — on a MISS the resolver never touches
+    // a mesh-owned entry, in ANY branch. On a HIT, #85 extends the symmetric
+    // claim (#6384878002) to wildlife: a creature nearer ALONG the ray than
+    // the live mesh claim wins (hovering a bee in front of a flower shows
+    // the bee, not the flower behind it). Stated once in
+    // data/magnifierKinds + engine/magnifierHit, consulted by every writer.
     // unproject the pointer through the live camera, then hand the PURE
     // hit function flat camera state + CURRENT probe positions
     dir.current
@@ -149,13 +150,21 @@ export function MagnifierResolver() {
       MAGNIFIER_TUNING.wildlifeReach,
     );
     const cur = s.magnifierEntry;
-    if (isMeshOwnedEntry(cur)) return; // the ONE rule, every branch
     if (hit) {
       missStreak.current = 0;
       const next = { kind: 'visitor', visitorId: hit.kind } as MagnifierEntry;
+      if (isMeshOwnedEntry(cur)) {
+        // #85: symmetric claim, wildlife side — overtake the mesh claim only
+        // when the creature is nearer along the pointer ray than the claim bar
+        if (wildlifeOvertakesMeshClaim(hit, claimDistanceReadback())) {
+          s.setMagnifierEntry(next);
+        }
+        return;
+      }
       if (JSON.stringify(next) !== JSON.stringify(cur)) s.setMagnifierEntry(next);
       return;
     }
+    if (isMeshOwnedEntry(cur)) return; // the ONE rule, absolute on miss frames
     // miss: a visitor lock survives the grace window, then releases
     missStreak.current++;
     if (missStreak.current > 30) {

@@ -537,9 +537,15 @@ async function checkMagnifier() {
       return {
         x: ((clip.x / clip.w + 1) / 2) * window.innerWidth,
         y: ((-clip.y / clip.w + 1) / 2) * window.innerHeight,
+        depth: clip.w,
       };
     };
-    // walk until a real hivebee is nearest the pixel (resolver-agreement)
+    // #85 (detector fix): collect every in-viewport pixel where a real
+    // hivebee is the nearest creature, carrying the bee's clip depth so the
+    // node side tries the nearest-to-camera candidates first (a bee in
+    // FRONT of any flower mesh wins the symmetric claim; one behind it
+    // legitimately does not)
+    const candidates = [];
     for (const bee of bees) {
       const base = project(bee);
       const others = sightings.filter((s) => s !== bee);
@@ -554,22 +560,38 @@ async function checkMagnifier() {
           }),
           Infinity,
         );
-        if (beeD < 12 && otherD > beeD) return { ok: true, screen: cand, targeted: 'hivebee' };
+        if (beeD < 12 && otherD > beeD && cand.x >= 0 && cand.x < window.innerWidth && cand.y >= 0 && cand.y < window.innerHeight) {
+          candidates.push({ x: cand.x, y: cand.y, depth: base.depth });
+        }
       }
     }
-    return { ok: false, reason: 'no pixel where a hivebee wins', total: sightings.length };
+    candidates.sort((a, b) => a.depth - b.depth);
+    if (candidates.length === 0) return { ok: false, reason: 'no pixel where a hivebee wins', total: sightings.length };
+    return { ok: true, candidates: candidates.slice(0, 8), targeted: 'hivebee' };
   });
+  // #85 (detector fix): drive the REAL claim path per candidate — move off
+  // the previous mesh first (pointer-out releases its claim), then onto the
+  // candidate pixel, and read the LIVE entry each time; accept the first
+  // candidate the resolver actually claimed as hivebee. The old one-shot
+  // wiggle assumed the away-point released the flower claim — on a dense
+  // meadow it often landed on ANOTHER mesh, so a mesh-owned entry was live at
+  // the bee pixel and the ownership rule (correctly) kept the flower card.
+  let beeTarget = null;
   if (beeHover.ok) {
-    // #69: wiggle OFF the target first, then onto it — a flower mesh whose
-    // pointer-over already fired (from the earlier cluster check) keeps a
-    // mesh-owned entry, and the resolver refuses to overwrite it (the ONE
-    // ownership rule); landing directly on the bee pixel left the FLOWER
-    // card shown while the resolver never claimed the bee. Moving away fires
-    // the flower's pointer-out (releases its claim), then moving onto the
-    // bee lets the resolver claim the hivebee through the real path.
-    await page.mouse.move(beeHover.screen.x - 80, beeHover.screen.y - 80);
-    await page.waitForTimeout(400);
-    await page.mouse.move(beeHover.screen.x, beeHover.screen.y);
+    const vp = page.viewportSize() ?? { width: 1280, height: 720 };
+    for (const cand of beeHover.candidates) {
+      const ax = Math.min(Math.max(cand.x - 80, 4), vp.width - 4);
+      const ay = Math.min(Math.max(cand.y - 80, 4), vp.height - 4);
+      await page.mouse.move(ax, ay);
+      await page.waitForTimeout(300);
+      await page.mouse.move(cand.x, cand.y);
+      await page.waitForTimeout(300);
+      const entry = await page.evaluate(() => window.__meadowlight.magnifierReadback().entry);
+      if (entry && entry.kind === 'visitor' && entry.visitorId === 'hivebee') {
+        beeTarget = { x: cand.x, y: cand.y, entry };
+        break;
+      }
+    }
   }
   await page.waitForTimeout(1200); // hover + resolver frames, then read
   const beeCard = await page.evaluate(() => {
@@ -598,9 +620,15 @@ async function checkMagnifier() {
   // (2) the card shows that creature's fact — asserted via the fact's stable
   // numeric core ('50' and '100' appear in both the en and any future sl
   // phrasing of the honeybee foraging fact), never via a prose literal.
-  const claimed = beeCard?.entry.entry?.kind === 'visitor' ? beeCard.entry.entry.visitorId : null;
+  // #85: name the RAW claimed entry in the FAIL line — the old extraction
+  // collapsed a mesh-owned (flower) entry to "claimed: null", which read as
+  // a broken readback while the card visibly showed the flower's fact; the
+  // readback itself was faithful (same store field the card renders)
+  const claimedEntry = beeCard?.entry.entry ?? null;
+  const claimed = claimedEntry?.kind === 'visitor' ? claimedEntry.visitorId : null;
   const beeFactShown =
     beeHover.ok &&
+    !!beeTarget &&
     !!beeCard &&
     beeCard.visible &&
     claimed === 'hivebee' &&
@@ -608,7 +636,8 @@ async function checkMagnifier() {
   rec.record('magnifier.wildlife-entry-shows-its-fact', beeFactShown,
     !beeHover.ok
       ? 'setup failed: ' + (beeHover.reason ?? '') + ' (' + (beeHover.total ?? 0) + ' creatures live)'
-      : 'targeted: ' + beeHover.targeted + ' — claimed: ' + claimed + ' — card: ' + beeCard.text.slice(0, 70));
+      : 'targeted: ' + beeHover.targeted + ' — claimed entry: ' + JSON.stringify(claimedEntry) +
+        ' — card: ' + (beeCard ? beeCard.text.slice(0, 70) : '(no card)'));
   // #6384994711: the removal-refusal gate sibling — with the glass ARMED
   // and an ACTIVE entry, a right-click ON a target must NOT remove it:
   // the target stays present, the save is unchanged, the right-click is

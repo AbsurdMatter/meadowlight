@@ -46,13 +46,24 @@ export interface HitCamera {
  * Reach is measured PERPENDICULAR to the ray (the pointer's line of sight),
  * so a distant creature hovering under the pointer still hits at range.
  */
+export interface WildlifeHit {
+  kind: MagnifierKind;
+  /** distance from the camera along the pointer ray to the creature — the
+   *  same metric the mesh raycast's e.distance uses, so a wildlife hit and
+   *  a mesh claim can be compared (#85: nearer along the ray wins) */
+  along: number;
+  /** squared perpendicular distance to the ray (the winner metric) */
+  perpSq: number;
+}
+
 export function resolveWildlifeHit(
   camera: HitCamera,
   sightings: HitSighting[],
   reach: number,
-): { kind: MagnifierKind } | null {
+): WildlifeHit | null {
   let best: MagnifierKind | null = null;
   let bestScore = Infinity;
+  let bestAlong = 0;
   for (const w of sightings) {
     // vector camera -> creature
     const dx = w.x - camera.camX;
@@ -73,9 +84,27 @@ export function resolveWildlifeHit(
     if (perpSq < bestScore) {
       bestScore = perpSq;
       best = w.kind;
+      bestAlong = along;
     }
   }
-  return best ? { kind: best } : null;
+  return best ? { kind: best, along: bestAlong, perpSq: bestScore } : null;
+}
+
+/**
+ * #85: the symmetric claim rule (#6384878002) extended to wildlife. When a
+ * creature is hit, it may overtake a MESH-OWNED entry (flower/structure)
+ * iff it is nearer ALONG the pointer ray than the live mesh claim bar —
+ * hovering a bee sitting in front of a flower shows the BEE, not the flower
+ * behind it. Mesh-vs-mesh ownership is unchanged, and on a MISS the
+ * mesh-owned entry is never touched (the resolver's miss path keeps that
+ * rule absolutely).
+ */
+export function wildlifeOvertakesMeshClaim(
+  hit: WildlifeHit | null,
+  claimBar: number | null,
+): boolean {
+  if (!hit) return false;
+  return claimBar === null || hit.along < claimBar;
 }
 
 /**
