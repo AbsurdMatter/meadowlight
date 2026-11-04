@@ -89,6 +89,17 @@ function isPondBandCell(x: number, z: number): boolean {
 
 let cache: HillsBox[] | null = null;
 
+/**
+ * #83: the ONE shared source for the Hills instanced buffer capacity — the
+ * renderer (Background.tsx) sizes the mesh from this and the unit gate
+ * asserts capacity >= instance count, so buffer and draw order can never
+ * diverge again (#66's class: an estimate under-counted and three.js
+ * silently dropped every instance past the capacity).
+ */
+export function hillsInstanceCapacity(): number {
+  return hillsBoxes().length + rimBoxes().length;
+}
+
 /** The rendered hills boxes (jittered centers + exact half-extents). */
 export function hillsBoxes(): HillsBox[] {
   if (cache) return cache;

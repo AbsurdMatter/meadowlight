@@ -101,7 +101,7 @@ const { advanceColony, colonyIntensity: colonyIntensityExport, colonyReadback: c
 const { SEEDING_TUNING, SEEDING_FACTS } = require(OUT + '/data/seeding.js');
 const { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, FIREFLY_SUMMER_TUNING, HOVERFLY_AUTUMN_TUNING, isEarlySpring } = require(OUT + '/data/seasonalVisitors.js');
 const { isPlantableCell, groundAt: groundAtReadback } = require(OUT + '/engine/ground.js');
-const { hillsCover: hillsCoverReadback, rimBoxes: rimBoxesReadback, hillsBoxes: hillsBoxesReadback } = require(OUT + '/engine/hillsLayout.js');
+const { hillsCover: hillsCoverReadback, rimBoxes: rimBoxesReadback, hillsBoxes: hillsBoxesReadback, hillsInstanceCapacity: hillsInstanceCapacityReadback } = require(OUT + '/engine/hillsLayout.js');
 const { seasonWindows, precipReadback, tickPrecipScheduleForTest, nextWindowAfter } = require(OUT + '/engine/rainSchedule.js');
 const { wasVisitedThisSeason, withVisit, visitedParents } = require(OUT + '/engine/visits.js');
 const { resolveWildlifeHit, nextWildlifeEntry, wildlifeOvertakesMeshClaim } = require(OUT + '/engine/magnifierHit.js');
@@ -1025,6 +1025,22 @@ test('#50: the rim ring is deterministic, past outerRadius, varied heights, pond
     assert.ok(hillsCoverReadback(rimOnly.x, rimOnly.z), 'rim-covered point reads as terrain (hillsCover includes the ring)');
     assert.ok(!isPlantableCell(rimOnly.x, rimOnly.z), 'rim-covered point is unplantable');
   }
+});
+
+test('#83 invariant: the instanced buffer capacity >= the instance count for the distant families (#66 class, encoded)', () => {
+  // The renderer (Background.tsx) sizes the Hills mesh from
+  // hillsInstanceCapacity() — the ONE shared source. Assert the invariant
+  // that was missing when #66 shipped: capacity >= the real draw order
+  // (hillsBoxes + rimBoxes), counted exactly, never estimated.
+  const cap = hillsInstanceCapacityReadback();
+  const drawn = hillsBoxesReadback().length + rimBoxesReadback().length;
+  assert.ok(cap >= drawn, 'hills buffer capacity ' + cap + ' >= drawn instances ' + drawn);
+  assert.strictEqual(cap, drawn, 'capacity is counted exactly from the layout, not estimated');
+  // and prove the class existed: the pre-#66 area/step^2 estimate under-counts
+  // the real draw order, which is exactly what silently truncated the rim
+  const env = require(OUT + '/data/environment.js');
+  const est = Math.floor((Math.PI * (env.HILLS.outerRadius ** 2 - env.HILLS.innerRadius ** 2)) / (env.HILLS.step ** 2));
+  assert.ok(est < drawn, 'pre-#66 area estimate (' + est + ') under-counts the real layout (' + drawn + ') — the truncation class this invariant guards (render path also self-checks with a gate-visible console.error per family)');
 });
 
 test('#50: camera-sweep survey — no horizon-direction ray from any in-bounds camera escapes to sky', () => {

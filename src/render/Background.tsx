@@ -14,7 +14,7 @@ import {
   backgroundHeight,
 } from '../data/environment';
 import { groundAt } from '../engine/ground';
-import { hillsBoxes, rimBoxes } from '../engine/hillsLayout';
+import { hillsBoxes, rimBoxes, hillsInstanceCapacity } from '../engine/hillsLayout';
 
 function makeRng(seed: number) {
   let s = seed;
@@ -63,12 +63,15 @@ function isPondBandCell(x: number, z: number): boolean {
 function Hills() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
 
-  // #66 eyeball follow-up: the instanced buffer must fit the REAL layout —
-  // hillsBoxes() + rimBoxes() counted exactly (the old area/step^2 estimate
-  // under-counted and three.js silently dropped every box past `count`,
-  // which is where the visible through-rim gaps on the elongated edges
-  // came from). One source: the same hillsLayout the loop draws.
-  const count = useMemo(() => hillsBoxes().length + rimBoxes().length, []);
+  // #66 eyeball follow-up + #83 invariant: the instanced buffer must fit the
+  // REAL layout — hillsBoxes() + rimBoxes() counted exactly via the ONE
+  // shared capacity source (the old area/step^2 estimate under-counted and
+  // three.js silently dropped every box past `count`, which is where the
+  // visible through-rim gaps came from). The unit gate asserts
+  // hillsInstanceCapacity() >= instance count; the draw loop self-checks
+  // below and logs an error (gate-visible via no-console-errors) if drawn
+  // ever exceeds the capacity again.
+  const count = useMemo(() => hillsInstanceCapacity(), []);
 
   useEffect(() => {
     const mesh = meshRef.current;
@@ -139,6 +142,11 @@ function Hills() {
         color.copy(base).lerp(fogColor, t * HILLS.fogBlendStrength);
         mesh.setColorAt(i, color);
         i++;
+    }
+    // #83: runtime invariant — three.js silently drops instances past the
+    // buffer capacity (the #66 class); surface it loudly instead
+    if (i > count) {
+      console.error('[render] hills instanced buffer under-sized: capacity ' + count + ' < drawn ' + i + ' — trailing instances are silently dropped');
     }
     mesh.count = i;
     mesh.instanceMatrix.needsUpdate = true;
@@ -258,6 +266,10 @@ function Lake() {
         }
       }
     }
+    // #83: same runtime invariant for the pond families (estimate-sized buffers)
+    if (bi > bandCount) console.error('[render] lake band buffer under-sized: capacity ' + bandCount + ' < drawn ' + bi);
+    if (fi > waterCount) console.error('[render] lake floor buffer under-sized: capacity ' + waterCount + ' < drawn ' + fi);
+    if (wi > waterCount) console.error('[render] lake water buffer under-sized: capacity ' + waterCount + ' < drawn ' + wi);
     band.count = bi;
     floor.count = fi;
     water.count = wi;
@@ -375,6 +387,9 @@ function Forest() {
         }
       }
     }
+    // #83: same runtime invariant for the forest families
+    if (trunkI > totalTrees) console.error('[render] forest trunk buffer under-sized: capacity ' + totalTrees + ' < drawn ' + trunkI);
+    if (foliageI > maxFoliage) console.error('[render] forest foliage buffer under-sized: capacity ' + maxFoliage + ' < drawn ' + foliageI);
     trunks.count = trunkI;
     foliage.count = foliageI;
     trunks.instanceMatrix.needsUpdate = true;
