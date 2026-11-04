@@ -59,17 +59,29 @@ async function newPage() {
     }
     w.placeStructure('hive', 0, 0);
     w.setSeason('summer'); // force bloom for the summer bloomers
+    // #82 (detector fix): pin the season progress too — setSeason already
+    // restarts the calendar at progress 0; pinning 0.5 makes the fixture's
+    // bloom window explicit and immune to boot-phase residue
+    w.setSeasonProgressForTest(0.5);
     return n;
   });
-  // sample bee telemetry over ~20s: dispersion must grow, foraging must dominate
+  // #82 (detector fix): sample until the swarm settles instead of a fixed
+  // 10x2s window. targetFound is CUMULATIVE and monotone, so polling it
+  // removes the load dependence the moving counts exposed: the adaptive
+  // swarm cap (frame-time driven) and the colony-breath ease make the
+  // forager count inside a fixed wall-clock window machine-dependent
+  // (full suite vs standalone read 19 vs 13). The predicate is REACHED,
+  // not sampled at one instant.
   const samples = [];
-  for (let i = 0; i < 10; i++) {
+  const deadline = Date.now() + 60000;
+  let last = null;
+  while (Date.now() < deadline) {
     await page.waitForTimeout(2000);
-    const d = await page.evaluate(() => window.__meadowlight.beeDebug());
-    samples.push(d);
+    last = await page.evaluate(() => window.__meadowlight.beeDebug());
+    samples.push(last);
+    if (last.targetFound > 20) break;
   }
   const first = samples[0];
-  const last = samples[samples.length - 1];
   // observable is ABSOLUTE dispersion (bees spread across the planted field),
   // not growth ratio: the fixed swarm reaches steady-state dispersion within
   // the first 2s sample. Pre-fix baseline for this scenario: 4.9u avg, bees
@@ -81,7 +93,11 @@ async function newPage() {
     `avgDist ${first.avgDistFromHive.toFixed(1)}u -> ${last.avgDistFromHive.toFixed(1)}u, max ${last.maxDistFromHive.toFixed(1)}u`);
   record('bees.200-flowers-foraging-not-parked', foraging,
     `foraging ${last.foraging} wander ${last.wandering} home ${last.homing} of ${last.count}`);
-  record('bees.targets-being-found', totalFound > 20, `targetFound=${totalFound} lost=${last.targetLost}`);
+  // "lost" predicate, named: beeDebug.targetLost = cumulative bees whose
+  // held target vanished (removed / out of bloom) or failed to re-resolve in
+  // the same frame as selection — stable fixture => ~0; load-correlated
+  // same-frame misses otherwise. The contract is target ACQUISITION.
+  record('bees.targets-being-found', totalFound > 20, `targetFound=${totalFound} lost=${last.targetLost} count=${last.count} samples=${samples.length}`);
   const realErrors = errors.filter((e) => !/favicon/.test(e));
   record('bees.200-flowers-no-console-errors', realErrors.length === 0, realErrors.slice(0, 3).join(' | '));
   await page.close();
