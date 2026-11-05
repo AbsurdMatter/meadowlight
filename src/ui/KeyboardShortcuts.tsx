@@ -355,8 +355,13 @@ export function KeyboardShortcuts() {
       // clamp to floor(realBand) so the rendered bottom never exceeds
       // floorY on any rasterizer (fractional rows round DOWN, never over).
       const realBand = Math.max(0, floorY - top);
-      // border-box element: css maxHeight == border-box max, no subtraction
-      const cssMaxHeight = naturalHeight > realBand ? Math.max(48, Math.floor(realBand)) : null;
+      // border-box element: css maxHeight == border-box max, no subtraction.
+      // #65 round-12: the lane is the HARD constraint — clamp to the exact
+      // measured band (floor(realBand)); the old 48px minimum floor let the
+      // rendered bottom exceed floorY when the band was shorter than 48
+      // (panel∩cornerRow@360x500: band 20.8, clamp 48, bottom 387 > floorY
+      // 360). A short lane scrolls inside, it never overlaps the floor.
+      const cssMaxHeight = naturalHeight > realBand ? Math.floor(realBand) : null;
       if (top !== panelTop || cssMaxHeight !== panelMaxHeight) {
         setPanelTop(top);
         setPanelMaxHeight(cssMaxHeight);

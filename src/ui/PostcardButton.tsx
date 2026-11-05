@@ -49,28 +49,36 @@ export function PostcardButton() {
   useEffect(() => {
     if (!seedShown) return;
     const el = popRef.current;
-    if (!el) return;
+    const btn = btnRef.current;
+    if (!el || !btn) return;
     const update = () => {
-      // #65 round-10: CONVERGE on the rendered rect instead of a one-shot
-      // formula. The popover opens UPWARD from the corner-row button
-      // (bottom-anchored: [anchorBottom - h, anchorBottom]). Start from the
-      // generous viewport cap, then while the RENDERED popover still
-      // intersects a live toast card or pokes above the viewport top, shrink
-      // maxHeight by the measured overlap + 1 and re-read (getBoundingClientRect
-      // reflows synchronously). The round-9 formula moved share top 238 ->
-      // 280.4 but still landed on toast#0 at the 500-height viewports —
+      // #65 round-12: derive the popover's lane from the LIVE toast ceiling,
+      // exactly like the hint panel's solver. The popover opens UPWARD from
+      // the corner-row button (bottom-anchored), so its bottom anchor is the
+      // button's live top minus the lane gap, and its lane is
+      // [ceiling, anchorBottom] where ceiling = the lowest live toast card's
+      // bottom + gap (toasts are a ceiling, not just a floor — the popover
+      // must never rise into the toast lane). maxHeight starts at the whole
+      // measured band, CLAMPED UPWARD (never above the ceiling, never past
+      // the viewport top), then the loop re-measures the RENDERED rect at
+      // every attempt and shrinks by the measured residual until it clears —
       // the rendered rect is the only truth that survives wrap/font timing.
-      let maxH = window.innerHeight - 16;
+      const anchorBottom = btn.getBoundingClientRect().top - CHROME_TUNING.shareLaneGap;
+      const cards = [...document.querySelectorAll('[data-toast]')];
+      const cardsBottom = cards.reduce((m, c) => Math.max(m, c.getBoundingClientRect().bottom), 0);
+      const ceiling = cardsBottom > 0 ? cardsBottom + 6 : 8;
+      const band = anchorBottom - Math.max(ceiling, 8);
+      let maxH = Math.max(8, Math.min(window.innerHeight - 16, band));
       for (let k = 0; k < 16; k++) {
         el.style.setProperty('--share-max-h', maxH.toFixed(1) + 'px');
         const r = el.getBoundingClientRect();
-        let worst = 8 - r.top; // viewport-top overflow (positive = pokes out)
-        for (const c of document.querySelectorAll('[data-toast]')) {
+        let worst = Math.max(ceiling - r.top, 8 - r.top); // toast-lane / viewport-top overflow
+        for (const c of cards) {
           const b = c.getBoundingClientRect();
           worst = Math.max(worst, b.bottom - r.top); // positive = toast overlap
         }
-        if (worst <= 0.5 && r.bottom <= window.innerHeight + 0.5) break;
-        maxH = Math.max(60, maxH - worst - 1);
+        if (worst <= 0.5 && r.top >= 0 && r.bottom <= window.innerHeight + 0.5) break;
+        maxH = Math.max(8, maxH - worst - 1);
       }
       el.style.setProperty('--share-max-h', Math.min(maxH, window.innerHeight - 16).toFixed(1) + 'px');
     };
@@ -179,6 +187,13 @@ export function PostcardButton() {
             // top); maxHeight shrinks by the live toast-band overlap so the
             // popover clears the toast stack from ABOVE at short viewports
             // while staying on-screen at tall ones.
+            // #65 round-12: border-box, like the hint panel — the lane solver
+            // writes a BORDER-box max height into --share-max-h, so with
+            // content-box the padding+border chrome sat ON TOP of the cap and
+            // the rendered box could never shrink into a short lane
+            // (share∩toast#0 at the 500-height viewports: band 22.8px,
+            // floor 16 + ~30px chrome = 46px rendered minimum).
+            boxSizing: 'border-box',
             bottom: 'calc(100% + ' + CHROME_TUNING.shareLaneGap + 'px)',
             top: 'auto',
             right: 0,
