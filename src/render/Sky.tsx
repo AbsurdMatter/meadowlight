@@ -194,7 +194,14 @@ export function DistantRidge() {
   return (
     <instancedMesh ref={meshRef} args={[undefined, undefined, count]} frustumCulled={false} receiveShadow>
       <boxGeometry args={[1, 1, 1]} />
-      <meshLambertMaterial side={THREE.DoubleSide} />
+      {/* #90: the rebuilt ridge band (r in (rimOuter, ridgeOuterRadius] = 90..100)
+          sits at depth >= ~118 from the resting camera — at/beyond FOG.far
+          (120), so with scene fog on every fragment was fogged to ~100%
+          horizon color and the family rendered but never read as a silhouette.
+          The ridge opts out of scene fog; its instance colors already carry
+          the fogBlend mix (45% terrain at the band), so it reads past the rim
+          in fog AND no-fog cases. */}
+      <meshLambertMaterial side={THREE.DoubleSide} fog={false} />
     </instancedMesh>
   );
 }

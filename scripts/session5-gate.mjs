@@ -385,13 +385,23 @@ async function checkSky(browser) {
       skySamples = [...distinct].slice(0, 20);
       skyBanded = distinct.size >= 5 && distinct.size <= 30;
     }
-    // 2. distant ridge: a ~96-instance basic-material mesh at r 56..74
+    // 2. distant ridge: the #83-rebuilt family — the InstancedMesh sized from
+    //    the ONE shared source (ridgeInstanceCapacity(), read back via the
+    //    test hook) whose instances all sit in the ridge band
+    //    (rimOuter, ridgeOuterRadius] = 90..100. (The pre-#83 shape — count
+    //    === 96, instance0 at r 50..80 — no longer exists; matching it read
+    //    0 on the rebuilt family, which is how #90's regression surfaced.)
     let ridgeCount = 0;
+    const ridgeLen = w.ridgeBoxesReadback ? w.ridgeBoxesReadback().length : 0;
     scene.traverse((o) => {
-      if (o.isInstancedMesh && o.instanceMatrix && o.count === 96) {
+      if (o.isInstancedMesh && o.instanceMatrix && o.count > 0 && o.count === ridgeLen) {
         const m = o.instanceMatrix.array;
-        const r0 = Math.hypot(m[12], m[14]);
-        if (r0 > 50 && r0 < 80) ridgeCount++;
+        let inBand = 0;
+        for (let i = 0; i < o.count; i++) {
+          const r = Math.hypot(m[i * 16 + 12], m[i * 16 + 14]);
+          if (r > 85 && r <= 105) inBand++;
+        }
+        if (inBand === o.count) ridgeCount++;
       }
     });
     // 3. composed clouds: puffs wide-and-low (x size >> y size)
