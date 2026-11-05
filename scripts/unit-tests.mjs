@@ -104,7 +104,7 @@ const { isPlantableCell, groundAt: groundAtReadback } = require(OUT + '/engine/g
 const { hillsCover: hillsCoverReadback, rimBoxes: rimBoxesReadback, hillsBoxes: hillsBoxesReadback, ridgeBoxes: ridgeBoxesReadback, hillsInstanceCapacity: hillsInstanceCapacityReadback, ridgeInstanceCapacity: ridgeInstanceCapacityReadback } = require(OUT + '/engine/hillsLayout.js');
 const { seasonWindows, precipReadback, tickPrecipScheduleForTest, nextWindowAfter } = require(OUT + '/engine/rainSchedule.js');
 const { wasVisitedThisSeason, withVisit, visitedParents } = require(OUT + '/engine/visits.js');
-const { resolveWildlifeHit, nextWildlifeEntry, wildlifeOvertakesMeshClaim } = require(OUT + '/engine/magnifierHit.js');
+const { resolveWildlifeHit, nextWildlifeEntry, wildlifeOvertakesMeshClaim, wildlifeClaimHit } = require(OUT + '/engine/magnifierHit.js');
 const { MAGNIFIER_WILDLIFE } = require(OUT + '/data/magnifierWildlife.js');
 const { MAGNIFIER_KINDS } = require(OUT + '/data/magnifierKinds.js');
 const { starterPatchFor } = require(OUT + '/engine/starterPatch.js');
@@ -1686,6 +1686,20 @@ test('#85: wildlife overtakes a mesh claim only when ON the creature AND nearer 
   assert.strictEqual(wildlifeOvertakesMeshClaim(beside, null), false, 'containment is required even with no live mesh claim bar');
   const atEdge = { kind: 'hivebee', along: 5, perpSq: 0.2 * 0.2 };
   assert.strictEqual(wildlifeOvertakesMeshClaim(atEdge, 10), true, 'perp exactly at the containment radius still counts as on-creature');
+});
+
+test('#85 round 3: containment gates EVERY wildlife claim — a near-ray creature is a miss, never the entry', () => {
+  // within the glass reach but off the body: the resolver must treat it as no-hit
+  const nearRay = { kind: 'hivebee', along: 5, perpSq: 0.27 * 0.27 };
+  assert.strictEqual(wildlifeClaimHit(nearRay), null, 'creature 0.27u off-ray (inside reach 1.1u) may not win or switch the entry');
+  const atReach = { kind: 'hoverfly', along: 8, perpSq: 1.09 * 1.09 };
+  assert.strictEqual(wildlifeClaimHit(atReach), null, 'creature near the reach boundary but off the body is also a miss');
+  // dead-on under the pointer: claims freely
+  const deadOn = { kind: 'hivebee', along: 5, perpSq: 0.01 };
+  assert.strictEqual(wildlifeClaimHit(deadOn), deadOn, 'ray through the body (perp 0.1u) is a real claim');
+  const atEdge = { kind: 'hivebee', along: 5, perpSq: 0.2 * 0.2 };
+  assert.strictEqual(wildlifeClaimHit(atEdge), atEdge, 'perp exactly at the containment radius still claims');
+  assert.strictEqual(wildlifeClaimHit(null), null, 'a miss stays a miss');
 });
 
 test('entry decision: a MISS KEEPS the current visitor entry (no null-wipe)', () => {

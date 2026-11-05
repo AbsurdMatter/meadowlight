@@ -121,6 +121,19 @@ export function wildlifeOvertakesMeshClaim(
 }
 
 /**
+ * #85 round 3: the containment gate for EVERY wildlife claim, not only the
+ * mesh overtake. A creature merely NEAR the ray — inside the glass reach
+ * (1.1u) but off the body (perp > 0.2u) — must never win or switch the
+ * entry: the resolver treats a non-contained hit exactly like a miss. Only
+ * a creature the pointer ray actually passes through may hold the card.
+ */
+export function wildlifeClaimHit(hit: WildlifeHit | null): WildlifeHit | null {
+  return hit !== null && hit.perpSq <= WILDLIFE_CONTAINMENT_RADIUS * WILDLIFE_CONTAINMENT_RADIUS
+    ? hit
+    : null;
+}
+
+/**
  * The resolver's per-frame ENTRY DECISION (also pure, also tested):
  * hit found -> that entry; no hit -> KEEP the current visitor entry
  * (a wobble is not a pointer-leave); the glass/cursor decides clears.

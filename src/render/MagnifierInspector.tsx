@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { usePlacementStore } from './placementStore';
 import { allWildlife } from './magnifierProbes';
 import { MAGNIFIER_TUNING } from '../data/magnifier';
-import { resolveWildlifeHit, wildlifeOvertakesMeshClaim } from '../engine/magnifierHit';
+import { resolveWildlifeHit, wildlifeClaimHit, wildlifeOvertakesMeshClaim } from '../engine/magnifierHit';
 import type { MagnifierEntry } from '../data/magnifierKinds';
 import { isMeshOwnedEntry, claimDistanceReadback } from '../data/magnifierKinds';
 
@@ -137,7 +137,7 @@ export function MagnifierResolver() {
       .unproject(camera)
       .sub(camera.position)
       .normalize();
-    const hit = resolveWildlifeHit(
+    const rawHit = resolveWildlifeHit(
       {
         camX: camera.position.x,
         camY: camera.position.y,
@@ -149,6 +149,10 @@ export function MagnifierResolver() {
       allWildlife(),
       MAGNIFIER_TUNING.wildlifeReach,
     );
+    // #85 round 3: containment gates EVERY wildlife claim — a creature merely
+    // NEAR the ray (within reach but off the body) is treated as a miss, so
+    // it can neither steal a mesh-owned entry nor flip a held visitor lock.
+    const hit = wildlifeClaimHit(rawHit);
     const cur = s.magnifierEntry;
     if (hit) {
       missStreak.current = 0;

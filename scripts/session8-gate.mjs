@@ -815,9 +815,14 @@ async function checkMagnifier() {
     // resolves to the queen. The check no longer fights the resolver's
     // correct nearest-wins; it finds a pointer position the resolver
     // AGREES resolves to the queen. Frozen clock = deterministic ecology.
-    const pos = await page.evaluate((q) => {
+    const pos = await page.evaluate((qPre) => {
       const w = window.__meadowlight;
       w.timeSetPaused(true); // pin the creatures for the targeting walk
+      // #85 round 3: re-read the queen AFTER the freeze — the argument is the
+      // pre-freeze position and she may have drifted in the gap, which would
+      // stale every candidate pixel (the containment rule needs the ray
+      // within 0.2u of her PINNED body, not the old 1.1u reach).
+      const q = w.wildlifeSightings().find((s) => s.kind === 'queenbumble') ?? qPre;
       const cam = w.__three?.camera;
       const proj = cam.projectionMatrix.elements;
       const view = cam.matrixWorldInverse.elements;
@@ -855,26 +860,37 @@ async function checkMagnifier() {
       const base = project(q);
       const sightings = w.wildlifeSightings();
       const others = sightings.filter((s) => s !== q);
-      // candidate pixels: the queen's own projection first, then a ring
-      // walk around her (queen-nearest per the creature screen-space
-      // pre-filter — necessary but NOT sufficient without the real read)
+      // candidate pixels: the queen's own projection first, then pixels
+      // whose ray passes THROUGH her body. #85 round 3 made containment
+      // (perp <= 0.2u) the claim rule for every wildlife entry, so the old
+      // screen-space ring walk (pixels within the 1.1u reach but often
+      // outside the 0.2u body) no longer claims by design — project points
+      // on a small sphere around her live position instead (radius 0.15u
+      // < the 0.2u containment radius => the ray through each such pixel
+      // passes within her body). The real read below stays the acceptance.
       candidates.push(base);
-      for (let step = 1; step <= 6; step++) {
-        for (let dir = 0; dir < 8; dir++) {
-          const ang = (dir / 8) * Math.PI * 2;
-          const cand = { x: base.x + Math.cos(ang) * step * 6, y: base.y + Math.sin(ang) * step * 6 };
-          const queenD = Math.hypot(cand.x - base.x, cand.y - base.y);
-          const otherD = Math.min(
-            ...others.map((o) => {
-              const op = project(o);
-              return Math.hypot(cand.x - op.x, cand.y - op.y);
-            }),
-            Infinity,
-          );
-          // pre-filter: the pixel must be plausibly queen-nearest among
-          // CREATURES (meshes checked by the real read below)
-          if (otherD > queenD) candidates.push(cand);
-        }
+      const R = 0.15;
+      for (let i = 0; i < 26; i++) {
+        const k = i + 0.5;
+        const z = 1 - 2 * (k / 26);
+        const rr = Math.sqrt(Math.max(0, 1 - z * z));
+        const phi = k * 2.399963229728653; // golden-angle sphere sample
+        const cand = project({
+          x: q.x + R * rr * Math.cos(phi),
+          y: q.y + R * z,
+          z: q.z + R * rr * Math.sin(phi),
+        });
+        const queenD = Math.hypot(cand.x - base.x, cand.y - base.y);
+        const otherD = Math.min(
+          ...others.map((o) => {
+            const op = project(o);
+            return Math.hypot(cand.x - op.x, cand.y - op.y);
+          }),
+          Infinity,
+        );
+        // pre-filter: the pixel must be plausibly queen-nearest among
+        // CREATURES (meshes checked by the real read below)
+        if (otherD > queenD) candidates.push(cand);
       }
       return { ok: true, candidates };
     }, queenSeen.queen);
