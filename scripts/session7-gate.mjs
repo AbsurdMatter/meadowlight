@@ -455,19 +455,41 @@ async function checkTimeControlsUI() {
       rowInlineOpacity: row ? row.style.opacity : null,
     };
     // the decided observable also includes the INVERSE: running shows no chip
+    // AND the dim lifts back. #84 round-3 hardening: the old fixed 2200ms
+    // wait after unpausing is the same fixed-wait class as the round-1 FAIL
+    // (it samples wherever the row's own 1s re-render interval + 0.25s
+    // transition phase happens to be). Poll instead — 100ms steps, 5s
+    // deadline — until the chip is absent AND the computed opacity has
+    // settled back above the dim threshold, then read in that settled state.
+    // A world-side regression (chip stuck present, or the row never undims)
+    // now FAILs only after the full poll, named by the dump fields.
     w.timeSetPaused(false);
-    await new Promise((r) => setTimeout(r, 2200));
-    const chipWhenRunning = document.querySelector('[data-paused-chip]');
+    let chipWhenRunning = document.querySelector('[data-paused-chip]');
+    let rowOpacityWhenRunning = null;
+    const invDeadline = Date.now() + 5000;
+    while (Date.now() < invDeadline) {
+      await new Promise((r) => setTimeout(r, 100));
+      row = document.querySelector('[data-time-row]');
+      rowOpacityWhenRunning = row ? getComputedStyle(row).opacity : null;
+      chipWhenRunning = document.querySelector('[data-paused-chip]');
+      if (!chipWhenRunning && rowOpacityWhenRunning !== null && parseFloat(rowOpacityWhenRunning) > 0.9) break;
+    }
     return {
       ...pausedSnapshot,
       inViewport: !!chipRect && chipRect.width > 0 && chipRect.top >= 0 && chipRect.bottom <= window.innerHeight,
       chipAbsentWhenRunning: !chipWhenRunning,
+      rowOpacityWhenRunning,
     };
   });
   rec.record(
     'timecontrols.pause-indicator-present-in-viewport',
-    pausedUI.chip && pausedUI.inViewport && parseFloat(pausedUI.rowOpacity) < 0.7 && pausedUI.chipAbsentWhenRunning,
-    JSON.stringify(pausedUI) + ' (resting chip visible + row dimmed when paused; no chip when running)',
+    pausedUI.chip &&
+      pausedUI.inViewport &&
+      parseFloat(pausedUI.rowOpacity) < 0.7 &&
+      pausedUI.chipAbsentWhenRunning &&
+      pausedUI.rowOpacityWhenRunning !== null &&
+      parseFloat(pausedUI.rowOpacityWhenRunning) > 0.9,
+    JSON.stringify(pausedUI) + ' (resting chip visible + row dimmed when paused; no chip + dim lifted when running)',
   );
 
   const re = realErrors(errors);
