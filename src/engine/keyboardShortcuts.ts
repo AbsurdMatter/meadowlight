@@ -66,13 +66,17 @@ export function applyKey(
 }
 
 /** the single-fire toggle keys (never held-repeat) */
-export type ToggleAction = 'inspector' | 'journal' | 'reset' | 'cancel';
+export type ToggleAction = 'inspector' | 'journal' | 'reset' | 'cancel' | 'pause';
 
 export function toggleForKey(key: string): ToggleAction | null {
   if (key === 'i' || key === 'I') return 'inspector';
   if (key === 'j' || key === 'J') return 'journal';
   if (key === 'r' || key === 'R') return 'reset';
   if (key === 'Escape') return 'cancel';
+  // #71: Space toggles pause — the SAME timeControl.setPaused the pause
+  // button drives (one input path per interaction). Browsers report the
+  // key as ' ' (modern) or 'Spacebar' (legacy) — accept both.
+  if (key === ' ' || key === 'Spacebar') return 'pause';
   return null;
 }
 
@@ -90,13 +94,26 @@ export interface EscSurfaces {
   hubOpen: boolean;
   hivePopupOpen: boolean;
   glassArmed: boolean;
+  /** #61/#62: the seed share popover joins the close-grammar family */
+  sharePanelOpen: boolean;
+  /** the "?" shortcut hint panel (closes on Esc too — one grammar) */
+  hintPanelOpen: boolean;
 }
 
-export type EscAction = 'close-modal' | 'close-notebook' | 'close-hub' | 'close-hive-popup' | 'disarm-glass';
+export type EscAction =
+  | 'close-modal'
+  | 'close-notebook'
+  | 'close-hub'
+  | 'close-hive-popup'
+  | 'disarm-glass'
+  | 'close-share-panel'
+  | 'close-hint-panel';
 
 export function escActionFor(s: EscSurfaces): EscAction | null {
   if (s.modalOpen) return 'close-modal';
   if (s.notebookOpen) return 'close-notebook';
+  if (s.sharePanelOpen) return 'close-share-panel';
+  if (s.hintPanelOpen) return 'close-hint-panel';
   if (s.hubOpen) return 'close-hub';
   if (s.hivePopupOpen) return 'close-hive-popup';
   if (s.glassArmed) return 'disarm-glass';

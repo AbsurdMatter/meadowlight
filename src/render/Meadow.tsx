@@ -101,6 +101,11 @@ export function Meadow() {
         i++;
       }
     }
+    // #83: runtime invariant — three.js silently drops instances past the
+    // buffer capacity; surface it loudly (gate-visible via no-console-errors)
+    if (i > count) {
+      console.error('[render] meadow buffer under-sized: capacity ' + count + ' < drawn ' + i);
+    }
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingSphere();

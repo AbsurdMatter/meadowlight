@@ -5,6 +5,7 @@ import { NotebookHub } from './NotebookHub';
 import { theme } from './theme';
 import { usePlacementStore } from '../render/placementStore';
 import { CHROME_TUNING } from '../data/chrome';
+import { useLocale } from '../engine/locale';
 
 /**
  * One shared bottom-right container: Sound, Postcard, the notebook hub, and
@@ -80,7 +81,24 @@ const controlButtonStyle = (armed: boolean): React.CSSProperties => ({
 });
 
 export function CornerControls() {
+  const t = useLocale((s) => s.t());
   const [helpOpen, setHelpOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  // #65: publish the corner wrapper's MEASURED height on a data attribute so
+  // the dock can reserve its lane from the live box (the #59 rework added two
+  // buttons to the row; stale lane constants overlapped the dock at 480/700)
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const publish = () => {
+      el.setAttribute('data-corner-controls-height', String(Math.ceil(el.getBoundingClientRect().height)));
+    };
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    window.addEventListener('resize', publish);
+    return () => { ro.disconnect(); window.removeEventListener('resize', publish); };
+  }, []);
   // O4 (v4, #42): at narrow frames the corner row WRAPS to two rows
   // (right-anchored) instead of running under the dock — the reserved lane
   // becomes the wrapped row's height, never an overlap
@@ -97,8 +115,11 @@ export function CornerControls() {
   // and grouping it with placeable things was the confusion
   const magnifierOn = usePlacementStore((s) => s.magnifierOn);
   const toggleMagnifier = usePlacementStore((s) => s.toggleMagnifier);
+  const locale = useLocale((s) => s.locale);
+  const setLocale = useLocale((s) => s.setLocale);
   return (
     <div
+      ref={wrapRef}
       data-corner-controls
       style={{
         position: 'absolute',
@@ -143,7 +164,7 @@ export function CornerControls() {
         <button
           onClick={toggleMagnifier}
           data-corner-tool="magnifier"
-          title="Magnifying glass — hover a flower or a visitor for a close read"
+          title={t.magnifierTitle}
           aria-pressed={magnifierOn}
           style={controlButtonStyle(magnifierOn)}
         >
@@ -154,10 +175,34 @@ export function CornerControls() {
         <button
           onClick={() => setHelpOpen((o) => !o)}
           data-controls-help
-          title="How to play"
+          title={t.helpTitle}
           style={controlButtonStyle(false)}
         >
           ?
+        </button>
+        {/* #59: the "?" help button lives in the corner row (chrome), not in
+            the top-right stack — the stack's fixed lanes are dial → time row →
+            reset → notices → share panel */}
+        <button
+          onClick={() => usePlacementStore.getState().setHintOpen(!usePlacementStore.getState().hintOpen)}
+          data-shortcut-hint
+          title={t.shortcutsPanelTitle}
+          aria-pressed={usePlacementStore((s) => s.hintOpen)}
+          style={controlButtonStyle(false)}
+        >
+          ?
+        </button>
+        {/* P4 (i18n): the manual language toggle — one button in the corner
+            row, cycles the locales, persisted, aria-pressed syncs both ways */}
+        <button
+          onClick={() => setLocale(locale === 'en' ? 'sl' : 'en')}
+          data-language-toggle
+          title={t.languageName[locale === 'en' ? 'sl' : 'en']}
+          aria-pressed={locale === 'sl'}
+          aria-label={`Language: ${t.languageName[locale]}`}
+          style={controlButtonStyle(false)}
+        >
+          {locale === 'en' ? 'SL' : 'EN'}
         </button>
       </div>
     </div>

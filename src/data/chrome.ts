@@ -39,8 +39,13 @@ export const CHROME_TUNING = {
    * dock or the corner controls at any width. At narrow frames the dock is
    * bottom-anchored ABOVE the wrapped corner rows, so its top edge is
    * higher — this offset clears the tallest case.
+   * #65 tail: at 480 the corner row wraps to THREE rows and the dock lifts
+   * with the LIVE corner height (up to ~3*36+2*8+16 = 140 + inset), so the
+   * old constant 360 under-cleared and onboarding.hint-above-dock@480
+   * regressed. The offset is now the tallest narrow dock stack: 3-row lane
+   * + dock body + insets.
    */
-  onboardingHintBottom: 360,
+  onboardingHintBottom: 520,
   /** the narrow dock's scrollable body height */
   narrowBodyHeight: 110,
   /**
@@ -66,8 +71,28 @@ export const CHROME_TUNING = {
    * the ORDER is unchanged — toasts/reset were always the lowest lane.
    */
   helpLaneTop: 102,
-  /** the toast/reset lane's top (below the help button's bottom + gap) */
+  /**
+   * #59 (session 10 fix round): the reset button is anchored DIRECTLY under
+   * the time controls (top 56, bottom 94 at 700-1280 / 80 at 360-480) — its
+   * lane top is the time row's measured bottom + gap, same discipline as the
+   * help lane. The toast stack (season notices) flows BELOW the reset button;
+   * the share popover gets its own measured lane below the toasts.
+   */
+  resetLaneTop: 102,
+  /**
+   * the toast lane's top — directly below the reset button's lane. The stack
+   * grows UPWARD (column-reverse) from its lane and is capped at the lane
+   * height, so it can never reach the reset button above it.
+   */
   toastLaneTop: 138,
+  /**
+   * the share popover's lane top — below the toast lane. The popover is
+   * measured against every live toast card (chrome gate) and must never
+   * overlap a notice.
+   */
+  shareLaneTop: 240,
+  /** the gap between the toast lane's bottom and the share lane */
+  shareLaneGap: 6,
   /** the hint panel's width (one key + action pair per line fits) */
   helpPanelWidth: 280,
   /**

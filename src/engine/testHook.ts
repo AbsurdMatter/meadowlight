@@ -9,7 +9,9 @@ import type { Size } from '@react-three/fiber';
 import { beeDebug } from '../render/BeeSwarm';
 import { wildDebug } from '../render/WildPollinators';
 import { fireflyDebug } from '../render/Fireflies';
-import { setDayPhase } from './dayCycle';
+import { setDayPhase, isDaylight } from './dayCycle';
+import { encodeSeedCode } from './seedCode';
+import { useLocale } from './locale';
 import { precipitationVisual } from './weather';
 import { precipReadback, tickPrecipScheduleForTest } from './rainSchedule';
 import { allWildlife } from '../render/magnifierProbes';
@@ -25,11 +27,11 @@ import { starsDebug } from '../render/NightSky';
 import { starVisibility } from './nightSky';
 import { NIGHT_SKY_TUNING } from '../data/nightSky';
 import { isPlantableCell } from './ground';
-import { hillsBoxes } from './hillsLayout';
+import { hillsBoxes, rimBoxes, ridgeBoxes } from './hillsLayout';
 import { setFireflyForce } from '../render/Fireflies';
 import { rainDebug } from '../render/Rain';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
-import { capturePostcardPng } from './postcard';
+import { capturePostcardPng, downloadPostcard } from './postcard';
 import { audioDebugInfo, audioRunning, audioEnabled, buzzLevelForBeeCount } from './audio';
 import { ghostDebug } from '../render/PlacementSystem';
 import { DAY_CYCLE_SECONDS, resumeDayCycle } from './dayCycle';
@@ -130,6 +132,10 @@ declare global {
       /** #36 hive popup: open/close via the store path the click uses */
       openHivePopup: (hiveId: string) => void;
       hillsBoxesReadback: () => { x: number; z: number; half: number }[];
+      /** #50/#83: the outer rim ring (shared source readback, full geometry) */
+      rimBoxesReadback: () => { x: number; z: number; half: number; extraH: number; top: number; bottom: number }[];
+      /** #83: the outer ridge band (shared source readback) */
+      ridgeBoxesReadback: () => { x: number; z: number; half: number; extraH: number; top: number; bottom: number }[];
       milestones: () => string[];
       beeCount: () => number;
       beeDebug: () => unknown;
@@ -142,6 +148,10 @@ declare global {
     tickPrecipScheduleForTest: (worldSeed: number, ordinal: number, season: string) => void;
     setFireflyForce: (v: boolean | null) => void;
     dayPhaseReadback: () => number;
+    /** #81: the ONE shared lit-window predicate at the live phase — the same
+     *  isDaylight(dayPhase()) the bees, the P panel, and the save all read
+     *  (dawn 0.22 .. dusk 0.88); the readback the gate's night check names */
+    daylightReadback: () => boolean;
     rainDebug: () => unknown;
     rareBeeCount: () => number;
     capturePostcard: () => string | null;
@@ -150,7 +160,17 @@ declare global {
     audioIsRunning: () => boolean;
     /** O5 (v4, #43): readbacks for the keyboard gate */
     hubOpenReadback: () => boolean;
+    /** #61/#62: share-panel + hint-panel open readbacks (the Esc-close surfaces) */
+    sharePanelOpenReadback: () => boolean;
+    /** #63: the active locale's season-rollover toast title (localized) */
+    toastSeasonTitleReadback: () => string;
     modalOpenReadback: () => boolean;
+    /** P3: open/close the reset confirm modal (the same modal R opens) */
+    setModalOpenForTest: (open: boolean) => void;
+    /** #86 (detector support): dismiss the boot onboarding in gate fixtures
+     *  so the timed notebook nudges stay off during key-sequence checks
+     *  (same fixture pinning the session5/6 gates do via a seeded save) */
+    dismissOnboardingForTest: () => void;
     toastsReadback: () => { id: number; title: string; body: string }[];
     dismissAllToastsForTest: () => void;
     /** O2 (v4, #40): the journal readback (the store reads the saved blob) */
@@ -175,6 +195,38 @@ declare global {
       ghostVariation: () => { rotationY: number; heightJitter: number; tiltX: number; tiltZ: number } | null;
       resetWorld: () => void;
       reloadFromSave: () => void;
+      /** P3: seed codes — encode the live meadow / start from a code */
+      seedCodeEncode: () => string;
+    /** #60: run the REAL save path and report the observable (blob present + size), not the handler */
+    postcardSaveForTest: () => Promise<{ ok: boolean; bytes: number; error: string | null }>;
+    /** #67: run the REAL compose path and return the caption-band readback — the
+     *  drawn stat lines + seed code are re-read from the composed canvas pixels
+     *  is not possible headlessly, so instead the compose inputs (stats, seed)
+     *  plus the live journal count are returned for the gate to assert against */
+    postcardComposeReadback: () => Promise<{
+      ok: boolean;
+      bytes: number;
+      stats: { label: string; value: string }[];
+      seedCode: string;
+      seedLabel: string;
+      seenFacts: number;
+      /** #67 close-out: draw-then-measure of the seed stamp on the composed
+       *  canvas — box in card coords, ink pixels inside it, frame containment,
+       *  wrapped line count, and the negative assertion (diff pixels outside
+       *  the stamp box vs the unseeded compose) */
+      stamp: {
+        box: { left: number; top: number; right: number; bottom: number };
+        inkPx: number;
+        insideFrame: boolean;
+        codeLines: number;
+        outsideStampDiffPx: number;
+      } | null;
+      error: string | null;
+    }>;
+      startFromSeedCode: (code: string) => boolean;
+    /** P4: locale readback + test setter (same store the toggle drives) */
+    localeReadback: () => string;
+    setLocaleForTest: (l: string) => void;
       openNotebookPlant: (itemId: string) => void;
       __three?: {
         camera: PerspectiveCamera;
@@ -196,6 +248,42 @@ declare global {
  * it via the PerfOverlay-style lazy check).
  */
 let demoSeeded = false;
+
+/**
+ * P5 (deploy): ?shot=1 captures a 1200x630 README/og screenshot of the demo
+ * meadow from the real WebGL canvas and downloads it as meadowlight-shot.png.
+ * Dev-only (?demo=1 gates the seeding, same pattern); never runs in normal
+ * play. Used once to refresh the README screenshot after v4.
+ */
+let shotTaken = false;
+export function maybeCaptureShot() {
+  if (shotTaken) return;
+  if (typeof window === 'undefined') return;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('shot') !== '1') return;
+    if (params.get('demo') !== '1') return;
+    const w = window.__meadowlight;
+    if (!w) return;
+    shotTaken = true;
+    setTimeout(() => {
+      try {
+        const t = (window as unknown as { __meadowlight?: { __three?: { gl?: { domElement: HTMLCanvasElement } } } }).__meadowlight?.__three;
+        const canvas = t?.gl?.domElement;
+        if (!canvas) return;
+        canvas.toBlob((blob) => {
+          if (!blob) return;
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'meadowlight-shot.png';
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        }, 'image/png');
+      } catch { /* dev-only convenience */ }
+    }, 4000);
+  } catch { /* never break the app */ }
+}
+
 export function maybeSeedDemoWorld() {
   if (demoSeeded) return;
   if (typeof window === 'undefined') return;
@@ -353,6 +441,8 @@ export function installTestHook() {
     isPlantableCellReadback: (x, z) => isPlantableCell(x, z),
     openHivePopup: (hiveId) => usePlacementStore.getState().openHivePopup(hiveId),
     hillsBoxesReadback: () => hillsBoxes().map((b) => ({ x: b.x, z: b.z, half: b.half })),
+    rimBoxesReadback: () => rimBoxes().map((b) => ({ x: b.x, z: b.z, half: b.half, extraH: b.extraH, top: b.top, bottom: b.bottom })),
+    ridgeBoxesReadback: () => ridgeBoxes().map((b) => ({ x: b.x, z: b.z, half: b.half, extraH: b.extraH, top: b.top, bottom: b.bottom })),
     milestones: () => usePlacementStore.getState().milestones,
     beeCount: () => beeDebug.count,
     beeDebug: () => ({ ...beeDebug }),
@@ -365,6 +455,7 @@ export function installTestHook() {
     tickPrecipScheduleForTest: (worldSeed, ordinal, season) => tickPrecipScheduleForTest(worldSeed, ordinal, season as never),
     setFireflyForce,
     dayPhaseReadback: () => dayPhase(),
+    daylightReadback: () => isDaylight(dayPhase()),
     rainDebug: () => ({ ...rainDebug }),
     rareBeeCount: () => rareBeeDebug.count,
     capturePostcard: () => capturePostcardPng(),
@@ -372,7 +463,11 @@ export function installTestHook() {
     terrainHeightAt: (x, z) => groundAt(x, z).height,
     audioIsRunning: () => audioRunning(),
     hubOpenReadback: () => usePlacementStore.getState().hubOpen,
+    sharePanelOpenReadback: () => usePlacementStore.getState().sharePanelOpen,
+    toastSeasonTitleReadback: () => useLocale.getState().t().toastSeasonDriftsIn,
     modalOpenReadback: () => usePlacementStore.getState().modalOpen,
+    setModalOpenForTest: (open) => usePlacementStore.getState().setModalOpen(open),
+    dismissOnboardingForTest: () => usePlacementStore.getState().dismissOnboarding(),
     toastsReadback: () => usePlacementStore.getState().toasts,
     dismissAllToastsForTest: () => usePlacementStore.getState().dismissAllToastsForTest(),
     journalReadback: () => usePlacementStore.getState().journal,
@@ -391,6 +486,133 @@ export function installTestHook() {
     freshBootForTest: () => freshBootForTest(),
     __setWorldSeedForTest: (seed) => usePlacementStore.setState({ worldSeed: seed }),
     reloadFromSave: () => usePlacementStore.getState().reloadFromSave(),
+    postcardSaveForTest: async () => {
+      try {
+        const capture = capturePostcardPng();
+        if (!capture) return { ok: false, bytes: 0, error: 'no capture' };
+        const { composePostcard, postcardSeedText } = await import('./postcardCompose');
+        const { postcardStatText } = await import('../ui/PostcardStats');
+        const stats = postcardStatText().map((l) => ({ label: l.label, value: l.value }));
+        const composed = await composePostcard(capture, stats, postcardSeedText());
+        const dataUrl = composed ?? capture;
+        // the observable: a non-empty image blob — decode the data URL and measure
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        // actually trigger the download path too (what the user clicks), but
+        // measure the blob, not the click
+        downloadPostcard(dataUrl);
+        return { ok: blob.size > 1000 && blob.type.startsWith('image/'), bytes: blob.size, error: null };
+      } catch (e) {
+        return { ok: false, bytes: 0, error: String(e) };
+      }
+    },
+    seedCodeEncode: () => {
+      const s = usePlacementStore.getState();
+      return encodeSeedCode(s.worldSeed, s.items);
+    },
+    postcardComposeReadback: async () => {
+      try {
+        const capture = capturePostcardPng();
+        if (!capture) return { ok: false, bytes: 0, stats: [], seedCode: '', seedLabel: '', seenFacts: 0, stamp: null, error: 'no capture' };
+        const { composePostcard, postcardSeedText } = await import('./postcardCompose');
+        const { postcardStatText } = await import('../ui/PostcardStats');
+        const stats = postcardStatText().map((l) => ({ label: l.label, value: l.value }));
+        const seed = postcardSeedText();
+        // #67 close-out: draw-then-measure — the layout out-param gives the
+        // stamp box in card coordinates; decode the composed PNG and scan
+        // that box for ink vs the parchment background
+        const layoutOut: { seedStamp: any } = { seedStamp: null };
+        const composed = await composePostcard(capture, stats, seed, layoutOut);
+        const dataUrl = composed ?? capture;
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        let stamp: {
+          box: { left: number; top: number; right: number; bottom: number };
+          inkPx: number;
+          insideFrame: boolean;
+          codeLines: number;
+          /** #67 round 2 negative assertion: pixels that differ between the
+           *  seeded and the unseeded compose OUTSIDE the stamp box — the seed
+           *  must appear ONLY in the stamp, never as a full-width string */
+          outsideStampDiffPx: number;
+        } | null = null;
+        const st = layoutOut.seedStamp;
+        if (st) {
+          const img = new Image();
+          await new Promise<void>((res2, rej) => { img.onload = () => res2(); img.onerror = () => rej(new Error('decode')); img.src = dataUrl; });
+          const c = document.createElement('canvas');
+          c.width = img.width; c.height = img.height;
+          const cx = c.getContext('2d')!;
+          cx.drawImage(img, 0, 0);
+          const border = 24;
+          const left = Math.round(st.right - st.width);
+          const top = Math.round(st.bandTop + st.top);
+          const w = Math.ceil(st.width), h = Math.ceil(st.height);
+          const d = cx.getImageData(left, top, w, h).data;
+          let ink = 0;
+          for (let i = 0; i < d.length; i += 4) {
+            // parchment panelSolid is #fff6e0 — ink = anything clearly off it
+            if (Math.abs(d[i] - 255) + Math.abs(d[i + 1] - 246) + Math.abs(d[i + 2] - 224) > 90) ink++;
+          }
+          // negative assertion: compose the SAME capture+stats WITHOUT the
+          // seed and diff the two canvases — every differing pixel must lie
+          // inside the stamp box (inflated a few px for the postmark tilt)
+          const plain = await composePostcard(capture, stats, undefined);
+          const img2 = new Image();
+          await new Promise<void>((res2, rej) => { img2.onload = () => res2(); img2.onerror = () => rej(new Error('decode')); img2.src = plain ?? dataUrl; });
+          const c2 = document.createElement('canvas');
+          c2.width = c.width; c2.height = c.height;
+          const cx2 = c2.getContext('2d')!;
+          cx2.fillStyle = '#fff6e0';
+          cx2.fillRect(0, 0, c2.width, c2.height);
+          cx2.drawImage(img2, 0, 0);
+          const a = cx.getImageData(0, 0, c.width, c.height).data;
+          const b = cx2.getImageData(0, 0, c.width, c.height).data;
+          // the stamp is drawn tilted (postmark), so its ink can bleed past
+          // the box by ~sin(tilt)*half-diagonal — inflate the box accordingly;
+          // the card's chunky border also moves when the band extends, so the
+          // diff only counts the frame INTERIOR (a full-width seed string
+          // lives there and is still caught)
+          const bleed = Math.ceil(0.07 * Math.max(w, h)) + 4;
+          const edge = border + 2;
+          let outside = 0;
+          for (let y = edge; y < c.height - edge; y++) {
+            for (let x = edge; x < c.width - edge; x++) {
+              const i = (y * c.width + x) * 4;
+              const diff = Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
+              if (diff > 30) {
+                const inBox = x >= left - bleed && x <= left + w + bleed && y >= top - bleed && y <= top + h + bleed;
+                if (!inBox) outside++;
+              }
+            }
+          }
+          stamp = {
+            box: { left, top, right: left + w, bottom: top + h },
+            inkPx: ink,
+            insideFrame:
+              left >= border && top >= border &&
+              left + w <= c.width - border && top + h <= c.height - border,
+            codeLines: st.codeBaselines.length,
+            outsideStampDiffPx: outside,
+          };
+        }
+        return {
+          ok: blob.size > 1000 && blob.type.startsWith('image/'),
+          bytes: blob.size,
+          stats,
+          seedCode: seed.code,
+          seedLabel: seed.label,
+          seenFacts: usePlacementStore.getState().seenFacts.length,
+          stamp,
+          error: null,
+        };
+      } catch (e) {
+        return { ok: false, bytes: 0, stats: [], seedCode: '', seedLabel: '', seenFacts: 0, stamp: null, error: String(e) };
+      }
+    },
+    startFromSeedCode: (code) => usePlacementStore.getState().startFromSeedCode(code),
+    localeReadback: () => useLocale.getState().locale,
+    setLocaleForTest: (l) => useLocale.getState().setLocale(l as 'en' | 'sl'),
     openNotebookPlant: (itemId) =>
       usePlacementStore.getState().openNotebook({ kind: 'plant', id: itemId }),
   };

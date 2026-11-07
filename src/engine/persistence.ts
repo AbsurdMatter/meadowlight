@@ -405,6 +405,21 @@ export function clearSavedWorld(): void {
   }
 }
 
+/**
+ * P3 (v4 seed codes): preserve the current save to the backup slot before
+ * a world is replaced by a seed code — the corrupt-blob pattern applied to
+ * seeds: an unknown/corrupt seed boots fresh and the player's meadow is
+ * never silently destroyed (same BACKUP_KEY the corrupt-save path uses).
+ */
+export function preserveSaveBeforeSeedStart(): void {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
+    if (raw !== null) localStorage.setItem(BACKUP_KEY, raw);
+  } catch {
+    // even the backup failing must not crash boot
+  }
+}
+
 export function saveWorld(data: Omit<WorldData, 'version'>): void {
   try {
     const payload: WorldData = { version: 9, ...data };

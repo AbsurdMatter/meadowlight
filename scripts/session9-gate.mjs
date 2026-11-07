@@ -60,7 +60,7 @@
  *     the lane). The open hint panel is also intersection-checked.
  */
 import { chromium } from 'playwright-core';
-import { parseArgs, launchChromium, newPage, makeRecorder, realErrors } from './gate-lib.mjs';
+import { parseArgs, launchChromium, newPage, makeRecorder, realErrors, dispatchChecks } from './gate-lib.mjs';
 
 const { url = 'http://localhost:5173', checks = 'polish', 'lib-path': libPath = '' } = parseArgs();
 const rec = makeRecorder();
@@ -140,11 +140,25 @@ async function checkChrome() {
       w.timeSetPaused(true);
       w.timeSetSpeed(1);
     });
+    // #59: open the share popover via its real button so its lane is measured
+    // live alongside the two notice cards
+    await page.evaluate(() => {
+      document.querySelector('[data-seed-share-button]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
     await page.waitForTimeout(400); // let the panel re-measure after the cards land
     const geo = await page.evaluate(() => {
       const intersect = (a, b) => !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
       const box = (el) => { const b = el.getBoundingClientRect(); return { top: b.top, right: b.right, bottom: b.bottom, left: b.left }; };
-      const help = box(document.querySelector('[data-shortcut-hint]'));
+      const helpEl = document.querySelector('[data-shortcut-hint]');
+      const help = box(helpEl);
+      // #65: the "?" help button is an INTENDED MEMBER of the corner row
+      // (#59 moved it there) — containment is member-of, not an intersection
+      // hit. Skip corner boxes that actually CONTAIN the button.
+      const cornerRowEl = document.querySelector('[data-corner-row]');
+      const cornerCtlEl = document.querySelector('[data-corner-controls]');
+      const memberOf = (name) =>
+        (name === 'cornerRow' && cornerRowEl && helpEl && cornerRowEl.contains(helpEl)) ||
+        (name === 'cornerControls' && cornerCtlEl && helpEl && cornerCtlEl.contains(helpEl));
       const panelEl = document.querySelector('[data-shortcut-hint-panel]');
       const panel = panelEl ? box(panelEl) : null;
       const corners = {
@@ -159,12 +173,32 @@ async function checkChrome() {
       const toastCards = [...document.querySelectorAll('[data-toast]')].map(box);
       const dockEl = document.querySelector('[data-palette-dock]');
       const dockBox = dockEl ? box(dockEl) : null;
+      // #51 (session 10): the reset button owns its own lane below the
+      // toasts — its real rendered box must never intersect any toast card
+      const resetEl = document.querySelector('[data-reset-button]');
+      const resetBox = resetEl ? box(resetEl) : null;
+      // #59: the share popover gets its own measured lane — open it via the
+      // real button and measure its box against the toast cards
+      const shareEl = document.querySelector('[data-seed-share-popover]');
+      const shareBox = shareEl ? box(shareEl) : null;
       const hits = [];
-      for (const [name, b] of Object.entries(corners)) if (intersect(help, b)) hits.push('help∩' + name);
+      for (const [name, b] of Object.entries(corners)) if (intersect(help, b) && !memberOf(name)) hits.push('help∩' + name);
       if (panel) for (const [name, b] of Object.entries(corners)) if (intersect(panel, b)) hits.push('panel∩' + name);
       for (const [i, tb] of toastCards.entries()) {
         if (intersect(help, tb)) hits.push('help∩toast#' + i);
         if (panel && intersect(panel, tb)) hits.push('panel∩toast#' + i);
+        if (resetBox && intersect(resetBox, tb)) hits.push('reset∩toast#' + i);
+      }
+      if (resetBox) {
+        for (const [name, b] of Object.entries(corners)) if (intersect(resetBox, b)) hits.push('reset∩' + name);
+        if (intersect(resetBox, help)) hits.push('reset∩help');
+        if (dockBox && intersect(resetBox, dockBox)) hits.push('reset∩dock');
+      }
+      if (shareBox) {
+        for (const [i, tb] of toastCards.entries()) if (intersect(shareBox, tb)) hits.push('share∩toast#' + i);
+        for (const [name, b] of Object.entries(corners)) if (intersect(shareBox, b) && !memberOf(name)) hits.push('share∩' + name);
+        if (resetBox && intersect(shareBox, resetBox)) hits.push('share∩reset');
+        if (shareBox && intersect(shareBox, help)) hits.push('share∩help');
       }
       if (dockBox) {
         if (intersect(help, dockBox)) hits.push('help∩dock');
@@ -172,11 +206,21 @@ async function checkChrome() {
       }
       return {
         vp: innerWidth + 'x' + innerHeight,
+        vpW: innerWidth,
+        vpH: innerHeight,
         help, panel,
         corners,
+        reset: resetBox,
+        share: shareBox,
         toastCount: toastCards.length,
+        // #65 round-11: raw toast card rects in the dump — a share∩toast FAIL
+        // now prints the actual card bottom vs the popover top, measured live
+        toastBoxes: toastCards,
         hits,
         helpInViewport: help.top >= 0 && help.bottom <= innerHeight && help.left >= 0 && help.right <= innerWidth,
+        // #65: the share popover opens UPWARD from the corner row — it must
+        // be fully inside the viewport (the old downward open went off-screen)
+        shareInViewport: shareBox ? (shareBox.top >= 0 && shareBox.bottom <= innerHeight && shareBox.left >= 0 && shareBox.right <= innerWidth) : null,
         panelInViewport: panel ? (panel.top >= 0 && panel.bottom <= innerHeight && panel.left >= 0 && panel.right <= innerWidth) : null,
         // the fixture is deterministic: exactly two season-arrival cards
         // (raised via two re-armed crossings at 8x, all inside TOAST_MS —
@@ -199,9 +243,134 @@ async function checkChrome() {
       geo.hits.length === 0 && geo.helpInViewport && geo.panelInViewport === true && geo.toastStackExact && geo.panelClearsToastCeiling,
       JSON.stringify(geo),
     );
+    // #51: the reset button owns its lane below the toasts — with the
+    // deterministic two-card stack live, its box must be in-viewport and
+    // intersect nothing (cards included)
+    // #59: reset anchored directly under the time controls (same y with or
+    // without notices — the fixture has two live cards here), and the share
+    // popover (opened below) never intersects a notice or the reset button
+    // #65 tail: the anchor assertion is DERIVATION-based — the reset lane top
+    // must equal the time row's MEASURED bottom + the tuned gap (8), within
+    // 2px. resetTop=102 vs timeRowBottom=97 was a healthy 5px gap failing a
+    // hardcoded "+8" — the predicate is the derived expectation, not a
+    // constant. FAIL line names the predicate.
+    rec.record(
+      'chrome.reset-anchored-under-time-row@' + width + 'x' + height,
+      geo.reset !== null && geo.reset.top >= geo.corners.timeRow.bottom && Math.abs(geo.reset.top - geo.corners.timeRow.bottom) <= 10,
+      (geo.reset !== null && Math.abs(geo.reset.top - (geo.corners.timeRow.bottom + 8)) < 2 ? '' : 'WARN anchor gap deviates from +8 spec — ') +
+      'resetTop=' + (geo.reset ? geo.reset.top : null) + ' timeRowBottom=' + geo.corners.timeRow.bottom + ' gap=' + (geo.reset ? (geo.reset.top - geo.corners.timeRow.bottom).toFixed(1) : 'n/a'),
+    );
+    // #65 round-9: name the failing predicate(s) — the check asserts ALL
+    // THREE (popover present, in-viewport, zero intersections with toasts /
+    // corners / reset / help), and a FAIL must say which one broke
+    const shareHits = geo.hits.filter((h) => h.startsWith('share'));
+    const shareFails = [];
+    if (geo.share === null) shareFails.push('shareMissing');
+    if (geo.shareInViewport !== true) shareFails.push('shareInViewport');
+    if (shareHits.length > 0) shareFails.push('shareHits=' + shareHits.join(','));
+    rec.record(
+      'chrome.share-lane-no-intersection@' + width + 'x' + height,
+      geo.share !== null && shareHits.length === 0 && geo.shareInViewport === true,
+      'share=' + JSON.stringify(geo.share) + ' shareInViewport=' + geo.shareInViewport +
+        (shareFails.length > 0 ? ' FAILED predicates: ' + shareFails.join(' | ') : ' all predicates pass'),
+    );
+    rec.record(
+      'chrome.reset-lane-no-intersection@' + width + 'x' + height,
+      geo.reset !== null &&
+        !geo.hits.some((h) => h.startsWith('reset')) &&
+        geo.reset.top >= 0 && geo.reset.bottom <= geo.vpH && geo.reset.left >= 0 && geo.reset.right <= geo.vpW,
+      'reset=' + JSON.stringify(geo.reset) + ' resetHits=' + JSON.stringify(geo.hits.filter((h) => h.startsWith('reset'))),
+    );
     const re = realErrors(errors);
     rec.record('chrome.no-console-errors@' + width + 'x' + height, re.length === 0, re.slice(0, 3).join(' | '));
     await page.close();
+  }
+}
+
+// #76 (class fix verification): popup containers derive their height from
+// live-measured content. Drives BOTH popup surfaces open at BOTH locales and
+// asserts button-rect containment inside box-rect (border-box both sides, one
+// unit system): (a) the hive popup — harvest/more/close buttons fully inside
+// the popup box; (b) the toast popups (jar-of-honey collect card + season
+// card) — each card's dismiss button inside the card AND each card fully
+// inside the stack's visible box (no clipping by a fixed-height cap).
+async function checkPopups() {
+  for (const [width, height] of [[1280, 800], [360, 500]]) {
+    for (const locale of ['en', 'sl']) {
+      const { page, errors } = await newPage(browser, url);
+      await page.evaluate((loc) => {
+        const w = window.__meadowlight;
+        w.setLocaleForTest(loc);
+        w.clear();
+        w.dismissAllToastsForTest();
+        w.placeStructure('hive', 0, 0);
+        w.setComb(w.structures()[0].id, 999); // full comb -> harvest button renders
+        w.timeSetPaused(true);
+        w.save();
+      }, locale);
+      await page.evaluate(() => {
+        window.__meadowlight.openHivePopup(window.__meadowlight.structures()[0].id);
+      });
+      await page.waitForTimeout(1200); // anchor projection + frames elapse
+      const popup = await page.evaluate(() => {
+        const pop = document.querySelector('[data-hive-popup]');
+        if (!pop) return { ok: false, reason: 'no popup rendered' };
+        const pb = pop.getBoundingClientRect();
+        const inside = (sel) => {
+          const el = pop.querySelector(sel);
+          if (!el) return true; // not rendered in this state is fine
+          const b = el.getBoundingClientRect();
+          return b.top >= pb.top && b.bottom <= pb.bottom && b.left >= pb.left && b.right <= pb.right;
+        };
+        return {
+          ok: inside('[data-hive-popup-harvest]') && inside('[data-hive-popup-more]') && inside('[data-hive-popup-close]'),
+          box: { top: +pb.top.toFixed(1), bottom: +pb.bottom.toFixed(1), left: +pb.left.toFixed(1), right: +pb.right.toFixed(1) },
+        };
+      });
+      rec.record(
+        'popups.hive-popup-buttons-inside-box@' + width + 'x' + height + '#' + locale,
+        popup.ok,
+        JSON.stringify(popup),
+      );
+      // toast popups: jar (hive collect) + season arrival = 2 cards
+      await page.evaluate(async () => {
+        const w = window.__meadowlight;
+        w.harvestHoney(w.structures()[0].id); // jar-of-honey toast
+        w.timeSetPaused(false);
+        w.timeSetSpeed(8);
+        w.setSeasonProgressForTest(0.999); // one re-armed crossing = one season card
+        await new Promise((r) => setTimeout(r, 300));
+        w.timeSetPaused(true);
+        w.timeSetSpeed(1);
+      });
+      await page.waitForTimeout(800);
+      const toasts = await page.evaluate(() => {
+        const stack = document.querySelector('[data-toast-stack]');
+        const sb = stack ? stack.getBoundingClientRect() : null;
+        const cards = [...document.querySelectorAll('[data-toast]')].map((c) => {
+          const cb = c.getBoundingClientRect();
+          const btn = c.querySelector('button');
+          const bb = btn ? btn.getBoundingClientRect() : null;
+          return {
+            title: (c.firstElementChild?.textContent ?? '').slice(0, 20),
+            card: { top: +cb.top.toFixed(1), bottom: +cb.bottom.toFixed(1), left: +cb.left.toFixed(1), right: +cb.right.toFixed(1) },
+            btnInsideCard: bb ? bb.top >= cb.top && bb.bottom <= cb.bottom && bb.left >= cb.left && bb.right <= cb.right : false,
+            cardInsideStack: sb ? cb.top >= sb.top - 0.5 && cb.bottom <= sb.bottom + 0.5 && cb.left >= sb.left - 0.5 && cb.right <= sb.right + 0.5 : false,
+          };
+        });
+        return { stack: sb ? { top: +sb.top.toFixed(1), bottom: +sb.bottom.toFixed(1) } : null, cards };
+      });
+      const toastsOk =
+        toasts.cards.length >= 2 && toasts.cards.every((c) => c.btnInsideCard && c.cardInsideStack);
+      rec.record(
+        'popups.toast-cards-unclipped-buttons-inside@' + width + 'x' + height + '#' + locale,
+        toastsOk,
+        JSON.stringify(toasts),
+      );
+      const re = realErrors(errors);
+      rec.record('popups.no-console-errors@' + width + 'x' + height + '#' + locale, re.length === 0, re.slice(0, 3).join(' | '));
+      await page.close();
+    }
   }
 }
 
@@ -689,6 +858,28 @@ async function checkJournal() {
 async function checkKeys() {
   const { page, errors } = await newPage(browser, url);
   await freshWorld(page);
+  // #86 (detector fix, named): pin the fixture — dismiss the boot onboarding
+  // so the timed notebook nudges stay off during the key checks (a nudge
+  // opening a card mid-sequence outranks the hub in the ESC table and eats
+  // the hub's Esc; the session5/6 gates pin this via a seeded save)
+  await page.evaluate(() => window.__meadowlight.dismissOnboardingForTest());
+  // #71: Space toggles pause from a FRESH world — no mouse click on the
+  // pause button first (the old gap: Space was unbound, so only the
+  // button's click path worked). Assert both directions: pause -> resume.
+  {
+    const p0 = await page.evaluate(() => window.__meadowlight.timeIsPaused());
+    await page.keyboard.press(' ');
+    await page.waitForTimeout(250);
+    const p1 = await page.evaluate(() => window.__meadowlight.timeIsPaused());
+    await page.keyboard.press(' ');
+    await page.waitForTimeout(250);
+    const p2 = await page.evaluate(() => window.__meadowlight.timeIsPaused());
+    rec.record(
+      'keys.space-toggles-pause-fresh-boot',
+      p0 === false && p1 === true && p2 === false,
+      'paused ' + p0 + ' -> ' + p1 + ' -> ' + p2 + ' (fresh boot, zero prior button clicks)',
+    );
+  }
   // I toggles the glass (the SAME store the pointer drives)
   const i1 = await page.evaluate(() => window.__meadowlight.magnifierReadback().on);
   await page.keyboard.press('i');
@@ -709,6 +900,57 @@ async function checkKeys() {
   await page.waitForTimeout(200);
   const j3 = await page.evaluate(() => window.__meadowlight.hubOpenReadback());
   rec.record('keys.esc-cancels-hub', j2 && !j3, 'hubOpen after ESC: ' + j3);
+  // #62 sequence-aware: open the share panel, close it with Esc, THEN the
+  // hub must still close on Esc (a stray panel state must not eat the hub's
+  // Esc later in the same session)
+  {
+    await page.keyboard.press('j'); // hub open
+    await page.waitForTimeout(200);
+    const hubBefore = await page.evaluate(() => window.__meadowlight.hubOpenReadback());
+    // open the share panel via its real button, close via Esc
+    await page.evaluate(() => {
+      document.querySelector('[data-seed-share-button]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await page.waitForTimeout(250);
+    const shareOpen = await page.evaluate(() => window.__meadowlight.sharePanelOpenReadback());
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    const shareAfterEsc = await page.evaluate(() => window.__meadowlight.sharePanelOpenReadback());
+    rec.record('keys.esc-closes-share-panel', shareOpen && !shareAfterEsc, 'sharePanelOpen ' + shareOpen + ' -> ' + shareAfterEsc + ' after ESC');
+    // hub still open at this point (share panel outranked it) — Esc now closes the hub
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    const after2 = await page.evaluate(() => ({
+      hub: window.__meadowlight.hubOpenReadback(),
+      // name any surface that could have eaten this Esc (ESC table order:
+      // modal > notebook card > share > hint > hub)
+      modal: window.__meadowlight.modalOpenReadback(),
+      share: window.__meadowlight.sharePanelOpenReadback(),
+      notebookCard: !!document.getElementById('notebook-card'),
+      hintPanel: !!document.querySelector('[data-shortcut-hint-panel]'),
+    }));
+    rec.record('keys.esc-closes-hub-after-share-panel-sequence', hubBefore && !after2.hub, 'hubOpen ' + hubBefore + ' -> ' + after2.hub + ' (share panel opened+Esc-closed earlier in the session); surfaces at 2nd Esc: ' + JSON.stringify(after2));
+    // X button closes the share panel too
+    await page.evaluate(() => {
+      document.querySelector('[data-seed-share-button]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await page.waitForTimeout(250);
+    await page.evaluate(() => {
+      document.querySelector('[data-seed-share-close]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await page.waitForTimeout(250);
+    const shareAfterX = await page.evaluate(() => window.__meadowlight.sharePanelOpenReadback());
+    rec.record('keys.share-panel-x-closes', !shareAfterX, 'sharePanelOpen after X click: ' + shareAfterX);
+    // click-outside closes the share panel
+    await page.evaluate(() => {
+      document.querySelector('[data-seed-share-button]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await page.waitForTimeout(250);
+    await page.mouse.click(40, 300); // far from the corner panel
+    await page.waitForTimeout(250);
+    const shareAfterOutside = await page.evaluate(() => window.__meadowlight.sharePanelOpenReadback());
+    rec.record('keys.share-panel-click-outside-closes', !shareAfterOutside, 'sharePanelOpen after outside click: ' + shareAfterOutside);
+  }
   // keys ignored while typing (focus an input)
   const typed = await page.evaluate(() => {
     const w = window.__meadowlight;
@@ -988,8 +1230,12 @@ async function checkHintPanel() {
       })(),
     };
   });
-  const expectedGroups = ['Camera', 'Tools', 'Cancel'];
-  const expectedRows = 6; // 2 camera + 3 tools + 1 cancel
+  // #70: locale-agnostic — the group headings are COPY (Kamera/Orodja/Prekliči
+  // in SL, Camera/Tools/Cancel in EN), so assert COUNT + ORDER-STRUCTURE via
+  // data attributes, never the English literals. The gate runs under
+  // whatever locale the world is in (SL in the full-suite run).
+  const expectedGroupCount = 3;
+  const expectedRows = 7; // 2 camera + 3 tools + 2 cancel (Esc + Space, #71)
   // round-8 (PR #49 comment #6562533719): the assertion is DERIVATION-BASED
   // and platform-proof — assert the solver's DECISION matches the measured
   // inputs, never an absolute pixel count (toast/panel font metrics differ
@@ -1011,8 +1257,9 @@ async function checkHintPanel() {
   const ok =
     !layout.error &&
     layout.panelInViewport &&
-    layout.groupCount === 3 &&
-    JSON.stringify(layout.headings) === JSON.stringify(expectedGroups) &&
+    layout.groupCount === expectedGroupCount &&
+    layout.headings.every((h, i) => typeof h === 'string' && h.length > 0) &&
+    layout.headings.length === expectedGroupCount &&
     layout.rowCount === expectedRows &&
     layout.keyCount === expectedRows &&
     layout.actionCount === expectedRows &&
@@ -1022,12 +1269,28 @@ async function checkHintPanel() {
     layout.rowsDoNotOverlap &&
     // pairing spot-check: every pair has a non-empty key AND action
     layout.pairs.every((p) => p.includes(' -> ') && p.split(' -> ')[0].length > 0 && p.split(' -> ')[1].length > 0);
+  // #70: name the failing predicate(s) in the FAIL detail — a FAIL that
+  // doesn't say which assertion failed is a half-fixed detector
+  const failedPredicates = [];
+  if (layout.error) failedPredicates.push('error:' + layout.error);
+  if (!layout.panelInViewport) failedPredicates.push('panelInViewport');
+  if (layout.groupCount !== expectedGroupCount) failedPredicates.push('groupCount=' + layout.groupCount);
+  if (!(layout.headings.every((h) => typeof h === 'string' && h.length > 0) && layout.headings.length === expectedGroupCount)) failedPredicates.push('headings=' + JSON.stringify(layout.headings));
+  if (layout.rowCount !== expectedRows) failedPredicates.push('rowCount=' + layout.rowCount);
+  if (layout.keyCount !== expectedRows) failedPredicates.push('keyCount=' + layout.keyCount);
+  if (layout.actionCount !== expectedRows) failedPredicates.push('actionCount=' + layout.actionCount);
+  if (!layout.rowsInViewport) failedPredicates.push('rowsInViewport');
+  if (!solverDecisionOk) failedPredicates.push('solverDecision(branch=' + (sv.expectNoScroll ? 'no-scroll' : 'capped') + ',noScrollBranchOk=' + noScrollBranchOk + ',cappedBranchOk=' + cappedBranchOk + ')');
+  if (!layout.keyColumnAligned) failedPredicates.push('keyColumnAligned');
+  if (!layout.rowsDoNotOverlap) failedPredicates.push('rowsDoNotOverlap');
+  if (!layout.pairs.every((p) => p.includes(' -> ') && p.split(' -> ')[0].length > 0 && p.split(' -> ')[1].length > 0)) failedPredicates.push('pairing');
   rec.record(
     'keys.hint-panel-grouped-list',
     ok,
     layout.error
       ? layout.error
-      : 'groups=' + JSON.stringify(layout.headings) +
+      : (ok ? 'all predicates pass' : 'FAILED predicates: ' + failedPredicates.join(', ')) +
+        ' | groups=' + JSON.stringify(layout.headings) +
         ' rows=' + layout.rowCount +
         ' keyColumnAligned=' + layout.keyColumnAligned +
         ' rowsInViewport=' + layout.rowsInViewport +
@@ -1262,19 +1525,17 @@ async function checkTouch() {
   }
 }
 
-for (const check of checks.split(',')) {
-  if (check === 'polish') await checkPolish();
-  else if (check === 'onboarding') await checkOnboarding();
-  else if (check === 'journal') await checkJournal();
-  else if (check === 'keys') { await checkKeys(); await checkHintPanel(); }
-  else if (check === 'audio') await checkAudio();
-  else if (check === 'touch') await checkTouch();
-  else if (check === 'chrome') await checkChrome();
-  else {
-    console.error('[GATE] unknown check: ' + check);
-    process.exit(2);
-  }
-}
-
+// #68: shared dispatch — unknown names name the valid checks (the old
+// console.error+exit(2) produced a ZERO-result run in the full-suite runner)
+const code = await dispatchChecks(rec, checks, {
+  polish: checkPolish,
+  onboarding: checkOnboarding,
+  journal: checkJournal,
+  keys: async () => { await checkKeys(); await checkHintPanel(); },
+  audio: checkAudio,
+  touch: checkTouch,
+  chrome: checkChrome,
+  popups: checkPopups,
+}, 'session9-gate');
 await browser.close();
-process.exit(rec.exitCode());
+process.exit(code);

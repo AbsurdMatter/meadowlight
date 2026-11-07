@@ -6,6 +6,8 @@ import { renderVoxelThumb, renderVoxelCloseUp } from '../engine/thumbnails';
 import { plantingsBySeason, bloomSeasonsLabel, seasonBadge } from '../data/bloomWindows';
 import { theme, headingStyle } from './theme';
 import { CHROME_TUNING } from '../data/chrome';
+import { useLocale } from '../engine/locale';
+import { PLANT_NAME_COPY, STRUCTURE_NAME_COPY } from '../data/i18n';
 
 const chipStyle = (active: boolean, enabled: boolean): React.CSSProperties => ({
   border: `${theme.border.chunk}px solid ${active ? theme.color.clay : 'transparent'}`,
@@ -82,6 +84,8 @@ const tabStyle = (active: boolean): React.CSSProperties => ({
  *  bloom season (derived from the engine's bloom data); EQUIPMENT is the
  *  bee-care structures + the nature structures that live with them. */
 export function Palette() {
+  const t = useLocale((s) => s.t());
+  const locale = useLocale((s) => s.locale);
   const [tab, setTab] = useState<'planting' | 'equipment'>('planting');
   const selectedPlantId = usePlacementStore((s) => s.selectedPlantId);
   const selectedStructureId = usePlacementStore((s) => s.selectedStructureId);
@@ -120,13 +124,63 @@ export function Palette() {
   // the dock collapses to its tab column only; the tab body scrolls
   // horizontally INSIDE the dock's own bounded box. One unwrapped row,
   // reserved lanes, never overlapping the corner controls at any width.
+  // #65 round-9: the narrow test is INCLUSIVE at the boundary — at exactly
+  // narrowDockBelow (700) the wide-mode right lane (cornerLane 460) leaves
+  // only 240px while the unwrapped corner row is itself ~460px wide, so the
+  // dock (220px) and the corner box overlap at the bottom-right (five
+  // identical touch dumps: dock 220x121 vs cornerTop 712). The narrow stack
+  // (right:auto + live corner height as bottom offset) is the mode that is
+  // provably clear at 360/480, so the boundary belongs to it.
   const [narrow, setNarrow] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth < CHROME_TUNING.narrowDockBelow : false,
+    typeof window !== 'undefined' ? window.innerWidth <= CHROME_TUNING.narrowDockBelow : false,
   );
+  // #65: the corner lane is the LIVE measured corner-controls height — re-read
+  // whenever the wrapper resizes (wrap changes its height) or the window does
+  const [cornerH, setCornerH] = useState<number>(() => {
+    if (typeof document === 'undefined') return 0;
+    const el = document.querySelector('[data-corner-controls]');
+    const h = el ? Number(el.getAttribute('data-corner-controls-height')) : NaN;
+    return Number.isFinite(h) && h > 0 ? h : 0;
+  });
   useEffect(() => {
-    const onResize = () => setNarrow(window.innerWidth < CHROME_TUNING.narrowDockBelow);
+    const onResize = () => {
+      setNarrow(window.innerWidth <= CHROME_TUNING.narrowDockBelow); // #65 round-9: inclusive boundary (see above)
+      read(); // #65 tail: wrap changes the corner height at 480/700 — re-read on every resize
+    };
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    const el = document.querySelector('[data-corner-controls]');
+    const read = () => {
+      const h = el ? Number(el.getAttribute('data-corner-controls-height')) : NaN;
+      if (Number.isFinite(h) && h > 0) setCornerH(h);
+      else {
+        // fallback: measure the wrapper directly if the attribute is missing
+        const live = el ? el.getBoundingClientRect().height : 0;
+        if (live > 0) setCornerH(Math.ceil(live));
+      }
+    };
+    const mo = new MutationObserver(read);
+    if (el) {
+      mo.observe(el, { attributes: true, attributeFilter: ['data-corner-controls-height'] });
+      // #65 tail: also watch the inner row — the wrap point moves the WRAPPER
+      // height, and a ResizeObserver catches it even without an attribute change
+      const ro = new ResizeObserver(read);
+      ro.observe(el);
+      const row = document.querySelector('[data-corner-row]');
+      if (row) ro.observe(row);
+      window.addEventListener('resize', read);
+      read();
+      return () => {
+        window.removeEventListener('resize', onResize);
+        window.removeEventListener('resize', read);
+        mo.disconnect();
+        ro.disconnect();
+      };
+    }
+    window.addEventListener('resize', read);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('resize', read);
+    };
   }, []);
   // season-grouped planting tab: derived from the engine's bloom windows
   // (one source — plantingsBySeason reads PLANTS[].bloom directly)
@@ -136,7 +190,7 @@ export function Palette() {
         season: g.season,
         entries: g.plants.map((p) => ({
           key: 'plant:' + p.id,
-          name: p.name,
+          name: PLANT_NAME_COPY[locale][p.id] ?? p.name,
           kind: 'plant' as const,
           id: p.id,
           thumb: thumbs['plant:' + p.id] ?? null,
@@ -151,7 +205,7 @@ export function Palette() {
     () =>
       STRUCTURES.filter((s) => s.id === 'hedge' || s.id === 'wildcorner' || s.id === 'bush').map((s) => ({
         key: 'structure:' + s.id,
-        name: s.name,
+        name: STRUCTURE_NAME_COPY[locale][s.id] ?? s.name,
         kind: 'structure' as const,
         id: s.id,
         thumb: thumbs['structure:' + s.id] ?? null,
@@ -163,7 +217,7 @@ export function Palette() {
     () =>
       STRUCTURES.filter((s) => s.id === 'hive' || s.id === 'bath' || s.id === 'hotel').map((s) => ({
         key: 'structure:' + s.id,
-        name: s.name,
+        name: STRUCTURE_NAME_COPY[locale][s.id] ?? s.name,
         kind: 'structure' as const,
         id: s.id,
         thumb: thumbs['structure:' + s.id] ?? null,
@@ -182,11 +236,11 @@ export function Palette() {
     // (one source: bloomSeasonsLabel reads PLANTS[].bloom) — structures
     // keep their plain tooltip
     const plantDef = e.kind === 'plant' ? PLANTS.find((p) => p.id === e.id) : undefined;
-    const badge = plantDef ? seasonBadge(plantDef) : null;
+    const badge = plantDef ? seasonBadge(plantDef, t.seasonName) : null;
     const tooltip = !enabled
       ? 'keep tending the meadow to unlock this'
       : plantDef
-        ? `${e.name} — ${bloomSeasonsLabel(plantDef)}`
+        ? `${e.name} — ${bloomSeasonsLabel(plantDef, t.seasonName, { rarely: t.bloomRarely, allYear: t.bloomAllYear, in: t.bloomIn })}`
         : e.name;
     return (
       <button
@@ -244,10 +298,13 @@ export function Palette() {
         // height — the dock stacks on top of it, never beside it). Below
         // cornerWrap3Below the corner row wraps to three rows, so the
         // dock lifts by the three-row lane height instead.
+        // #65: at narrow widths the dock's bottom offset is read from the
+        // LIVE corner-controls wrapper (published as data-corner-controls-
+        // height by CornerControls) + the dock inset — the corner lane is
+        // the measured wrapped-row height, never a stale constant. Fallback
+        // to the tuned constants only before the attribute is published.
         bottom: narrow
-          ? window.innerWidth < CHROME_TUNING.cornerWrap3Below
-            ? CHROME_TUNING.cornerWrap3Height + CHROME_TUNING.dockInset
-            : CHROME_TUNING.narrowDockBottom
+          ? (cornerH > 0 ? cornerH + CHROME_TUNING.dockInset : (window.innerWidth < CHROME_TUNING.cornerWrap3Below ? CHROME_TUNING.cornerWrap3Height + CHROME_TUNING.dockInset : CHROME_TUNING.narrowDockBottom))
           : 16,
         // UI round 3 (#6383867199): the dock sits in the space BETWEEN the
         // onboarding panel (bottom-left) and the corner controls
@@ -265,6 +322,12 @@ export function Palette() {
         // frames; at narrow frames the corner row WRAPS (two rows), so the
         // reserved lane is the wrapped row's HEIGHT and the dock bounds
         // itself to the tab column + scrollable body
+        // #65 round-8: at narrow widths the corner row WRAPS (its real width
+        // is viewport-minus-insets, ~676 at 700 — reserving the 460px wide
+        // cornerLane starved the dock to nothing and it still overlapped).
+        // Reserve horizontally only the LIVE corner-controls box width at
+        // narrow widths; vertically the bottom offset already stacks the
+        // dock above the wrapped rows.
         right: narrow ? 'auto' : CHROME_TUNING.cornerLane,
         width: narrow ? CHROME_TUNING.narrowDockWidth : 'fit-content',
         maxWidth: narrow
@@ -282,12 +345,13 @@ export function Palette() {
         // three rows below cornerWrap3Below). The bound is measured from
         // the dock's own bottom offset, so the dock's TOP edge always sits
         // below the corner rows' top.
+        // #65: same measured lane — the maxHeight bound uses the live
+        // corner height too, so the dock's top edge can never reach the
+        // corner rows at any width
         maxHeight: narrow
-          ? `calc(100vh - ${
-              (window.innerWidth < CHROME_TUNING.cornerWrap3Below
-                ? CHROME_TUNING.cornerWrap3Height + CHROME_TUNING.dockInset
-                : CHROME_TUNING.narrowDockBottom) + CHROME_TUNING.dockInset
-            }px)`
+          ? (cornerH > 0
+              ? `calc(100vh - ${cornerH + CHROME_TUNING.dockInset + CHROME_TUNING.dockInset}px)`
+              : `calc(100vh - ${(window.innerWidth < CHROME_TUNING.cornerWrap3Below ? CHROME_TUNING.cornerWrap3Height + CHROME_TUNING.dockInset : CHROME_TUNING.narrowDockBottom) + CHROME_TUNING.dockInset}px)`)
           : undefined,
         borderRadius: theme.border.radiusPanel,
         background: theme.color.panel,
@@ -303,18 +367,18 @@ export function Palette() {
           onClick={() => setTab('planting')}
           style={tabStyle(tab === 'planting')}
           aria-pressed={tab === 'planting'}
-          title="Flowers & nature — grouped by bloom season"
+          title={t.palettePlantingTitle}
         >
-          🌿 Planting
+          {t.palettePlantingLabel}
         </button>
         <button
           data-palette-tab="equipment"
           onClick={() => setTab('equipment')}
           style={tabStyle(tab === 'equipment')}
           aria-pressed={tab === 'equipment'}
-          title="Bee housing & care"
+          title={t.paletteEquipmentTitle}
         >
-          🐝 Equipment
+          {t.paletteEquipmentLabel}
         </button>
       </div>
       {/* the tab body — O4: at narrow frames the tab body wraps INSIDE the
@@ -344,7 +408,7 @@ export function Palette() {
                 data-palette-section={'season:' + g.season}
               >
                 <span style={sectionLabelStyle} data-section={g.season}>
-                  {g.season}
+                  {t.seasonName(g.season)}
                 </span>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {g.entries.map((e) => renderEntry(e))}
@@ -356,7 +420,7 @@ export function Palette() {
               data-palette-section="nature"
             >
               <span style={sectionLabelStyle} data-section="nature">
-                nature
+                {t.paletteSectionNature}
               </span>
               <div style={{ display: 'flex', gap: 6 }}>{natureEntries.map(renderEntry)}</div>
             </div>
@@ -364,7 +428,7 @@ export function Palette() {
         ) : (
           <div style={sectionStyle('rgba(255, 233, 184, 0.35)')} data-palette-section="beecare">
             <span style={sectionLabelStyle} data-section="beecare">
-              🐝 Bee care
+              {t.paletteSectionBeeCare}
             </span>
             <div style={{ display: 'flex', gap: 6 }}>{beeCare.map(renderEntry)}</div>
           </div>
@@ -387,9 +451,9 @@ export function Palette() {
             whiteSpace: 'nowrap',
           }}
         >
-          <span>Natural placement</span>
+          <span>{t.naturalPlacement}</span>
           <button onClick={toggleVariation} style={buttonStyle(placementVariation)}>
-            {placementVariation ? 'ON' : 'OFF'}
+            {placementVariation ? t.on : t.off}
           </button>
           <span style={{ opacity: 0.65 }}>(F)</span>
         </div>

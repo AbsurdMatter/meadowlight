@@ -3,6 +3,7 @@ import { usePlacementStore } from '../render/placementStore';
 import { beeDebug } from '../render/BeeSwarm';
 import { solitaryBeeDebug, rareBeeDebug } from '../render/SolitaryBees';
 import { theme, headingStyle } from './theme';
+import { useLocale } from '../engine/locale';
 
 /**
  * #18 postcard stats strip: gentle nature facts, never scores.
@@ -20,43 +21,49 @@ interface StatLine {
   value: string;
 }
 
-function statLines(): StatLine[] {
+function statLines(t: import('../data/i18n').UiCopy): StatLine[] {
   const s = usePlacementStore.getState();
   const bees = beeDebug.count + solitaryBeeDebug.count + rareBeeDebug.count;
   return [
     {
       key: 'nature',
-      label: 'Nature planted',
+      label: t.statNaturePlanted,
       value:
         s.items.length === 1
-          ? 'one flower — every meadow starts here'
+          ? t.statOneFlower
           : `${s.items.length} flowers`,
     },
     {
       key: 'beecare',
-      label: 'Bee care put up',
+      label: t.statBeeCarePutUp,
       value:
         s.structures.length === 0
-          ? 'none yet — the meadow manages on its own'
+          ? t.statNoneYet
           : `${s.structures.length} piece${s.structures.length === 1 ? '' : 's'}`,
     },
     {
       key: 'bees',
-      label: 'Bees about',
-      value: bees === 0 ? 'quiet skies — bees come with blooms' : `${bees}`,
+      label: t.statBeesAbout,
+      value: bees === 0 ? t.statQuietSkies : `${bees}`,
     },
     {
       key: 'seasons',
-      label: 'Seasons passed',
-      value: (s.wildSeasons?.length ?? 0) === 0 ? 'the dial has not turned yet' : `${s.wildSeasons.length}`,
+      label: t.statSeasonsPassed,
+      value: (s.wildSeasons?.length ?? 0) === 0 ? t.statDialNotTurned : `${s.wildSeasons.length}`,
     },
     {
       key: 'honey',
-      label: 'Jars of honey brought in',
+      label: t.statJarsOfHoney,
       value:
         (s.honeyJars ?? 0) === 0
-          ? 'the comb is still filling'
+          ? t.statCombFilling
           : `${s.honeyJars}`,
+    },
+    {
+      // #67: the journal's seen-facts count — the collection progress
+      key: 'facts',
+      label: t.statFactsLearned,
+      value: `${s.seenFacts.length}`,
     },
   ];
 }
@@ -68,11 +75,12 @@ const labelStyle: CSSProperties = {
 };
 
 export function PostcardStats() {
-  const [lines, setLines] = useState<StatLine[]>(statLines());
+  const t = useLocale((s) => s.t());
+  const [lines, setLines] = useState<StatLine[]>(() => statLines(t));
   useEffect(() => {
-    const t = setInterval(() => setLines(statLines()), 800);
-    return () => clearInterval(t);
-  }, []);
+    const timer = setInterval(() => setLines(statLines(t)), 800);
+    return () => clearInterval(timer);
+  }, [t]);
   return (
     <div
       data-postcard-stats
@@ -110,5 +118,8 @@ export function PostcardStats() {
 
 /** The same four facts, for the composed postcard image (canvas 2D). */
 export function postcardStatText(): StatLine[] {
-  return statLines();
+  // #60: this is called from the postcard click handler (NOT a component) —
+  // calling a hook there throws and the handler's catch swallowed it, so the
+  // save silently did nothing. Read the store directly instead.
+  return statLines(useLocale.getState().t());
 }

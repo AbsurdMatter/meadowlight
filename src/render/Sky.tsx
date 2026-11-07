@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
-import { FOG, HILLS, shapedHeight } from '../data/environment';
+import { FOG, HILLS } from '../data/environment';
+import { ridgeBoxes, ridgeInstanceCapacity } from '../engine/hillsLayout';
 import { skyPaletteAt, dayPhase, advanceDay } from '../engine/dayCycle';
 import { advanceSeasons } from '../engine/seasonClock';
 import { timeMultiplier } from '../engine/timeControl';
@@ -138,12 +139,16 @@ export function Sky() {
  */
 export function DistantRidge() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  const count = 96;
+  // #83 redesign: the ridge is the same SQUARE world-lattice block family as
+  // the rim, out to ridgeOuterRadius — drawn from the ONE shared layout source
+  // (ridgeBoxes()), replacing the old fixed-angular-pitch w×4 boxes whose
+  // rectangular footprints leaked sky at glancing short-end views.
+  const count = useMemo(() => ridgeInstanceCapacity(), []);
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
     const rng = (() => {
-      let s = 60221;
+      let s = 60222;
       return () => {
         s = (s * 1664525 + 1013904223) % 4294967296;
         return s / 4294967296;
@@ -151,54 +156,50 @@ export function DistantRidge() {
     })();
     const mat = new THREE.Matrix4();
     const color = new THREE.Color();
-    const fogColor = new THREE.Color(FOG.color);
-    // the HILLS renderer's own palette + fog blend — terrain, not sky
+    // the HILLS renderer's own palette — terrain, not sky. #90 reopened: NO
+    // baked fog blend in the instance colors anymore. The material keeps
+    // scene fog ON (fog removed below) and FOG.far now ends past the ridge
+    // band, so three.js applies the LIVE per-fragment fog (palette fog color
+    // included) exactly as it does for the rim — the ridge is visible but
+    // hazed, softer than the terrain in front, and fades when fog rolls in.
+    // c5e4180's fog={false} + fixed ~45% blend made the family immune to
+    // live fog (a constant standing in for a live condition).
     const hillColors = HILLS.hillColors.map((c) => new THREE.Color(c));
-    for (let i = 0; i < count; i++) {
-      const a = (i / count) * Math.PI * 2 + rng() * 0.06;
-      const r = 50 + rng() * 12;
-      const x = Math.cos(a) * r;
-      const z = Math.sin(a) * r;
-      // ground at this box's own position, from the shared oracle —
-      // the same function the hills renderer and placement use
-      const ground = shapedHeight(x, z);
-      // hills, not a wall: extents match the far-hills scale (1.4 box
-      // height + rise), with a mild range boost at two headings
-      const rangeBoost = Math.max(0, Math.cos(a * 2 + 0.8)) * 1.1;
-      const h = HILLS.boxHeight + 1.2 + rng() * 1.4 + rangeBoost;
-      const w = 9 + rng() * 6;
-      // PR #35 second-round fix (the point-anchor was not enough): a
-      // distant hill must read as land rising from the terrain — the box
-      // bottom must sit BELOW ground across its FULL footprint, with
-      // margin for reachable viewing angles. The center is placed so the
-      // box rises h above the LOCAL anchor ground and extends a fixed
-      // 4.5u skirt below it — deeper than the ~2u the terrain can rise
-      // across a 15u-wide box footprint, so no edge bottom clears the
-      // terrain behind it at any camera angle the orbit allows.
-      const skirt = 4.5;
-      const total = h + skirt;
-      mat.makeScale(w, total, 4);
-      // bottom = ground - skirt (sunk below terrain with margin); the
-      // visible hill crest still rises h above the anchor ground
-      mat.setPosition(x, ground - skirt + total / 2, z);
+    let i = 0;
+    for (const box of ridgeBoxes()) {
+      rng(); rng(); rng(); rng(); // layout consumed: jx, jz, extraH, spare
+      // square footprint; bottom sunk rimSkirt below the shared shapedHeight
+      // oracle at the box's own position (bottom-clears-oracle, PR #35) — the
+      // layout carries the full rendered top/bottom, one source
+      const size = box.half * 2;
+      const boxH = box.top - box.bottom;
+      mat.makeScale(size, boxH, size);
+      mat.setPosition(box.x, (box.top + box.bottom) / 2, box.z);
       mesh.setMatrixAt(i, mat);
-      // the hills' own color logic: hill palette, fog-blended by distance
-      // with the same curve the Hills renderer uses (fogBlendStrength 0.55)
-      const t = THREE.MathUtils.clamp(
-        (r - HILLS.fogBlendStart) / (HILLS.fogBlendEnd - HILLS.fogBlendStart),
-        0,
-        1,
-      );
-      const base = hillColors[Math.floor(rng() * hillColors.length)];
-      color.copy(base).lerp(fogColor, t * HILLS.fogBlendStrength);
+      color.copy(hillColors[Math.floor(rng() * hillColors.length)]);
       mesh.setColorAt(i, color);
+      i++;
     }
+    // #83: runtime invariant — three.js silently drops instances past the
+    // buffer capacity; surface it loudly (gate-visible via no-console-errors)
+    if (i > count) {
+      console.error('[render] ridge instanced buffer under-sized: capacity ' + count + ' < drawn ' + i);
+    }
+    mesh.count = i;
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.computeBoundingSphere();
   }, []);
   return (
     <instancedMesh ref={meshRef} args={[undefined, undefined, count]} frustumCulled={false} receiveShadow>
       <boxGeometry args={[1, 1, 1]} />
+      {/* #90 reopened: the material keeps scene fog ON. The rebuilt ridge
+          band (r in (rimOuter, ridgeOuterRadius] = 90..100) sat at/beyond
+          FOG.far (120) and was fogged to ~100% horizon color (invisible);
+          FOG.far now ends at 160, past the band, so the ridge sits inside
+          the live gradient: real per-fragment fog with the palette's live
+          fog color — visible silhouette, softer than the rim in front,
+          fading when mist/night fog rolls in. No baked blend constant. */}
       <meshLambertMaterial side={THREE.DoubleSide} />
     </instancedMesh>
   );

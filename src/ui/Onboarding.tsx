@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { usePlacementStore } from '../render/placementStore';
+import { useLocale } from '../engine/locale';
 import { theme, headingStyle } from './theme';
 import { CHROME_TUNING } from '../data/chrome';
 
@@ -15,22 +16,17 @@ import { CHROME_TUNING } from '../data/chrome';
  * it forever; "next" advances. It never blocks placement where it doesn't
  * overlap. Styled from the theme module only (#16).
  */
-const STEPS: { title: string; body: string }[] = [
-  {
-    title: '🌼 Plant a flower',
-    body: 'Pick any flower from the palette below and click the meadow to plant it. There is no wrong spot — winding drifts look best.',
-  },
-  {
-    title: '🔍 Hover it to learn',
-    body: 'Arm the magnifying glass in the corner and hover any flower, hive, or bee for a close read — your field notebook shares a real fact.',
-  },
-  {
-    title: '🌇 Come back tomorrow',
-    body: 'The meadow grows on its own while you are away. Turn the season dial, keep bees happy, and check back for milestones.',
-  },
-];
+function stepsFor(t: ReturnType<typeof useLocale.getState>['t'] extends never ? never : import('../data/i18n').UiCopy): { title: string; body: string }[] {
+  return [
+    { title: t.onbPlantTitle, body: t.onbPlantBody },
+    { title: t.onbHoverTitle, body: t.onbHoverBody },
+    { title: t.onbReturnTitle, body: t.onbReturnBody },
+  ];
+}
 
 export function Onboarding() {
+  const t = useLocale((s) => s.t());
+  const STEPS = stepsFor(t);
   const dismissed = usePlacementStore((s) => s.onboardingDismissed);
   const dismissOnboarding = usePlacementStore((s) => s.dismissOnboarding);
   const [step, setStep] = useState(0);

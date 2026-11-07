@@ -10,6 +10,8 @@ import {
 import { theme, headingStyle } from './theme';
 import { colonyReadback } from '../engine/lifecycle';
 import { seasonProgress } from '../engine/seasonClock';
+import { useLocale } from '../engine/locale';
+import { PLANT_NAME_COPY } from '../data/i18n';
 
 /**
  * Ambient info panel: shows a fact for the inspected object, varies content
@@ -19,6 +21,9 @@ import { seasonProgress } from '../engine/seasonClock';
  * Styled from the theme module only (#16).
  */
 export function Notebook() {
+  const locale = useLocale((s) => s.locale);
+  const t = useLocale((s) => s.t());
+  const colonyLine = { winter: t.colonyWinter, spring: t.colonySpring, summer: t.colonySummer, autumn: t.colonyAutumn }[usePlacementStore.getState().season];
   const entry = usePlacementStore((s) => s.notebook);
   const close = usePlacementStore((s) => s.closeNotebook);
   const seenFacts = usePlacementStore((s) => s.seenFacts);
@@ -71,7 +76,7 @@ export function Notebook() {
         s.seenFacts,
         item.position,
       );
-      const name = PLANTS.find((p) => p.id === item.plantId)?.name ?? 'Flower';
+      const name = PLANT_NAME_COPY[locale][item.plantId] ?? PLANTS.find((p) => p.id === item.plantId)?.name ?? t.flowerFallback;
       return { title: name, choice, hint: null };
     }
     if (entry.kind === 'structure') {
@@ -91,22 +96,19 @@ export function Notebook() {
         // the hive POPUP's real button (a 'click the hive' instruction
         // here was a dead end: clicking the hive opens the popup)
         // U3: the colony line joins it — same source as the popup/P panel
-        hint = `${combStateLine(v)} ${colonyReadback(
-          s.season,
-          seasonProgress(),
-        ).line}`;
+        hint = `${combStateLine(v, { full: t.combFull, filling: t.combFilling, settling: t.combSettling })} ${colonyReadback(s.season, seasonProgress(), colonyLine).line}`;
       }
       return { title: name, choice, hint };
     }
     const choice = chooseMeadowFact(s.season, s.seenFacts);
-    const blooming = PLANTS.filter((p) => p.bloom.includes(s.season)).map((p) => p.name);
+    const blooming = PLANTS.filter((p) => p.bloom.includes(s.season)).map((p) => PLANT_NAME_COPY[locale][p.id] ?? p.name);
     return {
-      title: 'The Meadow',
+      title: t.notebookTitle,
       choice,
       hint:
         blooming.length > 0
-          ? `In bloom now: ${blooming.join(', ')}.`
-          : 'A quiet winter — the bees rest.',
+          ? t.notebookInBloomNow + blooming.join(', ') + '.'
+          : t.notebookQuietWinter,
     };
   }, [entry, seenFacts]);
   // mark the shown fact as seen
@@ -137,7 +139,7 @@ export function Notebook() {
         <strong style={headingStyle()}>
           {content.title}
           {content.choice.alreadySeen && (
-            <span title="You've read this one before" style={{ fontSize: theme.font.smallSize, marginLeft: 6, opacity: 0.6 }}>
+            <span title={t.notebookSeenBadge} style={{ fontSize: theme.font.smallSize, marginLeft: 6, opacity: 0.6 }}>
               ✦
             </span>
           )}

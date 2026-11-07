@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { usePlacementStore } from './placementStore';
 import { allWildlife } from './magnifierProbes';
 import { MAGNIFIER_TUNING } from '../data/magnifier';
-import { resolveWildlifeHit } from '../engine/magnifierHit';
+import { resolveWildlifeHit, wildlifeClaimableHit } from '../engine/magnifierHit';
 import type { MagnifierEntry } from '../data/magnifierKinds';
 import { isMeshOwnedEntry, claimDistanceReadback } from '../data/magnifierKinds';
 
@@ -124,11 +124,12 @@ export function MagnifierResolver() {
     if (!inside.current) return; // pointer off-canvas: nothing to resolve
     // THE ONE OWNERSHIP RULE (#6384690070, third instance of the hit/miss
     // asymmetry class): a flower or structure entry is owned by its mesh's
-    // pointer-over/pointer-out pair — the resolver never overwrites a
-    // mesh-owned entry, in ANY branch. The resolver's visitor lock claims
-    // only null/visitor entries (isClaimableEntry). Stated once in
-    // data/magnifierKinds, consulted by every writer — no special cases.
-    if (isMeshOwnedEntry(s.magnifierEntry)) return;
+    // pointer-over/pointer-out pair — the resolver NEVER touches a mesh-owned
+    // entry, on a miss OR on a hit. #85 round 4 makes this absolute for
+    // wildlife too: even a creature dead-on under the pointer and nearer
+    // along the ray does NOT overtake a mesh-owned entry (the aefcd1b run:
+    // a hoverfly owned a flower hover with the entry stable). Stated once in
+    // data/magnifierKinds + engine/magnifierHit, consulted by every writer.
     // unproject the pointer through the live camera, then hand the PURE
     // hit function flat camera state + CURRENT probe positions
     dir.current
@@ -136,7 +137,7 @@ export function MagnifierResolver() {
       .unproject(camera)
       .sub(camera.position)
       .normalize();
-    const hit = resolveWildlifeHit(
+    const rawHit = resolveWildlifeHit(
       {
         camX: camera.position.x,
         camY: camera.position.y,
@@ -149,13 +150,18 @@ export function MagnifierResolver() {
       MAGNIFIER_TUNING.wildlifeReach,
     );
     const cur = s.magnifierEntry;
-    if (isMeshOwnedEntry(cur)) return; // the ONE rule, every branch
+    // #85 round 3+4: containment gates every wildlife claim (a creature
+    // merely NEAR the ray is a miss), and ownership-first decides the rest
+    // (a mesh-owned entry is never overtaken, even by a dead-on creature) —
+    // so while a flower/structure hover is live, the hit is null by rule.
+    const hit = wildlifeClaimableHit(rawHit, isMeshOwnedEntry(cur));
     if (hit) {
       missStreak.current = 0;
       const next = { kind: 'visitor', visitorId: hit.kind } as MagnifierEntry;
       if (JSON.stringify(next) !== JSON.stringify(cur)) s.setMagnifierEntry(next);
       return;
     }
+    if (isMeshOwnedEntry(cur)) return; // the ONE rule, absolute on miss frames
     // miss: a visitor lock survives the grace window, then releases
     missStreak.current++;
     if (missStreak.current > 30) {

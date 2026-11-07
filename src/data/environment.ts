@@ -10,7 +10,24 @@ export const FOG = {
    * visible detail while only the far horizon melts into the sky.
    */
   near: 34,
-  far: 120,
+  /**
+   * #90 reopened: far 120 -> 160 so the distant-ridge band (cell centers
+   * r 90..100, depth ~67..125 from the resting camera r~28) sits INSIDE the
+   * live fog gradient instead of at/beyond its end. At far 120 the ridge
+   * was fogged to ~100% fog color and read as sky ("nothing past the rim");
+   * c5e4180's opt-out (fog={false} + baked 45% blend) made it visible but
+   * IMMUNE to fog — a constant standing in for a live condition. With far
+   * 160 the ridge takes real per-fragment scene fog (live palette fog
+   * color flows through, so the ridge fades when mist/night fog rolls in)
+   * while staying softer than the rim in front of it (rim depth ~60-90
+   * gets a much smaller fog factor). Audit of the shift: the sky texture
+   * and fog COLOR are untouched (golden-hour horizon unchanged); the #66
+   * sky-above invariant is geometry-based (unit sweep over the layout) and
+   * unaffected; nearer families get proportionally less haze than before,
+   * which the rim's look was re-tuned against in #36 — kept soft by far
+   * ending just past the ridge band, not deep into empty sky.
+   */
+  far: 160,
 };
 
 /**
@@ -99,6 +116,49 @@ export const HILLS = {
   fogBlendStart: 24,
   fogBlendEnd: 50,
   fogBlendStrength: 0.55,
+  /**
+   * #50/#66 (session 10): the extra outer rim ring. #83 redesign (accepted
+   * round-3 proposal, MODERATE height variant): the rim is rebuilt from
+   * SQUARE 6x6-voxel cuboids on the world-unit lattice (rimStep), so no
+   * block has a long axis to look between at glancing angles. The hills
+   * family extends outward to hillsOuterRadius (owns cell centers r <= 58,
+   * same lattice phase/seed) and seals the seam from the inside; the rim
+   * owns cell centers r in (hillsOuterRadius, hillsOuterRadius+rimRingWidth]
+   * = (58, 88] — 5 rows across the 30u band. Boundary is binding: no rim
+   * footprint comes closer to the meadow center than the pond outer edge
+   * (49.23u) — measured rim innermost footprint 51.5u. Overlap canon in
+   * BOTH plan axes: footprint 9.6 >= rimStep*(1+rimJitter) = 6.6, so jitter
+   * can never open a through-gap. Heights: extraH in [rimMinExtraH,
+   * rimMaxExtraH] biased taller toward the outer edge (0.7+0.5t) — the
+   * accepted MODERATE profile (measured visible tops 3.42/7.04/10.04).
+   * Blocks sunk rimSkirt below ground (no under-gaps). The outer ridge is
+   * the same square lattice out to ridgeOuterRadius (all-square plan).
+   */
+  /** how far the hills family extends outward (cell centers r <= this). 60,
+   *  not the proposed 58: the 1.6-lattice diagonal interstices at r~58-60
+   *  would otherwise leave sub-voxel slivers between the dense hills
+   *  lattice and the sparser rim lattice — hills must overlap the rim's
+   *  inner bound by more than a diagonal cell (step*sqrt2). The binding
+   *  footprint constraint is unaffected (rim innermost >= pond edge). */
+  hillsOuterRadius: 60,
+  /** rim band width past hillsOuterRadius (world units) — 5 rows at rimStep */
+  rimRingWidth: 30,
+  /** world-unit lattice spacing for the rim/ridge families (hills-aligned phase) */
+  rimStep: 6,
+  /** rim/ridge block footprint in voxels (voxel = step) — square in plan */
+  rimFootprintVoxels: 6,
+  /** jitter fraction of rimStep (overlap canon: foot >= rimStep*(1+rimJitter)) */
+  rimJitter: 0.1,
+  /** MODERATE height profile base/range for rim blocks (above local ground) */
+  rimMinExtraH: 1.2,
+  rimMaxExtraH: 3.0,
+  /** rim/ridge block bottoms sink this far below local ground */
+  rimSkirt: 5,
+  /** the outer ridge band: cell centers r in (hillsOuter+rimRingWidth, ridgeOuterRadius] */
+  ridgeOuterRadius: 100,
+  /** ridge height range (above local ground) */
+  ridgeMinExtraH: 2.5,
+  ridgeMaxExtraH: 4.5,
 };
 
 /**

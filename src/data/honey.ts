@@ -73,10 +73,11 @@ export const HONEY_FORAGING_SEASONS: Season[] = ['spring', 'summer', 'autumn'];
  * engine/honey.ts and consumes the same tuning; the state LINE lives
  * here beside the copy it renders.
  */
-export function combStateLine(fill: number): string {
-  if (fill >= 1 - 1e-4) return 'The comb is full and heavy — golden to the brim. \u{1F36B}';
-  if (fill > 0.5) return 'The comb is filling — you can see it warming through the straw.';
-  return 'The colony is settling in; the first drops of the season are already in the comb.';
+export function combStateLine(fill: number, copy?: { full: string; filling: string; settling: string }): string {
+  const c = copy ?? { full: 'The comb is full and heavy — golden to the brim. \u{1F36B}', filling: 'The comb is filling — you can see it warming through the straw.', settling: 'The colony is settling in; the first drops of the season are already in the comb.' };
+  if (fill >= 1 - 1e-4) return c.full;
+  if (fill > 0.5) return c.filling;
+  return c.settling;
 }
 
 export const HONEY_FACTS = {

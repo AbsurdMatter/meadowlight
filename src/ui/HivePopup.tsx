@@ -7,6 +7,8 @@ import { combStateLine } from '../data/honey';
 import { colonyReadback } from '../engine/lifecycle';
 import { seasonProgress } from '../engine/seasonClock';
 import { theme, headingStyle } from './theme';
+import { useLocale } from '../engine/locale';
+import { STRUCTURE_NAME_COPY } from '../data/i18n';
 
 /**
  * #36 hive popup (user-approved design): a small popup anchored over the
@@ -22,6 +24,8 @@ import { theme, headingStyle } from './theme';
  * comb shows the gentle "the bees are still working" line.
  */
 export function HivePopup() {
+  const locale = useLocale((s) => s.locale);
+  const t = useLocale((s) => s.t());
   const hivePopup = usePlacementStore((s) => s.hivePopup);
   const structures = usePlacementStore((s) => s.structures);
   const hiveCombs = usePlacementStore((s) => s.hiveCombs);
@@ -89,10 +93,10 @@ export function HivePopup() {
   // ONE shared predicate: the same combReady the harvest path uses
   // (the isDaylight lesson — no second definition of full)
   const ready = combReady(fill);
-  const name = STRUCTURE_BY_ID.hive?.name ?? 'Hive';
+  const name = STRUCTURE_NAME_COPY[locale].hive ?? STRUCTURE_BY_ID.hive?.name ?? 'Hive';
   // the ONE shared state line (src/data/honey) — the info panel's hive
   // hint renders the same strings, so both surfaces always agree
-  const fillLine = combStateLine(fill);
+  const fillLine = combStateLine(fill, { full: t.combFull, filling: t.combFilling, settling: t.combSettling });
   // U3: the colony-breath line — ONE shared source (engine/lifecycle);
   // the popup, the info panel, and the P inspector all render this exact
   // string set, so no surface can ever disagree (or invent a decline read)
@@ -151,11 +155,11 @@ export function HivePopup() {
           }}
           style={btnStyle(true)}
         >
-          {'\u{1F36B}'} bring a jar in
+          {t.hiveHarvest}
         </button>
       ) : (
         <div style={{ fontSize: theme.font.smallSize, opacity: 0.75, marginTop: 8 }}>
-          the bees are still working {'\u{1F42B}'}
+          {t.hiveStillWorking}
         </div>
       )}
       <button
@@ -166,11 +170,11 @@ export function HivePopup() {
         }}
         style={{ ...btnStyle(false), marginLeft: ready ? 6 : 0 }}
       >
-        more about the hive
+        {t.hiveMore}
       </button>
       {honeyJars > 0 && (
         <div style={{ fontSize: 11, opacity: 0.7, marginTop: 6 }}>
-          {honeyJars} jar{honeyJars === 1 ? '' : 's'} of honey brought in so far
+          {t.hiveJarLine(honeyJars)}
         </div>
       )}
     </div>

@@ -9,11 +9,12 @@ import {
   toggleForKey,
   escActionFor,
   isTypingTarget,
-  SHORTCUT_HINT,
   type KeyState,
 } from '../engine/keyboardShortcuts';
 import { theme, headingStyle } from './theme';
 import { CHROME_TUNING } from '../data/chrome';
+import { useLocale } from '../engine/locale';
+import { isPaused, setPaused } from '../engine/timeControl';
 
 /**
  * O5 (v4, #43): the keyboard grammar — PURE input translation onto the
@@ -85,9 +86,31 @@ export function SceneKeyboard() {
 
 /** the DOM-side key handlers + the "?" hint — OUTSIDE the Canvas (the
  *  resolver-inside-Canvas / card-outside split, session-8 lesson 8). */
+function hintGroups(t: import('../data/i18n').UiCopy): { heading: string; rows: { key: string; action: string }[] }[] {
+  return [
+    { heading: t.shortcutsGroupCamera, rows: [
+      { key: 'W A S D', action: t.shortcutsMoveCamera },
+      { key: 'Q E', action: t.shortcutsTurnView },
+    ] },
+    { heading: t.shortcutsGroupTools, rows: [
+      { key: 'I', action: t.shortcutsGlass },
+      { key: 'J', action: t.shortcutsJournal },
+      { key: 'R', action: t.shortcutsStartOver },
+    ] },
+    { heading: t.shortcutsGroupCancel, rows: [
+      { key: 'Esc', action: t.shortcutsCloseOpen },
+      { key: 'Space', action: t.shortcutsPause },
+    ] },
+  ];
+}
+
 export function KeyboardShortcuts() {
+  const t = useLocale((s) => s.t());
   const keys = useRef<KeyState>(emptyKeyState());
-  const [hintOpen, setHintOpen] = useState(false);
+  const hintOpen = usePlacementStore((s) => s.hintOpen);
+  const setHintOpen = usePlacementStore((s) => s.setHintOpen);
+  const hintOpenRef = useRef(false);
+  useEffect(() => { hintOpenRef.current = hintOpen; }, [hintOpen]);
 
   useEffect(() => {
     // share the key state with the in-Canvas translation (one ref, two
@@ -110,7 +133,7 @@ export function KeyboardShortcuts() {
       // single-fire toggles
       const action = toggleForKey(e.key);
       if (!action) {
-        if (e.key === '?') setHintOpen((o) => !o);
+        if (e.key === '?') { const h = usePlacementStore.getState().hintOpen; usePlacementStore.getState().setHintOpen(!h); }
         return;
       }
       e.preventDefault();
@@ -129,6 +152,14 @@ export function KeyboardShortcuts() {
         s.setModalOpen(true);
         return;
       }
+      if (action === 'pause') {
+        // #71: Space toggles pause through the SAME timeControl the pause
+        // button uses — one input path, one store, no button-first focus
+        // requirement (the old gap: Space was never bound, so only the
+        // mouse-clicked button path worked)
+        setPaused(!isPaused());
+        return;
+      }
       if (action === 'cancel') {
         // ESC cancel-anything — the semantics table, one place
         const esc = escActionFor({
@@ -137,12 +168,16 @@ export function KeyboardShortcuts() {
           hubOpen: s.hubOpen,
           hivePopupOpen: s.hivePopup !== null,
           glassArmed: s.magnifierOn,
+          sharePanelOpen: s.sharePanelOpen,
+          hintPanelOpen: hintOpenRef.current,
         });
         if (esc === 'close-modal') s.setModalOpen(false);
         else if (esc === 'close-notebook') s.closeNotebook();
         else if (esc === 'close-hub') usePlacementStore.setState({ hubOpen: false });
         else if (esc === 'close-hive-popup') s.closeHivePopup();
         else if (esc === 'disarm-glass') usePlacementStore.setState({ magnifierOn: false, magnifierEntry: null });
+        else if (esc === 'close-share-panel') s.setSharePanelOpen(false);
+        else if (esc === 'close-hint-panel') setHintOpen(false);
         return;
       }
     };
@@ -175,9 +210,19 @@ export function KeyboardShortcuts() {
   // mirrored from the solver's live measurement so the style's maxWidth
   // (border-box) and the solver's content-box maxWidth share one conversion
   const chromeXRef = useRef(36);
+  // #65 round-13: sticky unclamped rendered height — recorded only while no
+  // clamp is applied, so the content readback's under-measurement cannot
+  // make the clamp flicker (clamp -> rendered shrinks -> readback says "fits"
+  // -> unclamp -> rendered grows -> clamp ...). With the sticky value the
+  // clamp decision is stable and the band can still grow back over it.
+  const contentHRef = useRef(0);
   const [panelTop, setPanelTop] = useState<number | null>(null);
   const [panelMaxWidth, setPanelMaxWidth] = useState<number | null>(null);
   const [panelMaxHeight, setPanelMaxHeight] = useState<number | null>(null);
+  // #65 round-13: block padding when the measured lane is tighter than the
+  // panel's chrome (padding+border is a hard rendered-height floor — CSS
+  // cannot shrink it, so a max-height clamp alone cannot clear a short lane)
+  const [panelPadY, setPanelPadY] = useState<number | null>(null);
   const toastCount = usePlacementStore((s) => s.toasts.length);
   // closed: drop the measured placement so a reopen re-measures fresh
   useEffect(() => {
@@ -185,6 +230,8 @@ export function KeyboardShortcuts() {
       setPanelTop(null);
       setPanelMaxWidth(null);
       setPanelMaxHeight(null);
+      setPanelPadY(null);
+      contentHRef.current = 0;
     }
   }, [hintOpen]);
   useEffect(() => {
@@ -247,7 +294,7 @@ export function KeyboardShortcuts() {
       // the floor (corner row) and never UP into the ceiling (toasts).
       const cards = [...document.querySelectorAll('[data-toast]')];
       const cardsBottom = cards.reduce((m, c) => Math.max(m, c.getBoundingClientRect().bottom), 0);
-      const minTop = CHROME_TUNING.helpLaneTop + 28 + 6;
+      const minTop = CHROME_TUNING.toastLaneTop + 6; // panel opens below the toast lane
       const ceiling = cardsBottom > 0 ? cardsBottom + 6 : minTop;
       // Round-3 finding 4: EVERY constraint is measured LIVE per viewport.
       // The floor is the corner CONTROLS' live box (the outer wrapper), not
@@ -260,11 +307,18 @@ export function KeyboardShortcuts() {
       const cornerRow = document.querySelector('[data-corner-row]');
       const cornerBox = corner ? corner.getBoundingClientRect() : cornerRow ? cornerRow.getBoundingClientRect() : null;
       const floorY = (cornerBox ? cornerBox.top : window.innerHeight) - 8;
-      const top = Math.max(minTop, ceiling); // never above the ceiling
+      // #65 round-6: the solver's conflict branch must actually FIRE at short
+      // viewports. top = max(minTop, ceiling) can exceed floorY (ceiling above
+      // the floor) — then band clamps to 0 and the panel renders at `top`
+      // with unclamped height, overlapping the corner row (panel bottom
+      // 378.39 vs cornerRow top 368 at 360x500). Pin top to the floor and
+      // let the height clamp do the shrinking: top = min(max(minTop, ceiling),
+      // floorY) when the band would be negative.
+      const topRaw = Math.max(minTop, ceiling); // never above the ceiling
+      const top = topRaw <= floorY ? topRaw : Math.max(minTop, floorY);
       // free vertical band below the ceiling, measured in BORDER-box px:
       // the panel's getBoundingClientRect().height is border-box, so the
       // band the panel may occupy is floorY - top (both viewport coords).
-      const band = Math.max(0, floorY - top);
       // Round-6/7 (PR #49 comments #6561476001, #6562013898): NO pixel
       // derivation survives cross-platform fonts (headless FreeType vs
       // Windows ClearType render the same woff2 ~42px apart at this
@@ -305,12 +359,46 @@ export function KeyboardShortcuts() {
         : panel.scrollHeight;
       // border-box natural height = unclamped content + all chrome
       const naturalHeight = Math.ceil(unclampedContent + padTop + padBottom + borderY);
-      const laneCeil = Math.ceil(band);
-      // border-box element: css maxHeight == border-box max, no subtraction
-      const cssMaxHeight = naturalHeight > laneCeil ? laneCeil : null;
-      if (top !== panelTop || cssMaxHeight !== panelMaxHeight) {
+      // #65 round-9: the clamp must be EXACT, not approximate — the round-8
+      // `+8` slack plus ceil() let the panel's bottom land up to 8px past
+      // floorY (panel bottom 668.39 vs cornerRow top 668 at 360x800 — zero
+      // clearance, and cappedAtLane=false at 360). floorY is already
+      // cornerTop - 8, so the panel may occupy [top, floorY] exactly:
+      // clamp to floor(realBand) so the rendered bottom never exceeds
+      // floorY on any rasterizer (fractional rows round DOWN, never over).
+      const realBand = Math.max(0, floorY - top);
+      // border-box element: css maxHeight == border-box max, no subtraction.
+      // #65 round-12: the lane is the HARD constraint — clamp to the exact
+      // measured band (floor(realBand)); the old 48px minimum floor let the
+      // rendered bottom exceed floorY when the band was shorter than 48.
+      // A short lane scrolls inside, it never overlaps the floor.
+      // #65 round-13 (aefcd1b residue, panel∩cornerRow@360x500 only): measure
+      // the RENDERED rect at each attempt too, not only the content readback —
+      // the lastChild/scrollHeight readback can under-measure the true
+      // rendered height (fractional rows, margin collapse), which left
+      // cssMaxHeight null while the rendered panel still overshot the lane
+      // (user's machine: band 9.6, readback <= band, rendered 28, panel bottom
+      // 378.4 vs cornerRow top 368 — 10.4u of overlap). Clamp whenever EITHER
+      // measure exceeds the band, so the rendered bottom never passes floorY
+      // (which is already the corner row's measured top - 8) at any viewport.
+      const renderedH = panel.getBoundingClientRect().height;
+      if (panelMaxHeight === null) contentHRef.current = Math.max(contentHRef.current, renderedH);
+      const effectiveNatural = Math.max(naturalHeight, contentHRef.current);
+      const needClamp = effectiveNatural > realBand + 0.5;
+      const cssMaxHeight = needClamp ? Math.floor(realBand) : null;
+      // #65 round-13: the rendered height has a hard floor of padding+border
+      // (12+12+2+2 = 28px here) — CSS cannot shrink chrome, so when the
+      // measured band is tighter than that floor a max-height clamp alone
+      // still overshoots (aefcd1b residue: panel∩cornerRow@360x500, band
+      // 9.6-20.8 < chrome 28, rendered bottom 378.4 vs cornerRow top 368).
+      // Shrink the block padding so the rendered box can fit the lane; the
+      // corner row's measured top stays the hard ceiling for the bottom.
+      const chromeY = padTop + padBottom + borderY;
+      const padY = needClamp && realBand < chromeY ? Math.max(0, Math.floor((realBand - borderY) / 2)) : null;
+      if (top !== panelTop || cssMaxHeight !== panelMaxHeight || padY !== panelPadY) {
         setPanelTop(top);
         setPanelMaxHeight(cssMaxHeight);
+        setPanelPadY(padY);
       }
     };
     // measure after paint, on every toast-stack change, on resize, on
@@ -326,6 +414,20 @@ export function KeyboardShortcuts() {
       const panel = panelRef.current;
       if (panel) ro.observe(panel);
     }
+    // #65 round-10: the panel's floor is the LIVE corner box, but the row only
+    // wraps (moving the box) after fonts load / button widths settle — AFTER
+    // the panel may already have placed. Observe the corner wrapper too, so
+    // place() re-runs with a fresh floorY whenever the corner box moves
+    // (the stale-floorY residue: panel∩cornerRow@360x500 while 360x800 and
+    // 1280x500 were fixed by the exact clamp alone).
+    let roCorner: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      const cornerEl = document.querySelector('[data-corner-controls]') ?? document.querySelector('[data-corner-row]');
+      if (cornerEl) {
+        roCorner = new ResizeObserver(() => place());
+        roCorner.observe(cornerEl);
+      }
+    }
     let fontsHooked = false;
     const hookFonts = () => {
       if (fontsHooked) return;
@@ -337,8 +439,9 @@ export function KeyboardShortcuts() {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', place);
       ro?.disconnect();
+      roCorner?.disconnect();
     };
-  }, [hintOpen, toastCount, panelMaxWidth, panelMaxHeight, panelTop]);
+  }, [hintOpen, toastCount, panelMaxWidth, panelMaxHeight, panelTop, panelPadY]);
 
   return (
     <>
@@ -348,37 +451,13 @@ export function KeyboardShortcuts() {
           62 at 700-900 wide, 48 at 360-480) and the time row (bottom 94).
           The hint panel measures its own placement (below the toast
           stack, clear of the dock) instead of assuming it. */}
-      <button
-        onClick={() => setHintOpen((o) => !o)}
-        data-shortcut-hint
-        title="Keyboard shortcuts"
-        aria-pressed={hintOpen}
-        style={{
-          position: 'absolute',
-          top: CHROME_TUNING.helpLaneTop,
-          right: 12,
-          height: 28,
-          padding: '0 10px',
-          borderRadius: theme.border.radius,
-          border: `${theme.border.chunk}px solid ${theme.color.honey}`,
-          background: theme.color.parchment,
-          color: theme.color.text,
-          fontFamily: theme.font.family,
-          fontSize: theme.font.smallSize,
-          cursor: 'pointer',
-          boxShadow: theme.border.shadow,
-          zIndex: 6,
-        }}
-      >
-        ?
-      </button>
       {hintOpen && (
         <div
           ref={panelRef}
           data-shortcut-hint-panel
           style={{
             position: 'absolute',
-            top: panelTop ?? CHROME_TUNING.helpLaneTop + 28 + 6,
+            top: panelTop ?? CHROME_TUNING.toastLaneTop + 6,
             right: 12,
             width: CHROME_TUNING.helpPanelWidth,
             // round 7: border-box so maxHeight is the BORDER-box height and
@@ -392,7 +471,13 @@ export function KeyboardShortcuts() {
             maxWidth: panelMaxWidth !== null ? panelMaxWidth + chromeXRef.current : undefined,
             maxHeight: panelMaxHeight ?? undefined,
             overflowY: panelMaxHeight !== null ? 'auto' : undefined,
-            padding: theme.spacing.panelPadding,
+            // #65 round-13: block padding shrinks when the measured lane is
+            // tighter than the chrome floor (see place()); horizontal padding
+            // is unchanged (theme value's second component)
+            padding:
+              panelPadY !== null
+                ? `${panelPadY}px ${theme.spacing.panelPadding.split(' ')[1] ?? '16px'}`
+                : theme.spacing.panelPadding,
             borderRadius: theme.border.radiusPanel,
             background: theme.color.panel,
             border: `${theme.border.chunk}px solid ${theme.color.honey}`,
@@ -403,15 +488,15 @@ export function KeyboardShortcuts() {
           }}
         >
           <div style={{ ...headingStyle(theme.font.smallSize - 1), textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 8 }}>
-            {SHORTCUT_HINT.title}
+            {t.shortcutsTitle}
           </div>
           {/* Round-1 finding 4: the content is a GROUPED LIST, not one
               joined block — groups by area (Camera / Tools / Cancel), one
               key + action pair per row. The key column is fixed-width so
               the actions align; the layout is measured (the panel's own
               placement was finding 2), not assumed. */}
-          {SHORTCUT_HINT.groups.map((group, gi) => (
-            <div key={group.heading} data-shortcut-group={group.heading} style={{ marginBottom: gi < SHORTCUT_HINT.groups.length - 1 ? 10 : 0 }}>
+          {hintGroups(t).map((group, gi) => (
+            <div key={group.heading} data-shortcut-group={group.heading} style={{ marginBottom: gi < hintGroups(t).length - 1 ? 10 : 0 }}>
               <div style={{ ...headingStyle(theme.font.smallSize - 1), textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 3 }}>
                 {group.heading}
               </div>

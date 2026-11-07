@@ -10,6 +10,7 @@ import { dayPhase, setDayPhase, resumeDayCycle, dayCycleOverridden } from '../en
 import { fireflyDebug, setFireflyForce, fireflyForced } from '../render/Fireflies';
 import { setCellMapVisible, cellMapVisible } from '../render/CellMapOverlay';
 import { hash2 } from '../engine/seededHash';
+import { seedingBrakeEngaged } from '../engine/seeding';
 import { CELL_KINDS } from '../render/CellMapOverlay';
 import { MILESTONES } from '../data/milestones';
 import {
@@ -679,6 +680,10 @@ function Session7SeedingReadback() {
   const epoch = usePlacementStore((s) => s.seedingEpoch);
   const items = usePlacementStore((s) => s.items);
   const volunteers = items.filter((it) => it.volunteer).length;
+  // #78: print the brake state explicitly — read the predicate from the ONE
+  // source the seeding site uses (the share comparison itself), never a
+  // re-derivation, so the readout cannot disagree with the roll
+  const brake = seedingBrakeEngaged(volunteers, items.length);
   const btn = (label: string, onClick: () => void, key?: string) => (
     <button
       key={key}
@@ -714,6 +719,7 @@ function Session7SeedingReadback() {
         }, 'seed-roll')}
         <span style={{ fontSize: 11, opacity: 0.7 }}>
           {' '}seed #{worldSeed} · epoch {epoch} · volunteers {volunteers}/{items.length}
+          {' '}— {brake ? 'brake engaged (seeding paused; clear or plant to resume)' : 'seeding active'}
         </span>
       </div>
     </div>

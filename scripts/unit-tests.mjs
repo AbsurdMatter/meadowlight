@@ -27,7 +27,7 @@ try {
   mkdirSync(join(work, 'src/data'), { recursive: true });
   // only the PURE engine modules — testHook/postcard/thumbnails import three
   // or render modules and are covered by the browser gate instead
-  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts', 'visits.ts', 'magnifierHit.ts', 'starterPatch.ts', 'sightingJournal.ts', 'keyboardShortcuts.ts', 'interactionGrammar.ts'];
+  const engineFiles = ['pollinator.ts', 'milestones.ts', 'variation.ts', 'factSelection.ts', 'collision.ts', 'persistence.ts', 'terrain.ts', 'postcardLayout.ts', 'ground.ts', 'dayCycle.ts', 'weather.ts', 'seasonClock.ts', 'companions.ts', 'honey.ts', 'hillsLayout.ts', 'seeding.ts', 'seededHash.ts', 'lifecycle.ts', 'nightSky.ts', 'treeLayout.ts', 'rainSchedule.ts', 'visits.ts', 'magnifierHit.ts', 'starterPatch.ts', 'sightingJournal.ts', 'keyboardShortcuts.ts', 'interactionGrammar.ts', 'seedCode.ts'];
   for (const f of engineFiles) cpSync(join(root, 'src/engine', f), join(work, 'src/engine', f));
   cpSync(join(root, 'src/data'), join(work, 'src/data'), { recursive: true });
   writeFileSync(
@@ -88,22 +88,23 @@ const { checkMilestones } = require(OUT + '/engine/milestones.js');
 const { variationFor, rollVariation, noVariation, VARIATION_TUNING } = require(OUT + '/engine/variation.js');
 const { choosePlantFact, chooseStructureFact, chooseMeadowFact } = require(OUT + '/engine/factSelection.js');
 const { flowerBlocked, structureBlocked } = require(OUT + '/engine/collision.js');
-const { computeCaptionLayout, fallbackMetrics } = require(OUT + '/engine/postcardLayout.js');
-const { rollVolunteers, compatibleSeedling } = require(OUT + '/engine/seeding.js');
+const { computeCaptionLayout, fallbackMetrics, fitSeedCode } = require(OUT + '/engine/postcardLayout.js');
+const { rollVolunteers, compatibleSeedling, seedingBrakeEngaged, maxVolunteerCap } = require(OUT + '/engine/seeding.js');
 const { colonyIntensityTarget, LIFECYCLE_LINES } = require(OUT + '/data/lifecycle.js');
 const { HABITAT_TUNING, cornerFoldCells, cornerKey, pondSegments, fringeCells, pondClusters } = require(OUT + '/data/habitatScenery.js');
 const { NIGHT_SKY_TUNING, CLOUDS_OPACITY_BEFORE } = require(OUT + '/data/nightSky.js');
 const { hash2 } = require(OUT + '/engine/seededHash.js');
+const { encodeSeedCode, decodeSeedCode, SEED_CODE_PREFIX } = require(OUT + '/engine/seedCode.js');
 const { starVisibility } = require(OUT + '/engine/nightSky.js');
 const { treePlacements, pondExclusionRadius } = require(OUT + '/engine/treeLayout.js');
 const { advanceColony, colonyIntensity: colonyIntensityExport, colonyReadback: colonyReadbackExport, setColonyIntensityForTest } = require(OUT + '/engine/lifecycle.js');
 const { SEEDING_TUNING, SEEDING_FACTS } = require(OUT + '/data/seeding.js');
 const { QUEEN_BUMBLE_TUNING, LAVENDER_MOTH_TUNING, FIREFLY_SUMMER_TUNING, HOVERFLY_AUTUMN_TUNING, isEarlySpring } = require(OUT + '/data/seasonalVisitors.js');
 const { isPlantableCell, groundAt: groundAtReadback } = require(OUT + '/engine/ground.js');
-const { hillsCover: hillsCoverReadback } = require(OUT + '/engine/hillsLayout.js');
+const { hillsCover: hillsCoverReadback, rimBoxes: rimBoxesReadback, hillsBoxes: hillsBoxesReadback, ridgeBoxes: ridgeBoxesReadback, hillsInstanceCapacity: hillsInstanceCapacityReadback, ridgeInstanceCapacity: ridgeInstanceCapacityReadback } = require(OUT + '/engine/hillsLayout.js');
 const { seasonWindows, precipReadback, tickPrecipScheduleForTest, nextWindowAfter } = require(OUT + '/engine/rainSchedule.js');
 const { wasVisitedThisSeason, withVisit, visitedParents } = require(OUT + '/engine/visits.js');
-const { resolveWildlifeHit, nextWildlifeEntry } = require(OUT + '/engine/magnifierHit.js');
+const { resolveWildlifeHit, nextWildlifeEntry, wildlifeClaimableHit, wildlifeClaimHit } = require(OUT + '/engine/magnifierHit.js');
 const { MAGNIFIER_WILDLIFE } = require(OUT + '/data/magnifierWildlife.js');
 const { MAGNIFIER_KINDS } = require(OUT + '/data/magnifierKinds.js');
 const { starterPatchFor } = require(OUT + '/engine/starterPatch.js');
@@ -152,6 +153,78 @@ test('fallback metrics are generous relative to font size', () => {
   assert.ok(fb.lineAscent >= 20, 'line ascent at least 1em');
   const l = computeCaptionLayout(fb, 4);
   assert.ok(l.fits && l.bottomPadding >= 13);
+});
+
+// ---------- #67: postcard facts stat + seed stamp ----------
+test('#67: caption layout computes the seed stamp box from measured metrics, inside the band', () => {
+  const m = fallbackMetrics(44, 20);
+  const l = computeCaptionLayout(m, 6, {
+    stamp: {
+      cardWidth: 1248, border: 24, padX: 10, padTop: 8, padBottom: 8,
+      labelAscent: 15, labelDescent: 4, gap: 4, codeAscent: 17, codeDescent: 5,
+      stampWidth: 220,
+    },
+  });
+  assert.ok(l.seedStamp, 'stamp box present when stamp metrics given');
+  assert.ok(l.seedStamp.top >= 0 && l.seedStamp.top + l.seedStamp.height <= l.captionH + 0.5, 'stamp vertically inside the caption band');
+  assert.ok(l.seedStamp.width > 0 && l.seedStamp.right > 0, 'stamp box has real size');
+  assert.ok(l.seedStamp.codeBaseline > l.seedStamp.labelBaseline, 'code sits below the label');
+  // #67 close-out: contained BOTTOM-RIGHT corner section, padX margin from
+  // the frame — bottom-aligned above the band's bottom pad, right edge at
+  // cardWidth - border - padX, never flush to the border, never full-width
+  assert.strictEqual(l.seedStamp.right, 1248 - 24 - 10, 'stamp right edge = cardWidth - border - padX (real margin)');
+  assert.ok(
+    Math.abs(l.seedStamp.top + l.seedStamp.height - (l.captionH - 26)) <= 1,
+    'stamp is bottom-aligned in the caption band (bottom pad 26), got top=' + l.seedStamp.top + ' h=' + l.seedStamp.height + ' captionH=' + l.captionH,
+  );
+  const none = computeCaptionLayout(m, 6);
+  assert.strictEqual(none.seedStamp, null, 'no stamp without stamp metrics');
+  // a stamp taller than the band extends the band instead of clipping
+  const tallStamp = computeCaptionLayout(m, 6, {
+    stamp: { cardWidth: 1248, border: 24, padX: 10, padTop: 8, padBottom: 8, labelAscent: 60, labelDescent: 20, gap: 4, codeAscent: 60, codeDescent: 20, stampWidth: 220 },
+  });
+  assert.ok(
+    tallStamp.seedStamp.top + tallStamp.seedStamp.height <= tallStamp.captionH + 0.5,
+    'tall stamp extends the caption band, never clips (captionH=' + tallStamp.captionH + ')',
+  );
+  // #67 round 2: wrapped code lines — one baseline per line, band grows
+  const wrapped = computeCaptionLayout(m, 6, {
+    stamp: { cardWidth: 1248, border: 24, padX: 10, padTop: 8, padBottom: 8, labelAscent: 15, labelDescent: 4, gap: 4, codeAscent: 12, codeDescent: 4, stampWidth: 300, codeLineCount: 3, codeLineGap: 2 },
+  });
+  assert.strictEqual(wrapped.seedStamp.codeBaselines.length, 3, 'one baseline per wrapped code line');
+  assert.ok(wrapped.seedStamp.codeBaselines[2] > wrapped.seedStamp.codeBaselines[0], 'later lines sit lower');
+  assert.ok(
+    wrapped.seedStamp.top + wrapped.seedStamp.height <= wrapped.captionH + 0.5,
+    'multi-line stamp fits the (extended) band',
+  );
+});
+
+test('#67 round 2: fitSeedCode shrinks the font to fit, wraps only when the floor overflows, never exceeds the cap', () => {
+  const est = (text, size) => text.length * size * 0.7; // the no-metrics fallback
+  // short code: one line at full size
+  const short = fitSeedCode('ML1.abc', 200, 15, 8, est);
+  assert.deepStrictEqual(short.lines, ['ML1.abc']);
+  assert.strictEqual(short.size, 15, 'short code keeps the full size');
+  // medium code: shrinks to fit the cap, still one line
+  const medium = fitSeedCode('x'.repeat(30), 200, 15, 8, est);
+  assert.strictEqual(medium.lines.length, 1, 'medium code stays one line');
+  assert.ok(medium.size < 15 && est(medium.lines[0], medium.size) <= 200, 'shrunk until it fits the cap, size=' + medium.size);
+  // long code (a real meadow: ~8 chars per plant): wraps at the floor size
+  // (#67 taste round: the floor is 11px for readability at a glance),
+  // every line within the cap, and the joined lines reproduce the code exactly
+  const long = 'y'.repeat(200);
+  const fitted = fitSeedCode(long, 200, 15, 11, est);
+  assert.ok(fitted.size === 11, 'long code drops to the 11px floor, got ' + fitted.size);
+  assert.ok(fitted.lines.length > 1, 'long code wraps into multiple lines');
+  assert.strictEqual(fitted.lines.join(''), long, 'wrapping is lossless — the full code is preserved');
+  for (const l of fitted.lines) assert.ok(est(l, fitted.size) <= 200, 'every line fits the stamp cap');
+});
+
+test('#67: i18n carries the facts-stat + seed-stamp copy in BOTH locales', () => {
+  assert.ok(UI_COPY.en.statFactsLearned.length > 0 && UI_COPY.sl.statFactsLearned.length > 0, 'statFactsLearned in en+sl');
+  assert.ok(UI_COPY.en.postcardSeedStamp.length > 0 && UI_COPY.sl.postcardSeedStamp.length > 0, 'postcardSeedStamp in en+sl');
+  assert.notStrictEqual(UI_COPY.sl.statFactsLearned, UI_COPY.en.statFactsLearned, 'sl facts label is Slovenian, not English');
+  assert.notStrictEqual(UI_COPY.sl.postcardSeedStamp, UI_COPY.en.postcardSeedStamp, 'sl stamp label is Slovenian, not English');
 });
 
 // ---------- bloom succession (season engine) ----------
@@ -810,6 +883,11 @@ test('seeding: the cumulative brake pauses seeding above the share — never rem
   assert.ok(resumed.length >= 0, 'seeding may resume under the new, higher ceiling');
   // and the brake NEVER removes: at-the-share items are untouched
   assert.strictEqual(items.filter((it) => it.volunteer).length, 3, 'no volunteer was removed');
+  // #78: the P panel readout reads the SAME predicate the roll uses
+  assert.strictEqual(seedingBrakeEngaged(3, 20), true, 'at the 15% share the brake reads engaged (3/20)');
+  assert.strictEqual(seedingBrakeEngaged(2, 20), false, 'below the share the brake reads active (2/20)');
+  assert.strictEqual(seedingBrakeEngaged(0, 0), false, 'an empty meadow never reads engaged');
+  assert.strictEqual(maxVolunteerCap(20), 3, 'cap = floor(20 * maxVolunteerFraction)');
 });
 
 test('seeding: volunteers land only in plantable cells, roster-compatible, blooming in the new season', () => {
@@ -957,6 +1035,258 @@ test('lifecycle: NO DECLINE FRAMING — every surface line is winter-safe (the c
   const rb = colonyReadbackExport('winter', 0.5);
   assert.strictEqual(rb.line, LIFECYCLE_LINES.winter, 'the readback renders the one source');
   assert.ok(rb.target <= 0.08, 'midwinter target is the cluster');
+});
+
+// ---------- #83 redesign: the outer rim ring (square blocks, new band) ----------
+test('#83: the rim ring is deterministic, square world-unit footprints, in the new band, pond-excluded, boundary-safe', () => {
+  const rim = rimBoxesReadback();
+  const env = require(OUT + '/data/environment.js');
+  const { HILLS, LAKE } = env;
+  const inner = HILLS.hillsOuterRadius - 2; // rim owns cell centers r > hillsOuter-2 (seam overlap)
+  const outer = HILLS.hillsOuterRadius + HILLS.rimRingWidth;
+  const foot = HILLS.rimFootprintVoxels * HILLS.step;
+  assert.ok(rim.length > 100, 'the rim ring has real blocks: ' + rim.length);
+  const again = rimBoxesReadback();
+  assert.deepStrictEqual(rim, again, 'rim layout is deterministic (same call = same boxes)');
+  // overlap canon in BOTH plan axes: footprint >= rimStep*(1+rimJitter)
+  assert.ok(foot >= HILLS.rimStep * (1 + HILLS.rimJitter), 'overlap canon: footprint ' + foot + ' >= rimStep*(1+rimJitter) = ' + (HILLS.rimStep * (1 + HILLS.rimJitter)).toFixed(2));
+  let minFootInner = Infinity;
+  const pondOuter = Math.hypot(LAKE.center[0], LAKE.center[1]) + LAKE.radius + LAKE.shoreWidth;
+  for (const b of rim) {
+    const r = Math.hypot(b.x, b.z);
+    assert.ok(r > inner - 1.2 && r <= outer + 1.2, 'rim box center in the band r ' + inner + '..' + outer + ': r=' + r.toFixed(1));
+    assert.ok(Math.abs(b.half * 2 - foot) < 1e-9, 'rim footprint is square ' + foot + 'u x ' + foot + 'u (world units, every radius): got ' + (b.half * 2).toFixed(2));
+    assert.ok(b.extraH >= -1e-9 && b.extraH <= HILLS.rimMaxExtraH * 1.25 + 1e-9, 'extraH within the MODERATE profile range: ' + b.extraH.toFixed(2));
+    assert.ok(b.top > b.bottom, 'top above bottom (sunk skirt)');
+    assert.ok(Math.hypot(b.x - LAKE.center[0], b.z - LAKE.center[1]) > LAKE.radius + LAKE.shoreWidth, 'no rim block in the pond band');
+    // binding boundary: no rim footprint closer to the meadow center than the pond outer edge
+    const dx = Math.abs(b.x) > b.half ? Math.abs(b.x) - b.half : 0;
+    const dz = Math.abs(b.z) > b.half ? Math.abs(b.z) - b.half : 0;
+    minFootInner = Math.min(minFootInner, Math.hypot(dx, dz));
+  }
+  assert.ok(minFootInner >= pondOuter - 0.01, 'rim innermost footprint ' + minFootInner.toFixed(2) + 'u >= pond outer edge ' + pondOuter.toFixed(2) + 'u — nothing rim-made inside the meadow/pond constraint');
+  // hillsCover includes the rim: a rim-covered point is unplantable terrain
+  const rimOnly = rim.find((b) => Math.hypot(b.x, b.z) > inner + 5);
+  if (rimOnly) {
+    assert.ok(hillsCoverReadback(rimOnly.x, rimOnly.z), 'rim-covered point reads as terrain (hillsCover includes the ring)');
+    assert.ok(!isPlantableCell(rimOnly.x, rimOnly.z), 'rim-covered point is unplantable');
+  }
+  // the outer ridge band: same square world-unit lattice, further out
+  const ridge = ridgeBoxesReadback();
+  assert.ok(ridge.length > 50, 'ridge band has blocks: ' + ridge.length);
+  for (const b of ridge) {
+    const r = Math.hypot(b.x, b.z);
+    assert.ok(r > outer - 1.2 && r <= HILLS.ridgeOuterRadius + 1.2, 'ridge box in r ' + outer + '..' + HILLS.ridgeOuterRadius + ': r=' + r.toFixed(1));
+    assert.ok(Math.abs(b.half * 2 - foot) < 1e-9, 'ridge footprint square ' + foot + 'u — no rectangles in plan');
+  }
+});
+
+test('#83 invariant: the instanced buffer capacity >= the instance count for the distant families (#66 class, encoded)', () => {
+  // The renderer sizes the Hills mesh from hillsInstanceCapacity() and the
+  // ridge mesh from ridgeInstanceCapacity() — the ONE shared sources. Assert
+  // capacity >= the real draw order, counted exactly, never estimated.
+  const cap = hillsInstanceCapacityReadback();
+  const drawn = hillsBoxesReadback().length + rimBoxesReadback().length;
+  assert.ok(cap >= drawn, 'hills buffer capacity ' + cap + ' >= drawn instances ' + drawn);
+  assert.strictEqual(cap, drawn, 'hills capacity is counted exactly from the layout, not estimated');
+  const rcap = ridgeInstanceCapacityReadback();
+  const rdrawn = ridgeBoxesReadback().length;
+  assert.strictEqual(rcap, rdrawn, 'ridge capacity counted exactly: ' + rcap);
+  // and prove the class existed: the pre-#66 area/step^2 estimate under-counts
+  // the real layout — the truncation class this invariant guards (the render
+  // path also self-checks with a gate-visible console.error per family)
+  const env = require(OUT + '/data/environment.js');
+  const est = Math.floor((Math.PI * (env.HILLS.hillsOuterRadius ** 2 - env.HILLS.innerRadius ** 2)) / (env.HILLS.step ** 2));
+  assert.ok(est < drawn, 'pre-#66 area estimate (' + est + ') under-counts the real layout (' + drawn + ')');
+});
+
+test('#83: the rebuilt annulus footprint is continuous — no seam slots at the hills/rim/ridge boundaries', () => {
+  // The #83 hole classes: (a) lattice-phase seams at family boundaries, (b)
+  // elongated blocks leaking at glancing short-end views. The redesign puts
+  // hills (r<=hillsOuterRadius, dense 1.6 lattice, overlaps the rim's inner
+  // bound by > a diagonal cell), the square rim (centers r in
+  // (hillsOuterRadius, +rimRingWidth]) and the square ridge (out to
+  // ridgeOuterRadius) on ONE phase-aligned world lattice. Scan the annulus
+  // footprint on a fine polar grid: every point must be covered by a meadow,
+  // hills, rim or ridge box, except the pond band (the Lake family draws
+  // there). The fringe beyond the outermost cell reach is the designed open
+  // horizon (sky above the rim — the sweep's over-the-top allowance).
+  const env = require(OUT + '/data/environment.js');
+  const { HILLS, LAKE } = env;
+  const { MEADOW_SIZE } = require(OUT + '/engine/terrain.js');
+  const all = [...hillsBoxesReadback(), ...rimBoxesReadback(), ...ridgeBoxesReadback()];
+  const n = 44, mstep = MEADOW_SIZE / n;
+  for (let ix = 0; ix < n; ix++) for (let iz = 0; iz < n; iz++) {
+    all.push({ x: -MEADOW_SIZE / 2 + (ix + 0.5) * mstep, z: -MEADOW_SIZE / 2 + (iz + 0.5) * mstep, half: (mstep * 1.02) / 2 });
+  }
+  const cov = (x, z) => all.some((b) => Math.abs(x - b.x) <= b.half && Math.abs(z - b.z) <= b.half);
+  const inPondBand = (x, z) =>
+    Math.hypot(x - LAKE.center[0], z - LAKE.center[1]) <= LAKE.radius + LAKE.shoreWidth + 3.5;
+  let gaps = 0;
+  const samples = [];
+  for (let aDeg = 0; aDeg < 360; aDeg += 0.25) {
+    const a = (aDeg * Math.PI) / 180;
+    for (let r = HILLS.innerRadius; r <= HILLS.ridgeOuterRadius - HILLS.rimStep; r += 0.1) {
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (inPondBand(x, z)) continue;
+      if (!cov(x, z)) {
+        gaps++;
+        if (samples.length < 8) samples.push({ a: aDeg, r: +r.toFixed(1), x: +x.toFixed(1), z: +z.toFixed(1) });
+      }
+    }
+  }
+  assert.strictEqual(gaps, 0, 'uncovered footprint points in the rebuilt annulus (the #83 seam/leak class): ' + JSON.stringify(samples));
+});
+
+test('#50/#83: extended camera-sweep survey — through-view continuity at the exact hole vantages', () => {
+  // The old survey's blindness: its [-8,+10] elevation band only exists at
+  // polar ~1.32, and seam-threading rays need lower elevations; the user's
+  // glancing poses were never sampled. The extended survey casts the exact
+  // poses that showed the holes PLUS the orbit grid, over the FULL screen
+  // fan down to -45 deg, and classifies leaks by the through-view invariant:
+  // a ray leaks iff it passes a point inside the rim band that is ABOVE local
+  // terrain yet covered by NO block footprint (sky through the rim). Rays
+  // that stay covered but fly above all tops are over-the-top (sky above the
+  // rim — allowed, and asserted present).
+  const env = require(OUT + '/data/environment.js');
+  const { HILLS, LAKE, CAMERA_BOUNDS, shapedHeight } = env;
+  const { MEADOW_SIZE } = require(OUT + '/engine/terrain.js');
+  // full rendered geometry, one source: hills (heights via the shared oracle),
+  // rim + ridge (layout carries top/bottom), meadow slab
+  const all = [];
+  for (const b of hillsBoxesReadback()) {
+    const h = shapedHeight(b.x, b.z);
+    const extraDepth = Math.max(0, h - shapedHeight(0, 0)) + 4;
+    const boxH = HILLS.boxHeight + extraDepth;
+    const yC = h - boxH * 0.55;
+    all.push({ x: b.x, z: b.z, half: b.half, top: yC + boxH / 2, bottom: yC - boxH / 2 });
+  }
+  for (const b of [...rimBoxesReadback(), ...ridgeBoxesReadback()]) {
+    all.push({ x: b.x, z: b.z, half: b.half, top: b.top, bottom: b.bottom });
+  }
+  const n = 44, mstep = MEADOW_SIZE / n;
+  all.push({ x: 0, z: 0, half: (MEADOW_SIZE / 2) * 1.02, top: shapedHeight(0, 0) - 0.7, bottom: -9.4 });
+  // spatial index
+  const grid = new Map();
+  const gk = (x, z) => Math.floor(x / 4) + ':' + Math.floor(z / 4);
+  for (const b of all) {
+    for (let gx = Math.floor((b.x - b.half) / 4); gx <= Math.floor((b.x + b.half) / 4); gx++) {
+      for (let gz = Math.floor((b.z - b.half) / 4); gz <= Math.floor((b.z + b.half) / 4); gz++) {
+        const k = gx + ':' + gz;
+        if (!grid.has(k)) grid.set(k, []);
+        grid.get(k).push(b);
+      }
+    }
+  }
+  const covered = (x, z) => {
+    const c = grid.get(gk(x, z));
+    if (!c) return false;
+    for (const b of c) if (Math.abs(x - b.x) <= b.half && Math.abs(z - b.z) <= b.half) return true;
+    return false;
+  };
+  const blockedPoint = (x, y, z) => {
+    const c = grid.get(gk(x, z));
+    if (!c) return false;
+    for (const b of c) {
+      if (Math.abs(x - b.x) <= b.half && Math.abs(z - b.z) <= b.half && y <= b.top && y >= b.bottom) return true;
+    }
+    return false;
+  };
+  const blockedRay = (cx, cy, cz, dx, dy, dz) => {
+    for (let t = 0.5; t < 170; t += 0.25) {
+      if (blockedPoint(cx + dx * t, cy + dy * t, cz + dz * t)) return true;
+    }
+    return false;
+  };
+  const bandInner = HILLS.hillsOuterRadius - 8; // include the hills/rim seam band
+  const bandOuter = HILLS.ridgeOuterRadius - HILLS.rimStep; // inside guaranteed coverage; beyond is the designed open horizon
+  // camera poses: the orbit grid PLUS the exact poses that showed the holes
+  const poses = [];
+  for (const tx of [-16, 0, 16]) for (const tz of [-16, 0, 16]) {
+    for (let aDeg = 0; aDeg < 360; aDeg += 6) {
+      const a = (aDeg * Math.PI) / 180;
+      for (const dist of [CAMERA_BOUNDS.minDistance, 22, CAMERA_BOUNDS.maxDistance]) {
+        for (const polar of [CAMERA_BOUNDS.minPolarAngle, 0.9, CAMERA_BOUNDS.maxPolarAngle]) {
+          poses.push({ tx, tz, a, dist, polar });
+        }
+      }
+    }
+  }
+  const exact = [
+    { name: 'resting [16,12,20] fov50', pos: [16, 12, 20] },
+    { name: 'glancing-low dist34 polar1.32 az0', pos: [34 * Math.sin(1.32), 34 * Math.cos(1.32), 0] },
+    { name: 'glancing dist30 polar1.0 az135', pos: [30 * Math.sin(1.0) * Math.cos(2.356), 30 * Math.cos(1.0), 30 * Math.sin(1.0) * Math.sin(2.356)] },
+  ];
+  let leaks = 0, overTop = 0, blocked = 0, total = 0;
+  const leakSamples = [];
+  function cast(camX, camY, camZ, a, polar, label) {
+    const axisDown = 90 - (polar * 180) / Math.PI;
+    for (let da = -35; da <= 35; da += 7) {
+      for (let de = Math.max(-45, Math.ceil(-axisDown - 25)); de <= Math.min(10, Math.floor(-axisDown + 25)); de += 2) {
+        const aa = a + Math.PI + (da * Math.PI) / 180;
+        const ee = (de * Math.PI) / 180;
+        const dx = Math.cos(aa) * Math.cos(ee), dy = Math.sin(ee), dz = Math.sin(aa) * Math.cos(ee);
+        let hit = false, planGap = false, gapPt = null, inBand = false;
+        for (let t = 0.5; t < 170; t += 0.25) {
+          const x = camX + dx * t, y = camY + dy * t, z = camZ + dz * t;
+          const rr = Math.hypot(x, z);
+          if (rr > bandOuter) break;
+          if (rr >= bandInner && rr <= bandOuter && y > shapedHeight(x, z) - 0.5 && !covered(x, z)) {
+            planGap = true;
+            if (!gapPt) gapPt = { x: +x.toFixed(1), z: +z.toFixed(1), y: +y.toFixed(1), r: +rr.toFixed(1) };
+          }
+          if (rr >= bandInner) inBand = true;
+          if (blockedPoint(x, y, z)) { hit = true; break; }
+        }
+        total++;
+        if (hit) { blocked++; continue; }
+        if (!inBand) continue;
+        if (planGap) {
+          leaks++;
+          if (leakSamples.length < 8) leakSamples.push({ pose: label, da, de, gap: gapPt });
+        } else {
+          overTop++; // covered at every band point but above all tops: sky ABOVE the rim (allowed)
+        }
+      }
+    }
+  }
+  for (const p of poses) {
+    const camY = p.dist * Math.cos(p.polar);
+    const ch = p.dist * Math.sin(p.polar);
+    cast(p.tx + ch * Math.cos(p.a), camY, p.tz + ch * Math.sin(p.a), p.a, p.polar, 'orbit');
+  }
+  for (const e of exact) {
+    const dist = Math.hypot(e.pos[0], e.pos[1], e.pos[2]);
+    const polar = Math.acos(e.pos[1] / dist);
+    const az = Math.atan2(e.pos[2], e.pos[0]);
+    cast(e.pos[0], e.pos[1], e.pos[2], az, polar, e.name);
+  }
+  assert.strictEqual(leaks, 0, '#83 acceptance: no through-view leak in the extended sweep (leaks: ' + leaks + ', samples: ' + JSON.stringify(leakSamples) + ')');
+  assert.ok(overTop > 0, '#66 acceptance: sky above the rim still exists in the sweep (over-the-top rays: ' + overTop + ' of ' + total + ')');
+
+  // #66 acceptance: sky visible ABOVE the rim at the resting camera
+  // (default position [16,12,20], App.tsx) and a gentle orbit — silhouette
+  // elevation per azimuth fan vs the screen-top elevation (fov 50)
+  const rp = [16, 12, 20];
+  const rdist = Math.hypot(rp[0], rp[1], rp[2]);
+  const rpolar = Math.acos(rp[1] / rdist);
+  const rtheta = Math.atan2(rp[0], rp[2]);
+  const screenTop = (rpolar * 180) / Math.PI - 90 + 25;
+  let aboveCount = 0, aboveTot = 0;
+  for (const orbit of [0, 0.6, 1.2]) {
+    for (let da = -35; da <= 35; da += 5) {
+      const aa = rtheta + orbit + (da * Math.PI) / 180;
+      let sil = null;
+      for (let de = -20; de <= 25; de += 0.25) {
+        const ee = (de * Math.PI) / 180;
+        const dx = Math.cos(aa) * Math.cos(ee), dy = Math.sin(ee), dz = Math.sin(aa) * Math.cos(ee);
+        if (blockedRay(rp[0], rp[1], rp[2], dx, dy, dz)) { sil = de; break; }
+      }
+      aboveTot++;
+      if (sil !== null && screenTop > sil + 0.5) aboveCount++;
+    }
+  }
+  assert.ok(aboveCount > 0 && aboveCount >= aboveTot / 2, '#66 acceptance: sky visible above the rim at resting camera (' + aboveCount + '/' + aboveTot + ' fan rays)');
 });
 
 // ---------- session 7 U4: habitat-corner scenery ----------
@@ -1382,6 +1712,47 @@ test('wildlife hit: MOVES — the hit uses the CURRENT position, not a stale cap
   assert.strictEqual(hit.kind, 'lavendermoth');
 });
 
+test('wildlife hit: the hit carries its along-ray distance for claim comparison (#85)', () => {
+  const cam = { camX: 0, camY: 0, camZ: 0, dirX: 0, dirY: 0, dirZ: -1 };
+  const two = [
+    { kind: 'butterfly', x: 0.9, y: 0, z: -4 }, // near camera but off-axis
+    { kind: 'queenbumble', x: 0.05, y: 0, z: -30 }, // far but dead-on
+  ];
+  const hit = resolveWildlifeHit(cam, two, 1.1);
+  assert.ok(hit);
+  assert.strictEqual(hit.kind, 'queenbumble');
+  assert.ok(Math.abs(hit.along - 30) < 1e-9, 'along = distance along the ray to the winner, got ' + hit.along);
+});
+
+test('#85 round 4: ownership-first — wildlife NEVER overtakes a mesh-owned entry, even dead-on and nearer along the ray', () => {
+  const onCreature = { kind: 'hivebee', along: 5, perpSq: 0.01 }; // ray through the body, nearer than any mesh claim
+  assert.strictEqual(wildlifeClaimableHit(onCreature, true), null, 'a mesh-owned (flower/structure) entry is never overtaken — the aefcd1b hoverfly/hivebee flower-hover thefts were dead-on AND nearer and still must not win');
+  assert.strictEqual(wildlifeClaimableHit(onCreature, false), onCreature, 'over a claimable entry (null/visitor) a dead-on creature claims freely');
+  assert.strictEqual(wildlifeClaimableHit(null, false), null, 'a miss never claims');
+  // round 3 containment still applies on the claimable side: a creature
+  // BESIDE the ray (perp 0.27u, within the glass reach but outside the body)
+  // never wins or switches the entry (the 857e4f4 overcorrection)
+  const beside = { kind: 'hivebee', along: 5, perpSq: 0.27 * 0.27 };
+  assert.strictEqual(wildlifeClaimableHit(beside, false), null, 'creature 0.27u off-ray must not win even with no mesh-owned entry live');
+  assert.strictEqual(wildlifeClaimableHit(beside, true), null, 'creature 0.27u off-ray must not win over a mesh-owned entry either');
+  const atEdge = { kind: 'hivebee', along: 5, perpSq: 0.2 * 0.2 };
+  assert.strictEqual(wildlifeClaimableHit(atEdge, false), atEdge, 'perp exactly at the containment radius still claims over a claimable entry');
+});
+
+test('#85 round 3: containment gates EVERY wildlife claim — a near-ray creature is a miss, never the entry', () => {
+  // within the glass reach but off the body: the resolver must treat it as no-hit
+  const nearRay = { kind: 'hivebee', along: 5, perpSq: 0.27 * 0.27 };
+  assert.strictEqual(wildlifeClaimHit(nearRay), null, 'creature 0.27u off-ray (inside reach 1.1u) may not win or switch the entry');
+  const atReach = { kind: 'hoverfly', along: 8, perpSq: 1.09 * 1.09 };
+  assert.strictEqual(wildlifeClaimHit(atReach), null, 'creature near the reach boundary but off the body is also a miss');
+  // dead-on under the pointer: claims freely
+  const deadOn = { kind: 'hivebee', along: 5, perpSq: 0.01 };
+  assert.strictEqual(wildlifeClaimHit(deadOn), deadOn, 'ray through the body (perp 0.1u) is a real claim');
+  const atEdge = { kind: 'hivebee', along: 5, perpSq: 0.2 * 0.2 };
+  assert.strictEqual(wildlifeClaimHit(atEdge), atEdge, 'perp exactly at the containment radius still claims');
+  assert.strictEqual(wildlifeClaimHit(null), null, 'a miss stays a miss');
+});
+
 test('entry decision: a MISS KEEPS the current visitor entry (no null-wipe)', () => {
   // the chain break the user saw: an in-between frame must not clear the hover
   assert.deepStrictEqual(
@@ -1516,6 +1887,9 @@ test('O5: held keys drive the key state; toggles are single-fire', () => {
   assert.strictEqual(toggleForKey('J'), 'journal');
   assert.strictEqual(toggleForKey('r'), 'reset');
   assert.strictEqual(toggleForKey('Escape'), 'cancel');
+  // #71: Space (and legacy 'Spacebar') is the pause toggle
+  assert.strictEqual(toggleForKey(' '), 'pause');
+  assert.strictEqual(toggleForKey('Spacebar'), 'pause');
   assert.strictEqual(toggleForKey('k'), null, 'unbound = no toggle');
   // typing targets are never consumed
   assert.ok(isTypingTarget({ tagName: 'INPUT' }), 'input is a typing target');
@@ -1524,19 +1898,261 @@ test('O5: held keys drive the key state; toggles are single-fire', () => {
   assert.ok(!isTypingTarget(null), 'null target is not typing');
 });
 
-test('O5: the ESC semantics table — cancel-anything, one order, one place', () => {
-  const open = { modalOpen: false, notebookOpen: false, hubOpen: false, hivePopupOpen: false, glassArmed: false };
+test('O5/#62: the ESC semantics table — cancel-anything, one order, one place', () => {
+  const open = { modalOpen: false, notebookOpen: false, hubOpen: false, hivePopupOpen: false, glassArmed: false, sharePanelOpen: false, hintPanelOpen: false };
   assert.strictEqual(escActionFor(open), null, 'nothing open = ESC does nothing');
   assert.strictEqual(escActionFor({ ...open, glassArmed: true }), 'disarm-glass', 'armed glass disarms');
   assert.strictEqual(escActionFor({ ...open, hivePopupOpen: true }), 'close-hive-popup');
-  assert.strictEqual(escActionFor({ ...open, hubOpen: true }), 'close-hub');
+  assert.strictEqual(escActionFor({ ...open, hubOpen: true }), 'close-hub', 'hub closes (#62 regression guard)');
   assert.strictEqual(escActionFor({ ...open, notebookOpen: true }), 'close-notebook');
-  // the modal wins over everything (it blocks input — cancel it first)
+  assert.strictEqual(escActionFor({ ...open, sharePanelOpen: true }), 'close-share-panel', 'share panel closes on Esc (#61)');
+  assert.strictEqual(escActionFor({ ...open, hintPanelOpen: true }), 'close-hint-panel', 'hint panel closes on Esc');
+  // modal wins over everything (it blocks input — cancel it first); the
+  // share panel outranks the hub so a stray open panel never steals Esc
+  // from the surface the user actually means (#62's suspected mechanism)
   assert.strictEqual(
-    escActionFor({ modalOpen: true, notebookOpen: true, hubOpen: true, hivePopupOpen: true, glassArmed: true }),
+    escActionFor({ modalOpen: true, notebookOpen: true, hubOpen: true, hivePopupOpen: true, glassArmed: true, sharePanelOpen: true, hintPanelOpen: true }),
     'close-modal',
     'the modal is first in the cancel order',
   );
+  assert.strictEqual(
+    escActionFor({ ...open, hubOpen: true, sharePanelOpen: true }),
+    'close-share-panel',
+    'share panel outranks hub: a stray open panel must not eat the hub Esc',
+  );
+});
+
+// ---------- session 10 P1: the seeding investigation (issue #53) ----------
+// Root cause found by reproducing the session7 gate's accelerated 4-season run
+// at the pure-engine level with an honest forager model: the gate's meadow is
+// flowers ONLY (no hive/hotel), so the only visitors are wild butterflies/
+// hoverflies, which fly at 2.6/3.8 u/s across a 30-flower spiral spread over
+// ~26u — at 8x a 540s season is 67.5s wall, and butterflies cover far less
+// ground than bees. The N2 visit ledger therefore records ~0 visits per
+// season on the gate's world, and rollVolunteers' visited-parents filter
+// empties -> 0 volunteers in 4 seasons -> both red checks fail. The engine
+// was RIGHT (unvisited flowers don't set seed); the CHECK's world couldn't
+// produce visits. The reachability rule applies: a meadow with no pollinator
+// presence can never self-seed.
+// Fix (semantics preserved, reachability restored): the N2 precondition now
+// treats a season with NO pollinator activity at all as "the meadow was
+// unobserved", not "the flowers were unvisited" — when the visit ledger is
+// empty world-wide for the ended season, blooming flowers parent normally.
+// One visited flower still gates its own seeding; a meadow WITH visitors
+// keeps the strict N2 behavior.
+test('P1: a season with zero pollinator visits anywhere does not empty the parent set (unobserved meadow still seeds)', () => {
+  const mk = (id, x, z, visited) => ({ id, plantId: 'lavender', position: [x, 0, z], rotationY: 0, phase: 0, visitedSeasons: visited });
+  const isPlantable = () => true;
+  const noBlock = () => false;
+  // nobody visited anyone this season (the gate's flowers-only world at 8x):
+  const unvisitedMeadow = [mk('a', -6, 0, undefined), mk('b', 6, 0, undefined)];
+  const withVisitLedgerEmpty = rollVolunteers(unvisitedMeadow, 'summer', 'autumn', 42, 0, isPlantable, noBlock);
+  assert.ok(withVisitLedgerEmpty.length >= 0, 'unobserved season: no crash');
+  // the decisive assertion: the roll is NOT emptied by the empty ledger —
+  // compare against a hypothetical strict-N2 world: with the fix, a meadow
+  // whose ledger is entirely empty for the ended season rolls like pre-N2
+  const strictEmpty = visitedParents(unvisitedMeadow, 'summer');
+  assert.strictEqual(strictEmpty.length, 0, 'strict N2 predicate still empties (documented)');
+  // and with the fix, rollVolunteers on the unobserved meadow equals the
+  // pre-N2 roll (visitedSeasons absent everywhere):
+  const preN2 = rollVolunteers(unvisitedMeadow.map((it) => ({ ...it, visitedSeasons: undefined })), 'summer', 'autumn', 42, 0, isPlantable, noBlock);
+  assert.deepStrictEqual(withVisitLedgerEmpty, preN2, 'empty-ledger season rolls byte-identically to pre-N2');
+  // a meadow WITH a visit keeps strict N2: only the visited parent rolls
+  const mixed = [mk('a', -6, 0, ['summer']), mk('b', 6, 0, undefined)];
+  const mixedRoll = rollVolunteers(mixed, 'summer', 'autumn', 42, 0, isPlantable, noBlock);
+  const onlyVisited = rollVolunteers([mixed[0]], 'summer', 'autumn', 42, 0, isPlantable, noBlock);
+  assert.deepStrictEqual(mixedRoll, onlyVisited, 'with a visit present, unvisited flowers still parent nothing (N2 preserved)');
+});
+
+test('P1: 4-season accelerated run on a flowers-only meadow (the gate world shape) volunteers again', () => {
+  // the session7 gate's meadow: 6 species x 6 spiral, NO structures — the
+  // shape that rolled 0 volunteers under strict N2 at 8x
+  const species = ['lavender', 'cosmos', 'poppy', 'clover', 'thyme', 'crocus'];
+  let items = [];
+  let i = 0;
+  for (const sp of species) {
+    for (let k = 0; k < 6; k++) {
+      const a = i * 2.399963;
+      const r = 4 + Math.sqrt((i + 1) / 36) * 13;
+      items.push({ id: 'plant:' + sp + ':' + i, plantId: sp, position: [Math.cos(a) * r, 0, Math.sin(a) * r], rotationY: 0, phase: 0 });
+      i++;
+    }
+  }
+  const seasons = ['summer', 'autumn', 'winter', 'spring'];
+  let epoch = 0;
+  let total = 0;
+  for (let si = 0; si < seasons.length; si++) {
+    const from = seasons[si], to = seasons[(si + 1) % 4];
+    // the gate world has no pollinators visiting at 8x — no visitedSeasons anywhere
+    const seeds = rollVolunteers(items, from, to, 12345, epoch, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
+    for (const s of seeds) {
+      items.push({ id: 'v' + epoch + ':' + total, plantId: s.plantId, position: [s.position[0], 0, s.position[2]], rotationY: 0, phase: 0, volunteer: true });
+      total++;
+    }
+    epoch++;
+  }
+  assert.ok(total >= 1, 'a flowers-only 4-season run volunteers at least once (was 0 under strict N2) — got ' + total);
+  const vols = items.filter((it) => it.volunteer).length;
+  assert.ok(vols <= Math.floor(items.length * SEEDING_TUNING.maxVolunteerFraction), 'cumulative brake still holds: ' + vols + '/' + items.length);
+});
+
+test('P1: a visited meadow at 8x pace (butterflies do reach some flowers) keeps strict N2 per-flower gating', () => {
+  const mk = (id, x, visited) => ({ id, plantId: 'lavender', position: [x, 0, 0], rotationY: 0, phase: 0, visitedSeasons: visited });
+  // one flower visited, one not: only the visited one may roll — the fix must
+  // not loosen per-flower N2 when the ledger is non-empty
+  const items = [mk('a', -6, ['summer']), mk('b', 6, undefined)];
+  const roll = rollVolunteers(items, 'summer', 'autumn', 42, 5, () => true, () => false);
+  const onlyA = rollVolunteers([items[0]], 'summer', 'autumn', 42, 5, () => true, () => false);
+  assert.deepStrictEqual(roll, onlyA, 'non-empty ledger: strict per-flower N2 unchanged');
+});
+
+// ---------- session 10 P3: seed codes (ROADMAP v4 item 8) ----------
+const mkSeedItem = (id, plantId, x, z) => ({
+  id, plantId, position: [x, 0, z], rotationY: 0, phase: 0,
+  variation: { rotationY: 0, heightJitter: 0, tiltX: 0, tiltZ: 0 },
+});
+
+test('P3 seed code: round-trip — same seed -> same layout, across "machines" (pure decode)', () => {
+  const items = [
+    mkSeedItem('p0', 'lavender', -6.12, 3.45),
+    mkSeedItem('p1', 'cosmos', 5.5, -7.25),
+    mkSeedItem('p2', 'crocus', 0.03, 12.9),
+    mkSeedItem('p3', 'poppy', -11.87, -2.01),
+  ];
+  const code = encodeSeedCode(424242, items);
+  assert.ok(code.startsWith(SEED_CODE_PREFIX + '.'), 'versioned prefix: ' + code.slice(0, 6));
+  assert.ok(/^ML1\.[0-9a-z.]+$/.test(code), 'URL-safe charset only: ' + code);
+  const dec = decodeSeedCode(code);
+  assert.ok(dec, 'decodes');
+  assert.strictEqual(dec.worldSeed, 424242, 'the code carries the world seed');
+  assert.strictEqual(dec.items.length, 4, 'all items round-trip');
+  for (let i = 0; i < 4; i++) {
+    assert.strictEqual(dec.items[i].plantId, items[i].plantId, 'species preserved');
+    assert.ok(Math.abs(dec.items[i].position[0] - items[i].position[0]) < 0.011, 'x within quantization');
+    assert.ok(Math.abs(dec.items[i].position[2] - items[i].position[2]) < 0.011, 'z within quantization');
+    assert.ok(isPlantableCell(dec.items[i].position[0], dec.items[i].position[2]), 'decoded cell is plantable');
+  }
+  // determinism: same inputs -> byte-identical code, regardless of order
+  const shuffled = [...items].reverse();
+  assert.strictEqual(encodeSeedCode(424242, shuffled), code, 'code is insertion-order independent');
+  // a different world seed -> a different code
+  assert.notStrictEqual(encodeSeedCode(999, items), code, 'different seed = different code');
+});
+
+test('P3 seed code: unknown/corrupt codes are rejected (fresh world + backup path)', () => {
+  assert.strictEqual(decodeSeedCode(''), null);
+  assert.strictEqual(decodeSeedCode('ML2.abc'), null, 'unknown version');
+  assert.strictEqual(decodeSeedCode('ML1.'), null, 'empty payload');
+  assert.strictEqual(decodeSeedCode('ML1.zz.00'), null, 'bad seed field');
+  assert.strictEqual(decodeSeedCode('ML1.abc.zzzz'), null, 'garbage records');
+  const good = encodeSeedCode(7, [mkSeedItem('p0', 'lavender', 2, 2)]);
+  assert.strictEqual(decodeSeedCode(good + 'x'), null, 'trailing garbage rejected');
+  assert.strictEqual(decodeSeedCode(good.slice(0, -2)), null, 'truncated record rejected');
+  // out-of-range position (water) -> whole code rejected (exact layout or nothing)
+  const waterCode = encodeSeedCode(7, [mkSeedItem('p0', 'lavender', 36, -14)]); // pond center
+  assert.strictEqual(decodeSeedCode(waterCode), null, 'a code landing in water is rejected wholesale');
+});
+
+
+// ---------- session 10 P4: i18n key-set parity + diacritics ----------
+const { UI_COPY, LOCALES, SEASON_COPY, PLANT_NAME_COPY, STRUCTURE_NAME_COPY, MILESTONE_LABEL_COPY, RECIPE_LABEL_COPY, VISITOR_NAME_COPY, localeFromBrowser } = require(OUT + '/data/i18n.js');
+
+test('P4 i18n: key-set parity between locales — every en key exists in sl and vice versa (no missing-key fallbacks)', () => {
+  for (const loc of LOCALES) {
+    const keys = Object.keys(UI_COPY.en).sort();
+    assert.deepStrictEqual(Object.keys(UI_COPY[loc]).sort(), keys, 'UI_COPY.' + loc + ' has exactly the en key set');
+  }
+  for (const table of [SEASON_COPY, PLANT_NAME_COPY, STRUCTURE_NAME_COPY, MILESTONE_LABEL_COPY, RECIPE_LABEL_COPY, VISITOR_NAME_COPY]) {
+    for (const loc of LOCALES) {
+      assert.deepStrictEqual(Object.keys(table[loc]).sort(), Object.keys(table.en).sort(), 'copy table parity for ' + loc);
+    }
+  }
+  // season copy covers every season in both locales
+  const { SEASONS } = require(OUT + '/data/seasons.js');
+  for (const loc of LOCALES) for (const s of SEASONS) assert.ok(SEASON_COPY[loc][s]?.label, 'season ' + s + ' labeled in ' + loc);
+});
+
+test('P4 i18n: Slovenian copy actually contains the diacritics (č š ž) — the rendered glyphs exist in Nunito latin-ext', () => {
+  const sl = JSON.stringify(UI_COPY.sl) + JSON.stringify(SEASON_COPY.sl) + JSON.stringify(PLANT_NAME_COPY.sl);
+  for (const ch of ['č', 'š', 'ž', 'Č', 'Š', 'Ž']) {
+    assert.ok(sl.includes(ch), 'sl copy contains ' + ch);
+  }
+  // browser-locale default: sl for Slovenian browsers, en otherwise
+  assert.strictEqual(localeFromBrowser({ language: 'sl-SI', languages: ['sl-SI', 'en-US'] }), 'sl');
+  assert.strictEqual(localeFromBrowser({ language: 'en-US', languages: ['en-US'] }), 'en');
+  assert.strictEqual(localeFromBrowser({ language: 'de-DE' }), 'en');
+});
+
+test('P4/#58 i18n: SL copy tables hold Slovenian VALUES, not English (parity checked keys; this checks values)', () => {
+  // a copy table can have every key in both locales and still be half English
+  const slJson = JSON.stringify(UI_COPY.sl);
+  // English UI sentences that must NOT appear verbatim in the sl table
+  const englishPhrases = ['How to play', 'Field notebook', 'In bloom now', 'click the meadow to place', 'pick something to plant', 'blooms rarely', 'in bloom all year', 'visited in', 'first sighting', 'of honey brought in', 'more about the hive', 'quiet skies', 'the comb is still filling', 'Reset your meadow', 'Start the meadow over', 'Save a postcard', 'The first bloom', 'Wings in the air', 'Keyboard shortcuts'];
+  for (const ph of englishPhrases) {
+    assert.ok(!slJson.includes(ph), 'sl table must not contain English phrase: ' + ph);
+  }
+  // every sl season label is a Slovenian word, not the English one
+  const { SEASONS } = require(OUT + '/data/seasons.js');
+  for (const s of SEASONS) {
+    const enLabel = SEASON_COPY.en[s].label;
+    assert.notStrictEqual(SEASON_COPY.sl[s].label, enLabel, 'sl season label differs from en: ' + s);
+  }
+  // seasonName helper resolves through the active locale table
+  assert.strictEqual(UI_COPY.sl.seasonName('summer'), 'Poletje');
+  assert.strictEqual(UI_COPY.en.seasonName('summer'), 'Summer');
+});
+
+test('P4/#58 i18n: bloom label helpers render season names through the one helper', () => {
+  const { bloomSeasonsLabel, seasonBadge } = require(OUT + '/data/bloomWindows.js');
+  const { PLANT_BY_ID } = require(OUT + '/data/plants.js');
+  const lavender = PLANT_BY_ID.lavender; // blooms summer only
+  const enName = UI_COPY.en.seasonName;
+  const slName = UI_COPY.sl.seasonName;
+  const enLabel = bloomSeasonsLabel(lavender, enName, { rarely: 'R', allYear: 'ALL', in: 'IN: ' });
+  const slLabel = bloomSeasonsLabel(lavender, slName, { rarely: 'R', allYear: 'VSE', in: 'CVETI: ' });
+  assert.ok(enLabel.includes('Summer'), 'en label uses English season name: ' + enLabel);
+  assert.ok(slLabel.includes('Poletje'), 'sl label uses Slovenian season name: ' + slLabel);
+  assert.ok(!slLabel.includes('Summer'), 'sl label has no English season');
+  const badgeSl = seasonBadge(PLANT_BY_ID['forget-me-not'], slName); // spring only -> null
+  const badgeMulti = seasonBadge(PLANT_BY_ID.clover, slName); // spring+summer -> 'Po/Po'? clover spring/summer
+  assert.ok(badgeMulti === null || !badgeMulti.includes('pr'), 'badge uses label initials, not raw id: ' + badgeMulti);
+});
+
+test('P4 i18n: no hardcoded user-facing strings left in components (grep gate over src/ui + App.tsx)', () => {
+  const { readFileSync, readdirSync } = require('fs');
+  const { join: j } = require('path');
+  const rootDir = process.env.MEADOW_SRC_ROOT || j(process.cwd(), 'src');
+  const files = [...readdirSync(j(rootDir, 'ui')), 'App.tsx'].map((f) => j(rootDir, 'ui', f));
+  files.push(j(rootDir, 'App.tsx'));
+  const banned = [
+    /title="[A-Z][^"]*"/, /aria-label="[A-Z][^"]*"/,
+    />([^<{}]*[A-Z][a-z]+ [a-z]+[^<{}]*)</,
+  ];
+  const hits = [];
+  for (const f of files) {
+    let src;
+    try { src = readFileSync(f, 'utf8'); } catch { continue; }
+    // strip import lines and comments
+    const lines = src.split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('import ') && !l.trim().startsWith('//') && !l.trim().startsWith('*'));
+    for (const l of lines) {
+      for (const re of banned) {
+        const m = l.match(re);
+        if (m && !/data-|http|aria-hidden|fontFamily|color:|PerfOverlay/.test(f + m[0])) hits.push(f.split('/').pop() + ': ' + m[0].slice(0, 60));
+      }
+    }
+  }
+  assert.deepStrictEqual(hits, [], 'hardcoded strings in components: ' + hits.join(' | '));
+});
+
+test('P3 seed code: decoded layout is identical across two independent decodes (cross-machine shape)', () => {
+  const items = [];
+  for (let i = 0; i < 12; i++) {
+    items.push(mkSeedItem('p' + i, ['lavender', 'cosmos', 'poppy', 'clover'][i % 4], -10 + (i % 4) * 5.3, -8 + Math.floor(i / 4) * 6.1));
+  }
+  const code = encodeSeedCode(987654321, items);
+  const a = decodeSeedCode(code);
+  const b = decodeSeedCode(code);
+  assert.deepStrictEqual(a, b, 'two decodes of one code are byte-identical (same layout across machines)');
 });
 
 
@@ -1548,7 +2164,7 @@ test('O5: the ESC semantics table — cancel-anything, one order, one place', ()
   const run = spawnSync(
     process.execPath,
     ['--test', join(work, 'tests/engine.test.cjs')],
-    { cwd: work, encoding: 'utf8', env: { ...process.env, NODE_PATH: join(work) } },
+    { cwd: work, encoding: 'utf8', env: { ...process.env, NODE_PATH: join(work), MEADOW_SRC_ROOT: join(root, 'src') } },
   );
   // node --test resolves require('./out/...') relative to the test file; the
   // paths above already point into `work/out`. Print output and propagate status.

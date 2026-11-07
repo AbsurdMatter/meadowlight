@@ -54,11 +54,17 @@ async function runChecks(browser) {
       await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
       await page.waitForTimeout(3000);
       if (check === 'boot') {
+        // #79 (detector fix, named): the boot contract is the TEST HOOK —
+        // window.__meadowlight with its __three bridge (camera/gl/scene),
+        // which every other gate in the harness consumes. window.THREE was
+        // never a contract: no src/ file, no other gate, and no html/vite
+        // config assigns it — it was an early dev-config side effect that a
+        // later session legitimately removed. Assert the real contract.
         const hook = await page.evaluate(() => ({
           hasHook: !!window.__meadowlight,
-          hasThree: !!window.__three,
+          hasThreeBridge: !!(window.__meadowlight && window.__meadowlight.__three && window.__meadowlight.__three.camera && window.__meadowlight.__three.gl),
         }));
-        record('boot', hook.hasHook && hook.hasThree, JSON.stringify(hook));
+        record('boot', hook.hasHook && hook.hasThreeBridge, JSON.stringify(hook));
       } else if (check === 'onboarding') {
         // fresh save -> overlay in DOM on first load
         const first = await page.evaluate(() => {

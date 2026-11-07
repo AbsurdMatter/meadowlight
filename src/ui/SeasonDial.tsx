@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
-import { SEASONS, SEASON_INFO } from '../data/seasons';
+import { SEASONS } from '../data/seasons';
+import { SEASON_COPY, SEASON_EMOJI } from '../data/i18n';
+
+function seasonEmoji(s: import('../data/seasons').Season): string { return SEASON_EMOJI[s]; }
 import { seasonProgress } from '../engine/seasonClock';
 import { usePlacementStore } from '../render/placementStore';
 import { theme } from './theme';
@@ -49,6 +52,7 @@ function SeasonProgressUnderline() {
 }
 
 export function SeasonDial() {
+  const locale = useLocale((s) => s.locale);
   const season = usePlacementStore((s) => s.season);
   const setSeason = usePlacementStore((s) => s.setSeason);
   return (
@@ -73,9 +77,9 @@ export function SeasonDial() {
           key={s}
           onClick={() => setSeason(s)}
           style={uiButtonStyle(season === s)}
-          title={SEASON_INFO[s].tip}
+          title={SEASON_COPY[locale][s].tip}
         >
-          {SEASON_INFO[s].emoji} {SEASON_INFO[s].label}
+          {seasonEmoji(s)} {SEASON_COPY[locale][s].label}
           {season === s && <SeasonProgressUnderline />}
         </button>
       ))}
@@ -102,8 +106,10 @@ import {
   type SpeedStep,
 } from '../engine/timeControl';
 import { setDayPhase } from '../engine/dayCycle';
+import { useLocale } from '../engine/locale';
 
 export function TimeControls() {
+  const t = useLocale((s) => s.t());
   const [, forceRender] = useState(0);
   const refresh = () => forceRender((n) => n + 1);
   useEffect(() => {
@@ -177,15 +183,15 @@ export function TimeControls() {
           {'\u{1F552}'}
         </span>
       )}
-      {btn('\u23F8', isPaused(), () => setPaused(!isPaused()), 'pause', 'Let the meadow hold still a moment (resumes naturally on your next visit)')}
+      {btn('\u23F8', isPaused(), () => setPaused(!isPaused()), 'pause', t.pauseTip)}
       {SPEED_STEPS.map((s: SpeedStep) =>
-        btn(`${s}x`, !isPaused() && currentSpeedStep() === s, () => setSpeedStep(s), `speed-${s}`, `Let time drift ${s}x faster${s === 8 ? ' — a night passes in about a minute and a half' : ''}`),
+        btn(`${s}x`, !isPaused() && currentSpeedStep() === s, () => setSpeedStep(s), `speed-${s}`, t.speedTip(s)),
       )}
       {btn('\u{1F305} morning', false, () => {
         setDayPhase(0.3);
         usePlacementStore.getState().setSeason('spring');
         refresh();
-      }, 'jump-morning', 'A new spring morning (starts spring; the calendar keeps drifting)')}
+      }, 'jump-morning', t.jumpMorningTip)}
     </div>
   );
 }

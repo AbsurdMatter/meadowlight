@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test:smoke": "node scripts/unit-tests.mjs && node scripts/build-health.mjs && node --check scripts/session8-gate.mjs && node --check scripts/session9-gate.mjs && node --check scripts/gate-lib.mjs",
+    "test:smoke": "node scripts/unit-tests.mjs && node scripts/build-health.mjs && node --check scripts/session5-gate.mjs && node --check scripts/session6-gate.mjs && node --check scripts/session7-gate.mjs && node --check scripts/session8-gate.mjs && node --check scripts/session9-gate.mjs && node --check scripts/session10-gate.mjs && node --check scripts/browser-gate.mjs && node --check scripts/bee-gate.mjs && node --check scripts/gate-lib.mjs && node scripts/gate-scope-lint.mjs && node scripts/gate-list-lint.mjs",
     "test:perf": "echo \"[perf] start the dev server (npm run dev), open the game, press F3 or P, then click the stress button - results log to the browser console\"",
     "test:unit": "node scripts/unit-tests.mjs"
   },
@@ -23,9 +23,9 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/three": "^0.170.0",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^5.2.0",
     "playwright-core": "^1.64.1",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "^7.3.7"
   }
 }

@@ -7,6 +7,8 @@ import { chooseStructureFact } from '../engine/factSelection';
 import { PLANT_FACTS } from '../data/facts';
 import { MAGNIFIER_TUNING } from '../data/magnifier';
 import { theme, headingStyle } from './theme';
+import { useLocale } from '../engine/locale';
+import { PLANT_NAME_COPY, STRUCTURE_NAME_COPY, VISITOR_NAME_COPY } from '../data/i18n';
 
 /**
  * N3: the magnifying-glass detail card — a zoomed close read of the hovered
@@ -20,6 +22,8 @@ import { theme, headingStyle } from './theme';
  * (the fact store is one source; the glass adds no new facts).
  */
 export function MagnifierCard() {
+  const locale = useLocale((s) => s.locale);
+  const t = useLocale((s) => s.t());
   const entry = usePlacementStore((s) => s.magnifierEntry);
   // N3 taste: the cursor reflects the lock — CSS reads this attribute; the
   // card owns it because IT knows an inspectable is showing (flower or
@@ -63,20 +67,20 @@ export function MagnifierCard() {
       if (!item) return null;
       const def = PLANTS.find((p) => p.id === item.plantId);
       if (!def) return null;
-      const fact = PLANT_FACTS[item.plantId]?.text ?? 'A meadow flower.';
+      const fact = PLANT_FACTS[item.plantId]?.text ?? t.cardFlowerFallback;
       const blooming = def.bloom.includes(s.season);
       // live read-only state: blooming now + the N2 visit ledger (has a
       // pollinator visited this season? — the seeding precondition, read
       // through the same one source the seeding gate uses)
       const visited = item.visitedSeasons?.includes(s.season) ?? false;
       const stateLine = [
-        blooming ? 'In bloom now' : 'Resting this season',
+        blooming ? t.cardInBloomNow : t.cardRestingThisSeason,
         visited ? 'visited by a pollinator this season — it can set seed' : 'waiting for its first pollinator visit',
         item.volunteer ? 'self-seeded here on its own' : null,
       ]
         .filter(Boolean)
         .join(' \u00b7 ');
-      return { title: def.name, text: fact, hint: stateLine, factId: PLANT_FACTS[item.plantId]?.id ?? null };
+      return { title: PLANT_NAME_COPY[locale][item.plantId] ?? def.name, text: fact, hint: stateLine, factId: PLANT_FACTS[item.plantId]?.id ?? null };
     }
     if (entry.kind === 'structure') {
       // #6384616654: structures join the glass — the card shows the SAME
@@ -85,14 +89,14 @@ export function MagnifierCard() {
       const def = STRUCTURES.find((st) => st.id === entry.structureId);
       const choice = chooseStructureFact(entry.structureId, s.season, []);
       return {
-        title: def?.name ?? entry.structureId,
+        title: (def ? (STRUCTURE_NAME_COPY[locale][def.id] ?? def.name) : (VISITOR_NAME_COPY[locale][entry.structureId] ?? entry.structureId)),
         text: choice.fact.text,
         hint: null,
         factId: choice.fact.id,
       };
     }
     const w = MAGNIFIER_WILDLIFE[entry.visitorId];
-    if (!w) return { title: 'Visitor', text: 'A wild visitor, passing through the meadow.', hint: null, factId: null };
+    if (!w) return { title: t.cardVisitorTitle, text: t.cardVisitorText, hint: null, factId: null };
     // live read-only state: the visitor-window log (the notebook's own
     // record — one source; the glass invents no state)
     let hint: string | null = null;
@@ -102,8 +106,8 @@ export function MagnifierCard() {
         .map((k) => k.split(':')[1]);
       hint =
         seen.length > 0
-          ? 'recorded in the notebook — visited in ' + seen.join(', ')
-          : 'a first sighting — the notebook will remember it';
+          ? t.cardVisitedIn + seen.map((x) => t.seasonName(x as never)).join(', ')
+          : t.cardFirstSighting;
     }
     return { title: w.name, text: w.fact, hint, factId: null };
   }, [entry]);
@@ -117,9 +121,15 @@ export function MagnifierCard() {
   // O2 (v4, #40): the journal records what the glass SHOWS — the card is
   // the one inspection surface, so the sighting rides the card render (the
   // same single write path the store exposes; idempotent per season).
+  // #85 round-2: the write is debounced on entry STABILITY (250ms) — one
+  // inspection records exactly the subject that STAYED under the pointer;
+  // a transient entry flip (creature crossing dead-on mid-hover) writes
+  // nothing, so the journal never gains a second record from one inspection.
   const recordSighting = usePlacementStore((s) => s.recordSighting);
   useEffect(() => {
-    if (entry) recordSighting(entry);
+    if (!entry) return;
+    const t = window.setTimeout(() => recordSighting(entry), 250);
+    return () => window.clearTimeout(t);
   }, [entry, recordSighting]);
   if (!magnifierOn || !entry || !content) return null;
   return (

@@ -1,6 +1,7 @@
-import { Component, type ReactNode } from 'react';
+import { Component, type ReactNode, useState } from 'react';
 import { usePlacementStore } from '../render/placementStore';
 import { theme, headingStyle } from './theme';
+import { useLocale } from '../engine/locale';
 
 class DialogBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -17,18 +18,34 @@ class DialogBoundary extends Component<{ children: ReactNode }, { failed: boolea
 }
 
 function ResetDialogInner() {
+  const t = useLocale((s) => s.t());
   const resetWorld = usePlacementStore((s) => s.resetWorld);
+  const startFromSeedCode = usePlacementStore((s) => s.startFromSeedCode);
   const setModalOpen = usePlacementStore((s) => s.setModalOpen);
   // O5 (v4, #43): the confirm modal's open state is the store's modalOpen
   // — the R key opens the SAME modal (one input path); Esc dismisses it
   // through the ESC semantics table (engine/keyboardShortcuts).
   const open = usePlacementStore((s) => s.modalOpen);
+  const [seedInput, setSeedInput] = useState('');
+  const [seedError, setSeedError] = useState(false);
   const show = (v: boolean) => {
     setModalOpen(v);
+    if (!v) { setSeedInput(''); setSeedError(false); }
   };
   const onReset = () => {
     resetWorld();
     show(false);
+  };
+  // P3 (v4 seed codes): "start from a friend's seed" lives ONLY inside this
+  // confirmation modal — never a one-click destructive path. An
+  // unknown/corrupt code changes nothing and says so gently (no fail
+  // state); the current save is preserved to the backup slot either way.
+  const onSeedStart = () => {
+    if (startFromSeedCode(seedInput)) {
+      show(false);
+    } else {
+      setSeedError(true);
+    }
   };
   return (
     <>
@@ -46,9 +63,9 @@ function ResetDialogInner() {
           cursor: 'pointer',
           boxShadow: theme.border.shadow,
         }}
-        title="Start the meadow over"
+        title={t.resetButtonTitle}
       >
-        Reset meadow
+        {t.resetButtonLabel}
       </button>
       {open && (
         <div
@@ -82,11 +99,56 @@ function ResetDialogInner() {
               maxWidth: 380,
             }}
           >
-            <strong style={headingStyle(theme.font.titleSize)}>Reset your meadow?</strong>
+            <strong style={headingStyle(theme.font.titleSize)}>{t.resetDialogTitle}</strong>
             <p style={{ fontSize: theme.font.bodySize, lineHeight: theme.font.lineHeight, margin: '10px 0 18px' }}>
-              All placed flowers, structures, progress and milestones will be deleted.
-              This cannot be undone.
+              {t.resetDialogBody}
             </p>
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: theme.font.smallSize, marginBottom: 6, opacity: 0.85 }}>
+                {t.resetOrSeedHeading}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  data-seed-input
+                  value={seedInput}
+                  onChange={(e) => { setSeedInput(e.target.value); setSeedError(false); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') onSeedStart(); }}
+                  placeholder={t.resetSeedPlaceholder}
+                  aria-label={t.resetOrSeedHeading}
+                  style={{
+                    flex: 1,
+                    padding: '6px 10px',
+                    borderRadius: theme.border.radius,
+                    border: `${theme.border.chunk}px solid ${seedError ? theme.color.clayDark : theme.color.honeyDark}`,
+                    background: theme.color.parchment,
+                    color: theme.color.text,
+                    fontFamily: theme.font.family,
+                    fontSize: theme.font.smallSize,
+                  }}
+                />
+                <button
+                  onClick={onSeedStart}
+                  data-seed-start-button
+                  style={{
+                    padding: '6px 16px',
+                    borderRadius: theme.border.radius,
+                    border: `${theme.border.chunk}px solid ${theme.color.honeyDark}`,
+                    background: theme.color.parchment,
+                    color: theme.color.text,
+                    fontFamily: theme.font.family,
+                    cursor: 'pointer',
+                    boxShadow: theme.border.shadow,
+                  }}
+                >
+                  {t.resetSeedStart}
+                </button>
+              </div>
+              {seedError && (
+                <div style={{ fontSize: theme.font.smallSize, color: theme.color.clayDark, marginTop: 6 }}>
+                  {t.resetSeedError}
+                </div>
+              )}
+            </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button
                 onClick={() => show(false)}
@@ -101,7 +163,7 @@ function ResetDialogInner() {
                   boxShadow: theme.border.shadow,
                 }}
               >
-                Cancel
+                {t.resetCancel}
               </button>
               <button
                 onClick={onReset}
@@ -116,7 +178,7 @@ function ResetDialogInner() {
                   boxShadow: theme.border.shadow,
                 }}
               >
-                Reset
+                {t.resetConfirm}
               </button>
             </div>
           </div>

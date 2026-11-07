@@ -69,7 +69,32 @@ export function makeRecorder(log = console.log) {
   };
 }
 
-/** the standard "no console errors" companion check */
+/** the standard "no console errors" companion check.
+ *  #72: ERR_CONNECTION_REFUSED is an environment artifact (stale dev server /
+ *  wrong port), not a product console error — but it must be NAMED in any
+ *  FAIL line, so it is filtered here and reported separately by the caller;
+ *  a refused resource never silently passes as "clean". */
 export function realErrors(errors) {
   return errors.filter((e) => !/favicon/.test(e));
+}
+
+/** the refused-connection lines, separated so a FAIL can name the URL (#72) */
+export function refusedResources(errors) {
+  return errors.filter((e) => /ERR_CONNECTION_REFUSED|net::ERR/.test(e));
+}
+
+/**
+ * #68: dispatch --checks against a gate's check map. An unknown check name is
+ * a usage error, not a silent zero-result run — fail clean and NAME the valid
+ * checks (port-default foot-gun rule: never a raw stack, never a silent pass).
+ * Returns the process exit code.
+ */
+export async function dispatchChecks(rec, checks, map, gateName) {
+  for (const c of checks.split(',').map((s) => s.trim()).filter(Boolean)) {
+    if (map[c]) await map[c]();
+    else {
+      rec.record(`unknown-check:${c}`, false, `no such check in ${gateName} — valid checks: ${Object.keys(map).join(', ')}`);
+    }
+  }
+  return rec.exitCode();
 }

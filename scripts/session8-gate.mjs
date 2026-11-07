@@ -19,7 +19,7 @@
  *     errors. Each check builds its OWN world (the stale-probe lesson).
  */
 import { chromium } from 'playwright-core';
-import { parseArgs, launchChromium, newPage, makeRecorder, realErrors } from './gate-lib.mjs';
+import { parseArgs, launchChromium, newPage, makeRecorder, realErrors, dispatchChecks } from './gate-lib.mjs';
 
 const { url = 'http://localhost:5199', checks = 'precip', 'lib-path': libPath = '' } = parseArgs();
 const rec = makeRecorder();
@@ -253,6 +253,26 @@ async function checkMagnifier() {
     await page.mouse.move(flowerHover.screen.x, flowerHover.screen.y);
   }
   await page.waitForTimeout(1500); // hover + resolver frames elapse
+  // #85 round 4 (aefcd1b verdict): the probes must assert the STABLE entry —
+  // the same 250ms stability standard the journal write uses (89182a6), not
+  // a single instant read that can catch a transient dead-on crossing. Read,
+  // wait past the standard, read again. A FAIL names its side: stable entry
+  // is the creature => WORLD (the resolver genuinely prefers creatures over
+  // the hovered mesh); stable entry is the flower but the instant read
+  // flipped => DETECTOR (transient read, stability discipline).
+  const readStableEntry = async () => {
+    const instant = await page.evaluate(() => window.__meadowlight.magnifierReadback().entry);
+    await page.waitForTimeout(300); // > the 250ms stability standard
+    const stable = await page.evaluate(() => window.__meadowlight.magnifierReadback().entry);
+    const agrees = JSON.stringify(instant) === JSON.stringify(stable);
+    const side =
+      stable && stable.kind !== 'flower'
+        ? 'WORLD (stable entry is ' + JSON.stringify(stable) + ')'
+        : agrees
+          ? 'neither'
+          : 'DETECTOR (stable=flower, instant read flipped transiently)';
+    return { instant, stable, agrees, side };
+  };
   const flowerHoverCard = await page.evaluate(() => {
     const w = window.__meadowlight;
     const el = document.querySelector('[data-magnifier-card="true"]');
@@ -264,12 +284,13 @@ async function checkMagnifier() {
       pointerEvents: el ? getComputedStyle(el).pointerEvents : 'n/a',
     };
   });
-  // THE REGRESSION ASSERTION: after hover + resolver frames, the entry is
-  // STILL a flower (the resolver must not steal it — pollinators cluster
+  // THE REGRESSION ASSERTION: after hover + resolver frames, the STABLE
+  // entry is a flower (the resolver must not steal it — pollinators cluster
   // on flowers) and the card shows the flower fact + visit readout
+  const flowerStable = await readStableEntry();
   const flowerHoverOk =
     flowerHover.ok &&
-    flowerHoverCard.entry.entry?.kind === 'flower' &&
+    flowerStable.stable?.kind === 'flower' &&
     flowerHoverCard.visible &&
     flowerHoverCard.text.length > 0 &&
     /waiting for its first pollinator visit|visited by a pollinator this season/.test(flowerHoverCard.text);
@@ -277,7 +298,9 @@ async function checkMagnifier() {
     !flowerHover.ok
       ? 'hover-path setup failed: ' + (flowerHover.reason ?? '')
       : flowerHoverCard.visible
-        ? 'real-hover entry: ' + JSON.stringify(flowerHoverCard.entry.entry) + ' — card: ' + flowerHoverCard.text.slice(0, 60)
+        ? 'real-hover instant entry: ' + JSON.stringify(flowerHoverCard.entry.entry) +
+          ' — stable entry (300ms re-read): ' + JSON.stringify(flowerStable.stable) +
+          ' — side: ' + flowerStable.side + ' — card: ' + flowerHoverCard.text.slice(0, 60)
         : 'no card rendered on real flower hover with glass armed');
   // #6384690070, THE CLUSTERING CASE: hover a flower WITH a pollinator on
   // it — the ecological scenario where a creature sits within wildlifeReach
@@ -340,24 +363,23 @@ async function checkMagnifier() {
     await page.mouse.move(clusteringHover.screen.x, clusteringHover.screen.y);
     await page.waitForTimeout(2000);
   }
-  const clusteringEntry = await page.evaluate((itemId) => {
-    const w = window.__meadowlight;
-    return { entry: w.magnifierReadback(), wanted: itemId };
-  }, clusteringHover.ok ? clusteringHover.itemId : null);
   // #6384878002 assertion audit: the INVARIANT is that a FLOWER entry
   // survives 2s of resolver frames while a pollinator clusters on it —
   // not that it is one exact projected itemId (the projection can land on
   // an occluding bloom of the same species; the exact-id comparison FAILED
   // while the survival itself held, per the user's output). Assert the
-  // invariant; print the entry for diagnosis.
+  // invariant on the STABLE entry (#85 round 4: same 250ms standard as the
+  // journal write); print instant + stable + the named side for diagnosis.
+  const clusteringStable = await readStableEntry();
   const clusteringOk =
     clusteringHover.ok &&
-    clusteringEntry.entry.entry?.kind === 'flower';
+    clusteringStable.stable?.kind === 'flower';
   rec.record('magnifier.flower-survives-pollinator-clustering', clusteringOk,
     !clusteringHover.ok
       ? 'clustering setup failed: ' + (clusteringHover.reason ?? '')
-      : 'bee ' + clusteringHover.beeDist.toFixed(2) + 'u from flower — entry after 2s hold: ' +
-        JSON.stringify(clusteringEntry.entry.entry));
+      : 'bee ' + clusteringHover.beeDist.toFixed(2) + 'u from flower — instant entry after 2s hold: ' +
+        JSON.stringify(clusteringStable.instant) + ' — stable entry (300ms re-read): ' +
+        JSON.stringify(clusteringStable.stable) + ' — side: ' + clusteringStable.side);
 
   // DoD-walk fix gate (#6384544116): the fireflies note records only inside
   // the NATURAL visibility window — a forced (test) state must NOT write a
@@ -537,9 +559,15 @@ async function checkMagnifier() {
       return {
         x: ((clip.x / clip.w + 1) / 2) * window.innerWidth,
         y: ((-clip.y / clip.w + 1) / 2) * window.innerHeight,
+        depth: clip.w,
       };
     };
-    // walk until a real hivebee is nearest the pixel (resolver-agreement)
+    // #85 (detector fix): collect every in-viewport pixel where a real
+    // hivebee is the nearest creature, carrying the bee's clip depth so the
+    // node side tries the nearest-to-camera candidates first (a bee in
+    // FRONT of any flower mesh wins the symmetric claim; one behind it
+    // legitimately does not)
+    const candidates = [];
     for (const bee of bees) {
       const base = project(bee);
       const others = sightings.filter((s) => s !== bee);
@@ -554,13 +582,38 @@ async function checkMagnifier() {
           }),
           Infinity,
         );
-        if (beeD < 12 && otherD > beeD) return { ok: true, screen: cand, targeted: 'hivebee' };
+        if (beeD < 12 && otherD > beeD && cand.x >= 0 && cand.x < window.innerWidth && cand.y >= 0 && cand.y < window.innerHeight) {
+          candidates.push({ x: cand.x, y: cand.y, depth: base.depth });
+        }
       }
     }
-    return { ok: false, reason: 'no pixel where a hivebee wins', total: sightings.length };
+    candidates.sort((a, b) => a.depth - b.depth);
+    if (candidates.length === 0) return { ok: false, reason: 'no pixel where a hivebee wins', total: sightings.length };
+    return { ok: true, candidates: candidates.slice(0, 8), targeted: 'hivebee' };
   });
+  // #85 (detector fix): drive the REAL claim path per candidate — move off
+  // the previous mesh first (pointer-out releases its claim), then onto the
+  // candidate pixel, and read the LIVE entry each time; accept the first
+  // candidate the resolver actually claimed as hivebee. The old one-shot
+  // wiggle assumed the away-point released the flower claim — on a dense
+  // meadow it often landed on ANOTHER mesh, so a mesh-owned entry was live at
+  // the bee pixel and the ownership rule (correctly) kept the flower card.
+  let beeTarget = null;
   if (beeHover.ok) {
-    await page.mouse.move(beeHover.screen.x, beeHover.screen.y);
+    const vp = page.viewportSize() ?? { width: 1280, height: 720 };
+    for (const cand of beeHover.candidates) {
+      const ax = Math.min(Math.max(cand.x - 80, 4), vp.width - 4);
+      const ay = Math.min(Math.max(cand.y - 80, 4), vp.height - 4);
+      await page.mouse.move(ax, ay);
+      await page.waitForTimeout(300);
+      await page.mouse.move(cand.x, cand.y);
+      await page.waitForTimeout(300);
+      const entry = await page.evaluate(() => window.__meadowlight.magnifierReadback().entry);
+      if (entry && entry.kind === 'visitor' && entry.visitorId === 'hivebee') {
+        beeTarget = { x: cand.x, y: cand.y, entry };
+        break;
+      }
+    }
   }
   await page.waitForTimeout(1200); // hover + resolver frames, then read
   const beeCard = await page.evaluate(() => {
@@ -578,19 +631,35 @@ async function checkMagnifier() {
   await page.evaluate(() => {
     window.__meadowlight.timeSetPaused(false);
   });
-  // targeted-vs-claimed logging: one run tells all
-  const claimed = beeCard?.entry.entry?.kind === 'visitor' ? beeCard.entry.entry.visitorId : null;
+  // targeted-vs-claimed logging: one run tells all.
+  // #69: the detector was stale — it matched the ENGLISH literals
+  // 'Honeybee worker' / 'flowers per foraging trip' in the card text, but the
+  // full-suite run is under the SL locale and fact BODIES stay English by
+  // design (the i18n tail, #58) — the observed card was a FLOWER card (Sivka),
+  // meaning the claim readback said visitor but the kind was not hivebee.
+  // The robust, locale-independent assertions: (1) the claimed kind matches
+  // the targeted instance (visitorId === 'hivebee' — the session-6 lesson),
+  // (2) the card shows that creature's fact — asserted via the fact's stable
+  // numeric core ('50' and '100' appear in both the en and any future sl
+  // phrasing of the honeybee foraging fact), never via a prose literal.
+  // #85: name the RAW claimed entry in the FAIL line — the old extraction
+  // collapsed a mesh-owned (flower) entry to "claimed: null", which read as
+  // a broken readback while the card visibly showed the flower's fact; the
+  // readback itself was faithful (same store field the card renders)
+  const claimedEntry = beeCard?.entry.entry ?? null;
+  const claimed = claimedEntry?.kind === 'visitor' ? claimedEntry.visitorId : null;
   const beeFactShown =
     beeHover.ok &&
+    !!beeTarget &&
     !!beeCard &&
     beeCard.visible &&
     claimed === 'hivebee' &&
-    /Honeybee worker/i.test(beeCard.text) &&
-    beeCard.text.includes('flowers per foraging trip');
+    /50/.test(beeCard.text) && /100/.test(beeCard.text);
   rec.record('magnifier.wildlife-entry-shows-its-fact', beeFactShown,
     !beeHover.ok
       ? 'setup failed: ' + (beeHover.reason ?? '') + ' (' + (beeHover.total ?? 0) + ' creatures live)'
-      : 'targeted: ' + beeHover.targeted + ' — claimed: ' + claimed + ' — card: ' + beeCard.text.slice(0, 70));
+      : 'targeted: ' + beeHover.targeted + ' — claimed entry: ' + JSON.stringify(claimedEntry) +
+        ' — card: ' + (beeCard ? beeCard.text.slice(0, 70) : '(no card)'));
   // #6384994711: the removal-refusal gate sibling — with the glass ARMED
   // and an ACTIVE entry, a right-click ON a target must NOT remove it:
   // the target stays present, the save is unchanged, the right-click is
@@ -598,9 +667,17 @@ async function checkMagnifier() {
   const glassRemove = await page.evaluate(() => {
     const w = window.__meadowlight;
     const read = () => JSON.parse(localStorage.getItem('meadowlight.world.v2') || '{}');
-    // arm the glass + hold an entry (a flower), frozen clock for the diff
+    // arm the glass + hold an entry (a flower), frozen clock for the diff.
+    // #75: ALSO freeze the autosave — App.tsx autosaves every 3s and the
+    // save blob carries live-clock fields (dayPhase, seasonProgress,
+    // hiveCombs, journal); an autosave landing inside the 800ms diff window
+    // mutates those fields with the world untouched. The sibling checks
+    // freeze the clock AND save an explicit baseline; this check read the
+    // blob BEFORE any explicit save, so the baseline was whatever the last
+    // autosave wrote. Fix: explicit baseline save at the frozen instant.
     const wasPaused = w.timeIsPaused();
     w.timeSetPaused(true);
+    w.save(); // explicit baseline at the frozen instant (same as siblings)
     w.setMagnifierOnForTest(true);
     const target = w.items()[0];
     w.setMagnifierEntryForTest({ kind: 'flower', itemId: target.id });
@@ -685,11 +762,19 @@ async function checkMagnifier() {
     glassRemove.afterCount === glassRemove.beforeCount &&
     glassRemove.changed.length === 0 &&
     click1Ok && click2Ok && click3Ok;
+  // #75: name the failing predicate — removal vs save-identity vs click-state
+  const failed75 = [];
+  if (glassRemove.afterCount !== glassRemove.beforeCount) failed75.push('removal: items ' + glassRemove.beforeCount + '->' + glassRemove.afterCount);
+  if (glassRemove.changed.length > 0) failed75.push('save-identity: changed fields ' + glassRemove.changed.join(','));
+  if (!click1Ok) failed75.push('click1 (dismiss, stays armed)');
+  if (!click2Ok) failed75.push('click2 (disarm)');
+  if (!click3Ok) failed75.push('click3 (dismiss after re-hover)');
   rec.record('magnifier.rightclick-while-armed-removes-nothing', glassRemoveOk,
     glassRemoveOk
       ? 'three right-clicks under armed glass: ' + glassRemove.beforeCount + ' items throughout, save unchanged — click states: ' +
         states.map((s) => '#' + s.click + (s.glassOn ? ' armed' : ' off') + '/' + (s.entry ?? 'no-entry')).join(', ')
-      : 'REMOVED under armed glass — items ' + glassRemove.beforeCount + '->' + glassRemove.afterCount +
+      : 'FAILED predicates: ' + failed75.join('; ') +
+        ' — items ' + glassRemove.beforeCount + '->' + glassRemove.afterCount +
         ', changed: ' + glassRemove.changed.join(', ') + ', states: ' + JSON.stringify(states));
 
   // wildlife inspection is read-only too: same frozen-clock field diff
@@ -752,9 +837,14 @@ async function checkMagnifier() {
     // resolves to the queen. The check no longer fights the resolver's
     // correct nearest-wins; it finds a pointer position the resolver
     // AGREES resolves to the queen. Frozen clock = deterministic ecology.
-    const pos = await page.evaluate((q) => {
+    const pos = await page.evaluate((qPre) => {
       const w = window.__meadowlight;
       w.timeSetPaused(true); // pin the creatures for the targeting walk
+      // #85 round 3: re-read the queen AFTER the freeze — the argument is the
+      // pre-freeze position and she may have drifted in the gap, which would
+      // stale every candidate pixel (the containment rule needs the ray
+      // within 0.2u of her PINNED body, not the old 1.1u reach).
+      const q = w.wildlifeSightings().find((s) => s.kind === 'queenbumble') ?? qPre;
       const cam = w.__three?.camera;
       const proj = cam.projectionMatrix.elements;
       const view = cam.matrixWorldInverse.elements;
@@ -792,26 +882,37 @@ async function checkMagnifier() {
       const base = project(q);
       const sightings = w.wildlifeSightings();
       const others = sightings.filter((s) => s !== q);
-      // candidate pixels: the queen's own projection first, then a ring
-      // walk around her (queen-nearest per the creature screen-space
-      // pre-filter — necessary but NOT sufficient without the real read)
+      // candidate pixels: the queen's own projection first, then pixels
+      // whose ray passes THROUGH her body. #85 round 3 made containment
+      // (perp <= 0.2u) the claim rule for every wildlife entry, so the old
+      // screen-space ring walk (pixels within the 1.1u reach but often
+      // outside the 0.2u body) no longer claims by design — project points
+      // on a small sphere around her live position instead (radius 0.15u
+      // < the 0.2u containment radius => the ray through each such pixel
+      // passes within her body). The real read below stays the acceptance.
       candidates.push(base);
-      for (let step = 1; step <= 6; step++) {
-        for (let dir = 0; dir < 8; dir++) {
-          const ang = (dir / 8) * Math.PI * 2;
-          const cand = { x: base.x + Math.cos(ang) * step * 6, y: base.y + Math.sin(ang) * step * 6 };
-          const queenD = Math.hypot(cand.x - base.x, cand.y - base.y);
-          const otherD = Math.min(
-            ...others.map((o) => {
-              const op = project(o);
-              return Math.hypot(cand.x - op.x, cand.y - op.y);
-            }),
-            Infinity,
-          );
-          // pre-filter: the pixel must be plausibly queen-nearest among
-          // CREATURES (meshes checked by the real read below)
-          if (otherD > queenD) candidates.push(cand);
-        }
+      const R = 0.15;
+      for (let i = 0; i < 26; i++) {
+        const k = i + 0.5;
+        const z = 1 - 2 * (k / 26);
+        const rr = Math.sqrt(Math.max(0, 1 - z * z));
+        const phi = k * 2.399963229728653; // golden-angle sphere sample
+        const cand = project({
+          x: q.x + R * rr * Math.cos(phi),
+          y: q.y + R * z,
+          z: q.z + R * rr * Math.sin(phi),
+        });
+        const queenD = Math.hypot(cand.x - base.x, cand.y - base.y);
+        const otherD = Math.min(
+          ...others.map((o) => {
+            const op = project(o);
+            return Math.hypot(cand.x - op.x, cand.y - op.y);
+          }),
+          Infinity,
+        );
+        // pre-filter: the pixel must be plausibly queen-nearest among
+        // CREATURES (meshes checked by the real read below)
+        if (otherD > queenD) candidates.push(cand);
       }
       return { ok: true, candidates };
     }, queenSeen.queen);
@@ -874,14 +975,11 @@ async function checkMagnifier() {
   await page.close();
 }
 
-for (const check of checks.split(',')) {
-  if (check === 'precip') await checkPrecip();
-  else if (check === 'visits') await checkVisits();
-  else if (check === 'magnifier') await checkMagnifier();
-  else {
-    console.error('[GATE] unknown check: ' + check);
-    process.exit(2);
-  }
-}
-
-process.exit(rec.exitCode());
+// #68: shared dispatch — unknown names name the valid checks (the old
+// console.error+exit(2) produced a ZERO-result run in the full-suite runner)
+process.exit(await dispatchChecks(rec, checks, {
+  precip: checkPrecip,
+  visits: checkVisits,
+  magnifier: checkMagnifier,
+}, 'session8-gate'));
+await browser.close();

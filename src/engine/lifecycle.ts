@@ -40,13 +40,13 @@ export function advanceColony(season: Season, progress: number, deltaSeconds: nu
  * intensity + the target — the popup, panel, and P inspector render
  * from this single object (the duplicate-state-strings lesson).
  */
-export function colonyReadback(season: Season, progress: number): {
+export function colonyReadback(season: Season, progress: number, lineOverride?: string): {
   line: string;
   intensity: number;
   target: number;
 } {
   return {
-    line: LIFECYCLE_LINES[season],
+    line: lineOverride ?? LIFECYCLE_LINES[season],
     intensity: colonyIntensity(),
     target: colonyIntensityTarget(season, progress),
   };

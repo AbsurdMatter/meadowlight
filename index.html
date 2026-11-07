@@ -22,9 +22,35 @@
       /* round 5 (PR #49 comment #6560170382): the two font ROLES, both
          self-hosted OFL woff2 — the embed never fetches fonts at runtime.
          BODY = Nunito 400/500/700 (legible small-size body copy),
-         HEADINGS = Silkscreen 400/700 (pixel identity for titles/labels).
+         HEADINGS = Jersey 25 (session-10 pick; titles/labels).
          The stacks themselves live in src/data/typography.ts; the families
          here are what those stacks reference. */
+      /* P4 (i18n): latin-ext faces carry the Slovenian diacritics (č š ž).
+         unicode-range keeps the latin subset primary for ASCII text. */
+      @font-face {
+        font-family: 'Nunito';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('./fonts/nunito-latin-ext-400-normal.woff2') format('woff2');
+        unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+      }
+      @font-face {
+        font-family: 'Nunito';
+        font-style: normal;
+        font-weight: 500;
+        font-display: swap;
+        src: url('./fonts/nunito-latin-ext-500-normal.woff2') format('woff2');
+        unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+      }
+      @font-face {
+        font-family: 'Nunito';
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url('./fonts/nunito-latin-ext-700-normal.woff2') format('woff2');
+        unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+      }
       @font-face {
         font-family: 'Nunito';
         font-style: normal;
@@ -46,87 +72,65 @@
         font-display: swap;
         src: url('./fonts/nunito-v32-latin-700.woff2') format('woff2');
       }
+      /* Session 10 font pick (user decision): HEADINGS = Jersey 25, replacing
+         Silkscreen (whose latin-ext lacks \u010d). Single-weight family registered
+         with a 400-700 range so 700 headings synthesize. Dual-subset: latin owns
+         ASCII (no range), latin-ext carries the diacritics (cmap-verified:
+         \u010d \u0161 \u017e \u010c \u0160 \u017d all present) — the #64 pattern, so every glyph
+         of a Slovenian heading renders in this one face. */
       @font-face {
-        font-family: 'Silkscreen';
+        font-family: 'Jersey 25';
         font-style: normal;
-        font-weight: 400;
+        font-weight: 400 700;
         font-display: swap;
-        src: url('./fonts/silkscreen-v6-latin-regular.woff2') format('woff2');
+        src: url('./fonts/jersey-25-latin-400-normal.woff2') format('woff2');
       }
       @font-face {
-        font-family: 'Silkscreen';
+        font-family: 'Jersey 25';
         font-style: normal;
-        font-weight: 700;
+        font-weight: 400 700;
         font-display: swap;
-        src: url('./fonts/silkscreen-v6-latin-700.woff2') format('woff2');
+        src: url('./fonts/jersey-25-latin-ext-400-normal.woff2') format('woff2');
+        unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
       }
-      /* round-4 leftovers kept for the ?font-preview=1 comparison overlay
-         only (src/ui/FontPreview.tsx) — not referenced by the app theme.
-         Varela Round (candidate C, not picked) + the old Pixelify files. */
-      @font-face {
-        font-family: 'Cand Varela Round';
-        font-style: normal;
-        font-weight: 400;
-        font-display: swap;
-        src: url('./fonts/varela-round-v21-latin-regular.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Pixelify Sans';
-        font-style: normal;
-        font-weight: 400;
-        font-display: swap;
-        src: url('./fonts/pixelify-sans-latin-400-normal.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Pixelify Sans';
-        font-style: normal;
-        font-weight: 500;
-        font-display: swap;
-        src: url('./fonts/pixelify-sans-latin-500-normal.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Pixelify Sans';
-        font-style: normal;
-        font-weight: 700;
-        font-display: swap;
-        src: url('./fonts/pixelify-sans-latin-700-normal.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Cand Silkscreen';
-        font-style: normal;
-        font-weight: 400;
-        font-display: swap;
-        src: url('./fonts/silkscreen-v6-latin-regular.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Cand Silkscreen';
-        font-style: normal;
-        font-weight: 700;
-        font-display: swap;
-        src: url('./fonts/silkscreen-v6-latin-700.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Cand Nunito';
-        font-style: normal;
-        font-weight: 400;
-        font-display: swap;
-        src: url('./fonts/nunito-v32-latin-regular.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Cand Nunito';
-        font-style: normal;
-        font-weight: 500;
-        font-display: swap;
-        src: url('./fonts/nunito-v32-latin-500.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Cand Nunito';
-        font-style: normal;
-        font-weight: 700;
-        font-display: swap;
-        src: url('./fonts/nunito-v32-latin-700.woff2') format('woff2');
-      }
-    </style>
+      /* ?font-preview=1 candidate faces (session 10, finding A / #64): each
+         Cand family is registered TWICE — the latin subset as the primary
+         face (no unicode-range, covers ASCII), the latin-ext subset with the
+         diacritic range — so every glyph of the SL test line renders in the
+         candidate's OWN face, never a per-glyph fallback. */
+      @font-face { font-family: 'Cand Jersey 25'; font-weight: 400; font-display: swap; src: url('./fonts/jersey-25-latin-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Jersey 25'; font-weight: 400; font-display: swap; src: url('./fonts/jersey-25-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+      @font-face { font-family: 'Cand Pixelify'; font-weight: 400; font-display: swap; src: url('./fonts/pixelify-sans-latin-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Pixelify'; font-weight: 400; font-display: swap; src: url('./fonts/pixelify-sans-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+      @font-face { font-family: 'Cand Pixelify'; font-weight: 700; font-display: swap; src: url('./fonts/pixelify-sans-latin-700-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Pixelify'; font-weight: 700; font-display: swap; src: url('./fonts/pixelify-sans-latin-ext-700-normal.woff2') format('woff2'); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+      @font-face { font-family: 'Cand Press Start 2P'; font-weight: 400; font-display: swap; src: url('./fonts/press-start-2p-latin-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Press Start 2P'; font-weight: 400; font-display: swap; src: url('./fonts/press-start-2p-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+      @font-face { font-family: 'Cand VT323'; font-weight: 400; font-display: swap; src: url('./fonts/vt323-latin-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand VT323'; font-weight: 400; font-display: swap; src: url('./fonts/vt323-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+      @font-face { font-family: 'Cand Handjet'; font-weight: 400; font-display: swap; src: url('./fonts/handjet-latin-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Handjet'; font-weight: 400; font-display: swap; src: url('./fonts/handjet-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+      @font-face { font-family: 'Cand Handjet'; font-weight: 700; font-display: swap; src: url('./fonts/handjet-latin-700-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Handjet'; font-weight: 700; font-display: swap; src: url('./fonts/handjet-latin-ext-700-normal.woff2') format('woff2'); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+      @font-face { font-family: 'Cand DotGothic16'; font-weight: 400; font-display: swap; src: url('./fonts/dotgothic16-latin-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand DotGothic16'; font-weight: 400; font-display: swap; src: url('./fonts/dotgothic16-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+      @font-face { font-family: 'Cand Jersey 10'; font-weight: 400; font-display: swap; src: url('./fonts/jersey-10-latin-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Jersey 10'; font-weight: 400; font-display: swap; src: url('./fonts/jersey-10-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+      @font-face { font-family: 'Cand Jersey 15'; font-weight: 400; font-display: swap; src: url('./fonts/jersey-15-latin-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Jersey 15'; font-weight: 400; font-display: swap; src: url('./fonts/jersey-15-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+      @font-face { font-family: 'Cand Jersey 20'; font-weight: 400; font-display: swap; src: url('./fonts/jersey-20-latin-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Jersey 20'; font-weight: 400; font-display: swap; src: url('./fonts/jersey-20-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+      @font-face { font-family: 'Cand Tektur'; font-weight: 400; font-display: swap; src: url('./fonts/tektur-latin-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Tektur'; font-weight: 400; font-display: swap; src: url('./fonts/tektur-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+      @font-face { font-family: 'Cand Tektur'; font-weight: 700; font-display: swap; src: url('./fonts/tektur-latin-700-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Tektur'; font-weight: 700; font-display: swap; src: url('./fonts/tektur-latin-ext-700-normal.woff2') format('woff2'); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+      @font-face { font-family: 'Cand Kode Mono'; font-weight: 400; font-display: swap; src: url('./fonts/kode-mono-latin-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Kode Mono'; font-weight: 400; font-display: swap; src: url('./fonts/kode-mono-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+      @font-face { font-family: 'Cand Kode Mono'; font-weight: 700; font-display: swap; src: url('./fonts/kode-mono-latin-700-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Kode Mono'; font-weight: 700; font-display: swap; src: url('./fonts/kode-mono-latin-ext-700-normal.woff2') format('woff2'); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+      @font-face { font-family: 'Cand Sixtyfour'; font-weight: 400; font-display: swap; src: url('./fonts/sixtyfour-latin-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Cand Sixtyfour'; font-weight: 400; font-display: swap; src: url('./fonts/sixtyfour-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+</style>
   </head>
   <body>
     <div id="root"></div>

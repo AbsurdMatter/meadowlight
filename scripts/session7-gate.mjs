@@ -17,7 +17,7 @@
  *     save loads without loss), and determinism holds across reload.
  */
 import { chromium } from 'playwright-core';
-import { parseArgs, launchChromium, newPage, makeRecorder, realErrors } from './gate-lib.mjs';
+import { parseArgs, launchChromium, newPage, makeRecorder, realErrors, dispatchChecks } from './gate-lib.mjs';
 
 const { url = 'http://localhost:5199', checks = 'seeding', 'lib-path': libPath = '' } = parseArgs();
 const rec = makeRecorder();
@@ -88,18 +88,25 @@ async function checkSeeding() {
       let lastEpoch = w.seedingEpochReadback();
       const perSeason = [];
       let lastCount = 0;
+      // session 10 P1 (#53): log the visit ledger per sample — the chain
+      // visit-visit -> bloom -> seed-eligible -> roll must be visible in the
+      // check's own output, so a 0-volunteer run says WHY (unobserved
+      // season falls back to pre-N2 parents; a non-empty ledger keeps
+      // strict N2)
+      const visitCounts = [];
       for (let s = 0; s < 4; s++) {
         // ~90s per season at 8x
         await new Promise((r) => setTimeout(r, 92000));
         const volunteers = w.volunteersReadback().filter((v) => v.volunteer);
         const epoch = w.seedingEpochReadback();
         samples.push({ seasonIdx: s, epoch, volunteers: volunteers.length, total: w.items().length });
+        visitCounts.push(w.visitsReadback().filter((f) => f.visitedSeasons.length > 0).length);
         perSeason.push(volunteers.length - lastCount);
         lastCount = volunteers.length;
         lastEpoch = epoch;
       }
       w.timeSetSpeed(1);
-      return { before, before0, samples, perSeason, startSeason };
+      return { before, before0, samples, perSeason, startSeason, visitCounts };
     });
     // the samples are CUMULATIVE volunteer counts; the per-season cap
     // governs the DELTA between samples (the first run asserted cumulative
@@ -120,7 +127,7 @@ async function checkSeeding() {
     rec.record(
       'seeding.accelerated-4season-caps-hold',
       capsHold && !invasive && totalVolunteers >= 1,
-      JSON.stringify(run.samples) + ` (volunteers ${totalVolunteers}/${final} = ${(fraction * 100).toFixed(0)}%, cumulative brake target 15%)`,
+      JSON.stringify(run.samples) + ` (volunteers ${totalVolunteers}/${final} = ${(fraction * 100).toFixed(0)}%, cumulative brake target 15%, visitedFlowersPerSample=${JSON.stringify(run.visitCounts)})`,
     );
   }
 
@@ -412,30 +419,77 @@ async function checkTimeControlsUI() {
   const pausedUI = await page.evaluate(async () => {
     const w = window.__meadowlight;
     w.timeSetPaused(true);
-    // the row re-renders on its 1s interval and the opacity then takes a
-    // 0.25s transition — the old 1300ms wait could sample BEFORE the
-    // transition started (chip present, opacity still "1"). Wait past
-    // tick + transition with margin, and read the opacity BEFORE unpausing.
-    await new Promise((r) => setTimeout(r, 2200));
-    const chip = document.querySelector('[data-paused-chip]');
-    const row = document.querySelector('[data-time-row]');
+    // #84 (detector fix): the row re-renders on its OWN 1s interval, so the
+    // paused style lands up to 1s after the call and the 0.25s opacity
+    // transition runs after that. A FIXED wait samples wherever that
+    // interval phase happens to be — the FAIL read chip:true with
+    // rowOpacity:"1", i.e. sampled at the transition's start value. Poll
+    // the computed opacity until it settles below the dim threshold
+    // (5s deadline), then read chip + rects + inline opacity in that
+    // settled state and BEFORE unpausing (wait past tick+transition, read
+    // before mutating — the session-7 canon).
+    // #84 round 2: the poll must require BOTH observables of the paused
+    // render — the chip element present AND the computed opacity settled —
+    // because the check that ran before this one paused+unpaused the world:
+    // a stale dimmed opacity from the previous pause can read < 0.7 at the
+    // first 100ms sample, before the row's next 1s tick rendered the new
+    // paused state (chip still absent => the 2d014fc chip:false FAIL).
+    let row = null;
+    let rowOpacity = null;
+    let chip = null;
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 100));
+      row = document.querySelector('[data-time-row]');
+      rowOpacity = row ? getComputedStyle(row).opacity : null;
+      chip = document.querySelector('[data-paused-chip]');
+      if (chip && rowOpacity !== null && parseFloat(rowOpacity) < 0.7) break;
+    }
     const chipRect = chip ? chip.getBoundingClientRect() : null;
-    const rowOpacity = row ? getComputedStyle(row).opacity : null;
-    const pausedSnapshot = { chip: !!chip, rowOpacity };
+    const pausedSnapshot = {
+      chip: !!chip,
+      rowOpacity,
+      // world-vs-detector fork: inline opacity is the semantic the component
+      // writes; computed is the visible value — a FAIL with inline "0.55"
+      // but computed "1" is a timing read, inline "1" is a world regression
+      rowInlineOpacity: row ? row.style.opacity : null,
+    };
     // the decided observable also includes the INVERSE: running shows no chip
+    // AND the dim lifts back. #84 round-3 hardening: the old fixed 2200ms
+    // wait after unpausing is the same fixed-wait class as the round-1 FAIL
+    // (it samples wherever the row's own 1s re-render interval + 0.25s
+    // transition phase happens to be). Poll instead — 100ms steps, 5s
+    // deadline — until the chip is absent AND the computed opacity has
+    // settled back above the dim threshold, then read in that settled state.
+    // A world-side regression (chip stuck present, or the row never undims)
+    // now FAILs only after the full poll, named by the dump fields.
     w.timeSetPaused(false);
-    await new Promise((r) => setTimeout(r, 2200));
-    const chipWhenRunning = document.querySelector('[data-paused-chip]');
+    let chipWhenRunning = document.querySelector('[data-paused-chip]');
+    let rowOpacityWhenRunning = null;
+    const invDeadline = Date.now() + 5000;
+    while (Date.now() < invDeadline) {
+      await new Promise((r) => setTimeout(r, 100));
+      row = document.querySelector('[data-time-row]');
+      rowOpacityWhenRunning = row ? getComputedStyle(row).opacity : null;
+      chipWhenRunning = document.querySelector('[data-paused-chip]');
+      if (!chipWhenRunning && rowOpacityWhenRunning !== null && parseFloat(rowOpacityWhenRunning) > 0.9) break;
+    }
     return {
       ...pausedSnapshot,
       inViewport: !!chipRect && chipRect.width > 0 && chipRect.top >= 0 && chipRect.bottom <= window.innerHeight,
       chipAbsentWhenRunning: !chipWhenRunning,
+      rowOpacityWhenRunning,
     };
   });
   rec.record(
     'timecontrols.pause-indicator-present-in-viewport',
-    pausedUI.chip && pausedUI.inViewport && parseFloat(pausedUI.rowOpacity) < 0.7 && pausedUI.chipAbsentWhenRunning,
-    JSON.stringify(pausedUI) + ' (resting chip visible + row dimmed when paused; no chip when running)',
+    pausedUI.chip &&
+      pausedUI.inViewport &&
+      parseFloat(pausedUI.rowOpacity) < 0.7 &&
+      pausedUI.chipAbsentWhenRunning &&
+      pausedUI.rowOpacityWhenRunning !== null &&
+      parseFloat(pausedUI.rowOpacityWhenRunning) > 0.9,
+    JSON.stringify(pausedUI) + ' (resting chip visible + row dimmed when paused; no chip + dim lifted when running)',
   );
 
   const re = realErrors(errors);
@@ -684,10 +738,8 @@ async function checkNightSky() {
   await page.close();
 }
 
+// #68: shared dispatch — unknown names name the valid checks
 const map = { seeding: checkSeeding, visitors: checkVisitors, timecontrols: checkTimeControlsUI, colony: checkColony, habitat: checkHabitat, nightsky: checkNightSky };
-for (const c of checks.split(',')) {
-  if (map[c]) await map[c]();
-  else rec.record(`unknown-check:${c}`, false, 'no such check in session7-gate');
-}
+const code = await dispatchChecks(rec, checks, map, 'session7-gate');
 await browser.close();
-process.exit(rec.exitCode());
+process.exit(code);

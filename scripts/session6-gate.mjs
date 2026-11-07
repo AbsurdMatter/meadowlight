@@ -22,7 +22,7 @@
  *             boundary interpretation), no console errors.
  */
 import { chromium } from 'playwright-core';
-import { parseArgs, launchChromium, newPage, makeRecorder, realErrors } from './gate-lib.mjs';
+import { parseArgs, launchChromium, newPage, makeRecorder, realErrors, refusedResources, dispatchChecks } from './gate-lib.mjs';
 
 const { url = 'http://localhost:5199', checks = 'seasons', 'lib-path': libPath = '' } = parseArgs();
 const rec = makeRecorder();
@@ -36,15 +36,18 @@ async function checkSeasons() {
     await page.evaluate(() => {
       const w = window.__meadowlight;
       w.clear();
+      w.timeSetPaused(false); // #72: an earlier check's pause must not leak into the drift probe
+      w.timeSetSpeed(1);
       w.setSeasonProgressForTest(0);
     });
     const before = await page.evaluate(() => window.__meadowlight.seasonProgressReadback());
     await page.waitForTimeout(3000);
     const after = await page.evaluate(() => window.__meadowlight.seasonProgressReadback());
+    const driftState = await page.evaluate(() => ({ paused: window.__meadowlight.timeIsPaused(), mult: window.__meadowlight.timeMultiplierReadback() }));
     rec.record(
       'seasons.natural-drift-advances',
       after > before && after < 0.05,
-      `before=${before.toFixed(4)} after=${after.toFixed(4)} (monotonic advance, not exact-zero start)`,
+      `before=${before.toFixed(4)} after=${after.toFixed(4)} paused=${driftState.paused} mult=${driftState.mult} (monotonic advance, not exact-zero start)`,
     );
     // 2. a dial selection STARTS the season, never stops progression
     //    (round-1 finding 3): select winter -> the clock sits at winter's
@@ -69,7 +72,10 @@ async function checkSeasons() {
       JSON.stringify(started),
     );
     const re = realErrors(errors);
-    rec.record('seasons.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
+    const refused = refusedResources(errors);
+    rec.record('seasons.no-console-errors', re.length === 0 && refused.length === 0,
+      (re.length ? 'consoleErrors: ' + re.slice(0, 3).join(' | ') : '') +
+      (refused.length ? (re.length ? ' | ' : '') + 'refusedResources: ' + refused.slice(0, 3).join(' | ') : '') || 'clean');
     await page.close();
   }
 
@@ -84,17 +90,25 @@ async function checkSeasons() {
       w.setSeasonProgressForTest(0.999); // near the boundary so the rollover lands inside the wait
     });
     await page.waitForTimeout(2500);
-    const after = await page.evaluate(() => {
+    // #63: the toast title is localized — read the ACTIVE locale's title from
+    // the page's own copy table first, then scan the toast cards with it
+    const toastTitle = await page.evaluate(() =>
+      window.__meadowlight.toastSeasonTitleReadback
+        ? window.__meadowlight.toastSeasonTitleReadback()
+        : 'A season drifts in',
+    );
+    const after = await page.evaluate((title) => {
       const w = window.__meadowlight;
-      const toasts = [...document.querySelectorAll('div')].some((d) =>
-        d.textContent.includes('A season drifts in'),
+      const toasts = [...document.querySelectorAll('[data-toast]')].some((d) =>
+        d.textContent.includes(title),
       );
       return {
         season: w.seasonReadback(),
         progress: w.seasonProgressReadback(),
         toastShown: toasts,
+        toastTitle: title,
       };
-    });
+    }, toastTitle);
     rec.record(
       'seasons.rollover-fires-gentle-toast',
       after.toastShown && after.season === 'autumn',
@@ -1026,15 +1040,57 @@ async function checkHivePopup() {
   await page.waitForTimeout(200);
   const closed = await page.evaluate(() => !document.querySelector('[data-hive-popup]'));
   rec.record('hivepopup.closes-cleanly', closed, `closed: ${closed}`);
+  // #76: containment at BOTH locales — the popup's box geometry must derive
+  // from its rendered content (no fixed height), so every button's border-
+  // box sits fully inside the popup's border-box. SL copy is longer — test
+  // both. The harvest button only renders when the comb is full.
+  for (const loc of ['en', 'sl']) {
+    const contain = await page.evaluate(async (args) => {
+      const [id, l] = args;
+      const w = window.__meadowlight;
+      w.setLocaleForTest(l);
+      w.setComb(id, 1); // full comb -> harvest button renders
+      w.openHivePopup(id);
+      await new Promise((res) => setTimeout(res, 500));
+      await document.fonts.ready;
+      const popup = document.querySelector('[data-hive-popup]');
+      if (!popup) return { open: false };
+      const pb = popup.getBoundingClientRect();
+      const btns = ['[data-hive-popup-harvest]', '[data-hive-popup-more]', '[data-hive-popup-close]'];
+      const inside = {};
+      for (const sel of btns) {
+        const b = popup.querySelector(sel);
+        if (!b) { inside[sel] = 'missing'; continue; }
+        const rb = b.getBoundingClientRect();
+        inside[sel] = rb.top >= pb.top - 0.5 && rb.bottom <= pb.bottom + 0.5 && rb.left >= pb.left - 0.5 && rb.right <= pb.right + 0.5;
+      }
+      const cs = getComputedStyle(popup);
+      return {
+        open: true,
+        locale: l,
+        popupH: +pb.height.toFixed(1),
+        maxHeightCss: cs.maxHeight,
+        heightCss: cs.height,
+        overflowY: cs.overflowY,
+        inside,
+        allInside: Object.values(inside).every((v) => v === true),
+      };
+    }, [hiveId, loc]);
+    rec.record(
+      'hivepopup.content-contained@' + loc,
+      contain.open && contain.allInside && contain.maxHeightCss === 'none' && contain.heightCss === 'auto',
+      JSON.stringify(contain),
+    );
+    await page.evaluate(() => window.__meadowlight.closeHivePopup());
+  }
+  await page.evaluate(() => window.__meadowlight.setLocaleForTest('en'));
   const re = realErrors(errors);
   rec.record('hivepopup.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
   await page.close();
 }
 
+// #68: shared dispatch — unknown names name the valid checks
 const map = { seasons: checkSeasons, recipes: checkRecipes, honey: checkHoney, time: checkTimeControls, corners: checkCornerFold, hivepopup: checkHivePopup };
-for (const c of checks.split(',')) {
-  if (map[c]) await map[c]();
-  else rec.record(`unknown-check:${c}`, false, 'no such check in session6-gate');
-}
+const code = await dispatchChecks(rec, checks, map, 'session6-gate');
 await browser.close();
-process.exit(rec.exitCode());
+process.exit(code);

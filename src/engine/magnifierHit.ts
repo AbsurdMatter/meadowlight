@@ -46,13 +46,24 @@ export interface HitCamera {
  * Reach is measured PERPENDICULAR to the ray (the pointer's line of sight),
  * so a distant creature hovering under the pointer still hits at range.
  */
+export interface WildlifeHit {
+  kind: MagnifierKind;
+  /** distance from the camera along the pointer ray to the creature — the
+   *  same metric the mesh raycast's e.distance uses, so a wildlife hit and
+   *  a mesh claim can be compared (#85: nearer along the ray wins) */
+  along: number;
+  /** squared perpendicular distance to the ray (the winner metric) */
+  perpSq: number;
+}
+
 export function resolveWildlifeHit(
   camera: HitCamera,
   sightings: HitSighting[],
   reach: number,
-): { kind: MagnifierKind } | null {
+): WildlifeHit | null {
   let best: MagnifierKind | null = null;
   let bestScore = Infinity;
+  let bestAlong = 0;
   for (const w of sightings) {
     // vector camera -> creature
     const dx = w.x - camera.camX;
@@ -73,9 +84,49 @@ export function resolveWildlifeHit(
     if (perpSq < bestScore) {
       bestScore = perpSq;
       best = w.kind;
+      bestAlong = along;
     }
   }
-  return best ? { kind: best } : null;
+  return best ? { kind: best, along: bestAlong, perpSq: bestScore } : null;
+}
+
+/**
+ * #85 round 2: on-creature containment radius — the overtake requires the
+ * pointer ray to pass THROUGH the creature's body, not merely within the
+ * glass's reach beside it. ~a hivebee body half-diagonal (0.22/0.3 box ->
+ * 0.19); a creature 0.27u off-ray sitting next to a hovered flower must NOT
+ * steal the flower's entry (the round-1 overcorrection).
+ */
+export const WILDLIFE_CONTAINMENT_RADIUS = 0.2;
+
+/**
+ * #85 round 4: OWNERSHIP-FIRST, absolute. A MESH-OWNED entry (flower /
+ * structure hover) is NEVER overtaken by wildlife — not even by a creature
+ * dead-on under the pointer and nearer along the ray. The aefcd1b verdict
+ * measured both: a hoverfly owned a flower hover, and a hivebee 0.86u from
+ * a flower owned a clustering entry after a 2s hold, with the entry STABLE
+ * (held >= 250ms) — both creatures were genuinely dead-on in front of the
+ * mesh (along < claim bar), so the along-rule overtake fired; the resolver
+ * genuinely preferred creatures over the hovered mesh, and that is the world
+ * bug. The rule per the issue body: mesh-owned entries may not be overtaken.
+ * Wildlife claims only over a claimable entry (null or visitor).
+ */
+export function wildlifeClaimableHit(hit: WildlifeHit | null, currentMeshOwned: boolean): WildlifeHit | null {
+  if (currentMeshOwned) return null; // ownership-first: the mesh owns the entry
+  return wildlifeClaimHit(hit);
+}
+
+/**
+ * #85 round 3: the containment gate for every wildlife claim. A creature
+ * merely NEAR the ray — inside the glass reach (1.1u) but off the body
+ * (perp > 0.2u) — must never win or switch the entry: a non-contained hit
+ * is treated exactly like a miss. Only a creature the pointer ray actually
+ * passes through may hold the card.
+ */
+export function wildlifeClaimHit(hit: WildlifeHit | null): WildlifeHit | null {
+  return hit !== null && hit.perpSq <= WILDLIFE_CONTAINMENT_RADIUS * WILDLIFE_CONTAINMENT_RADIUS
+    ? hit
+    : null;
 }
 
 /**

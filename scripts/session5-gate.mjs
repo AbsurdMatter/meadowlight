@@ -14,7 +14,7 @@
  *             bloom succession at render level, notebook fact, v4 save load
  */
 import { chromium } from 'playwright-core';
-import { parseArgs, launchChromium, newPage, makeRecorder, realErrors } from './gate-lib.mjs';
+import { parseArgs, launchChromium, newPage, makeRecorder, realErrors, dispatchChecks } from './gate-lib.mjs';
 
 const { url = 'http://localhost:5199', checks = 'roster', 'lib-path': libPath = '' } = parseArgs();
 const rec = makeRecorder();
@@ -47,9 +47,14 @@ async function readPetalScales(page, species, season) {
     let found = null;
     // several species share the same instance capacity (same part count), so
     // identify THIS species' mesh by its measured part scales: every part must
-    // match its declared size (in bloom) or 0.25x of it (petals off-season)
+    // match its declared size (in bloom) or 0.25x of it (petals off-season).
+    // #80: mesh.count is the LIVE count (1 planted item), not the buffer
+    // capacity — since the buffer-truncation fix (#66) three.js no longer
+    // reports capacity here, so the old `=== 400 * partCount` filter matched
+    // nothing and every species read back as the previous probe's mesh
+    // (the identical [1,1,1]/[0.25,...] fingerprint).
     scene.traverse((o) => {
-      if (found || !o.isInstancedMesh || o.instanceMatrix?.count !== 400 * partCount) return;
+      if (found || !o.isInstancedMesh || !o.instanceMatrix || o.count !== partCount) return;
       const m = o.instanceMatrix.array;
       const scales = [];
       for (let i = 0; i < partCount; i++) {
@@ -85,12 +90,15 @@ async function checkRoster(browser) {
     const r = await page.evaluate(() => {
       const w = window.__meadowlight;
       w.clear();
-      const names = ['Lavender','Clover','Wild Poppy','Sunflower','Wild Thyme','Forget-me-not','Crocus','Borage','Cosmos','Aster'];
+      // #80: locale-agnostic — the palette chip names come from
+      // PLANT_NAME_COPY[locale] (SL run renders Sivka/Detelja/...), so match
+      // by the data-palette-entry key (the chip's real attribute), never by English text
+      const ids = ['lavender','clover','poppy','sunflower','thyme','forget-me-not','crocus','borage','cosmos','aster'];
       const missing = [];
       let inViewport = 0;
-      for (const n of names) {
-        const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith(n) && b.querySelector('img,canvas'));
-        if (!btn) { missing.push(n); continue; }
+      for (const id of ids) {
+        const btn = document.querySelector('button[data-palette-entry="plant:' + id + '"]');
+        if (!btn) { missing.push(id); continue; }
         const rect = btn.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0 && rect.bottom > 0) inViewport++;
       }
@@ -258,7 +266,8 @@ async function checkBushes(browser) {
       const w = window.__meadowlight;
       w.clear();
       // palette button exists and is not locked
-      const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith('Berry Bush'));
+      // #80: locale-agnostic — Berry Bush renders as Grmičevje under SL
+      const btn = document.querySelector('button[data-palette-entry="structure:bush"]');
       const paletteOk = !!btn && !btn.disabled && btn.getBoundingClientRect().width > 0;
       // place flowers + hive, then a bush; appeal is internal, so observe the
       // bee count proxy: beesForHive scales with appeal
@@ -376,13 +385,23 @@ async function checkSky(browser) {
       skySamples = [...distinct].slice(0, 20);
       skyBanded = distinct.size >= 5 && distinct.size <= 30;
     }
-    // 2. distant ridge: a ~96-instance basic-material mesh at r 56..74
+    // 2. distant ridge: the #83-rebuilt family — the InstancedMesh sized from
+    //    the ONE shared source (ridgeInstanceCapacity(), read back via the
+    //    test hook) whose instances all sit in the ridge band
+    //    (rimOuter, ridgeOuterRadius] = 90..100. (The pre-#83 shape — count
+    //    === 96, instance0 at r 50..80 — no longer exists; matching it read
+    //    0 on the rebuilt family, which is how #90's regression surfaced.)
     let ridgeCount = 0;
+    const ridgeLen = w.ridgeBoxesReadback ? w.ridgeBoxesReadback().length : 0;
     scene.traverse((o) => {
-      if (o.isInstancedMesh && o.instanceMatrix && o.count === 96) {
+      if (o.isInstancedMesh && o.instanceMatrix && o.count > 0 && o.count === ridgeLen) {
         const m = o.instanceMatrix.array;
-        const r0 = Math.hypot(m[12], m[14]);
-        if (r0 > 50 && r0 < 80) ridgeCount++;
+        let inBand = 0;
+        for (let i = 0; i < o.count; i++) {
+          const r = Math.hypot(m[i * 16 + 12], m[i * 16 + 14]);
+          if (r > 85 && r <= 105) inBand++;
+        }
+        if (inBand === o.count) ridgeCount++;
       }
     });
     // 3. composed clouds: puffs wide-and-low (x size >> y size)
@@ -617,20 +636,43 @@ async function checkTriggers(browser) {
     const first = btns[0]?.getBoundingClientRect();
     return { count: btns.length, labels, inViewport: !!first && first.width > 0 && first.top >= 0 };
   });
+  // #80: the S5 trigger section is 8 buttons (4 tod-* + resume natural +
+  // 3 firefly force); the old assertion expected >=10 incl 'rain ON' — a
+  // pre-N1 list (rain is natural since session 8, no force-rain button).
   rec.record('triggers.panel-has-s5-buttons-in-viewport',
-    panel.count >= 10 && panel.inViewport && panel.labels.includes('rain ON') && panel.labels.includes('resume natural'),
+    panel.count === 8 && panel.inViewport && panel.labels.includes('resume natural') && panel.labels.includes('night'),
     JSON.stringify({ count: panel.count, labels: panel.labels }));
 
   // B. forced night: bees home, sky dark; saved dayPhase survives reload
   await page.evaluate(() => window.__meadowlight.setDayPhase(0.97));
-  await page.waitForTimeout(3000);
-  const night = await page.evaluate(() => ({
-    bees: window.__meadowlight.beeDebug(),
-    rain: window.__meadowlight.rainDebug(),
+  // #81 (detector fix): the forced phase holds the override clock and 0.97
+  // is outside the lit window, so the bees' own predicate reads night — but
+  // a bee flips to homing only when it next PICKS a target (arrive -> rest ->
+  // home); mid-trip bees finish their trip first. A fixed 3s wait can sample
+  // mid-transition (homing 0 / foraging 5 while the swarm is visibly home
+  // later) — poll past the settle instead of sampling a fixed instant.
+  let night = null;
+  const nightDeadline = Date.now() + 12000;
+  while (Date.now() < nightDeadline) {
+    await page.waitForTimeout(500);
+    night = await page.evaluate(() => ({
+      bees: window.__meadowlight.beeDebug(),
+      rain: window.__meadowlight.rainDebug(),
+    }));
+    if (night.bees.count === 0 || night.bees.homing > night.bees.foraging) break;
+  }
+  // #81: assert the actual contract with the REAL readbacks — forced night
+  // 0.97 is outside the lit window (0.22..0.88), so daylightReadback (the ONE
+  // shared isDaylight predicate the bees read) is false and bees must home:
+  // homing > foraging (or no bees at all). The old probe hardcoded
+  // daylightAtNight: null (no writer existed for that name).
+  const nightVerdict = await page.evaluate(() => ({
+    phase: window.__meadowlight.dayPhaseReadback?.() ?? null,
+    daylightAtNight: window.__meadowlight.daylightReadback?.() ?? null,
   }));
   rec.record('triggers.forced-night-bees-home',
-    night.bees.homing >= 3 || night.bees.count === 0 || night.bees.foraging < night.bees.homing,
-    JSON.stringify({ homing: night.bees.homing, foraging: night.bees.foraging, count: night.bees.count }));
+    night.bees.count === 0 || night.bees.homing > night.bees.foraging,
+    JSON.stringify({ homing: night.bees.homing, foraging: night.bees.foraging, count: night.bees.count, phase: nightVerdict.phase, daylightAtNight: nightVerdict.daylightAtNight }));
 
   // C. natural rain at night (N1: no force-rain input path — sweep the
   // season progress to a schedule window; deterministic per world seed)
@@ -662,9 +704,21 @@ async function checkTriggers(browser) {
   const phaseOk = savedPhase !== undefined && Math.abs(savedPhase - (resumed.phase ?? savedPhase)) < 0.05;
   rec.record('triggers.dayphase-save-not-corrupted', savedPhase !== undefined && phaseOk,
     JSON.stringify({ savedPhase, resumedPhase: resumed.phase }));
-  // rain is per-visit ambient: must NOT persist through reload
-  rec.record('triggers.rain-does-not-persist', resumed.rain.count === 0,
-    JSON.stringify({ rainAfterReload: resumed.rain.count }));
+  // #80 (detector fix, named): the premise is stale since session 8 N1 —
+  // rain is now NATURAL and seasonally weighted, so rain CAN legitimately be
+  // falling after reload (rainAfterReload=165 was a natural window, not a
+  // persisted override). The real contract: no FORCED rain persists. Assert
+  // the forced flag is null after reload (natural rain allowed).
+  // the forced-override flag is module memory (testForced) — never persisted;
+  // after reload it is null by construction. The observable contract: the
+  // SAVED blob carries no precip/force field at all.
+  // #80 round-7: localStorage is a BROWSER global — read the save blob inside
+  // page.evaluate, never in node scope (the round-6 version crashed here and
+  // every check after it never ran)
+  const savedKeys = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('meadowlight.world.v2') || '{}')));
+  const precipKeys = savedKeys.filter((k) => /rain|precip|force/i.test(k));
+  rec.record('triggers.rain-does-not-persist', precipKeys.length === 0,
+    JSON.stringify({ rainAfterReload: resumed.rain.count, savedPrecipKeys: precipKeys, note: 'natural rain (N1) allowed; the save must carry no precip/force field' }));
 
   // E. firefly force: on at noon (independent of dusk), off at dusk
   await page.evaluate(() => {
@@ -688,16 +742,16 @@ async function checkTriggers(browser) {
 }
 
 const browser = await launchChromium(chromium, { libPath });
-for (const check of checks.split(',')) {
-  if (check === 'roster') await checkRoster(browser);
-  else if (check === 'terrain') await checkTerrain(browser);
-  else if (check === 'bushes') await checkBushes(browser);
-  else if (check === 'sky') await checkSky(browser);
-  else if (check === 'wild') await checkWild(browser);
-  else if (check === 'daynight') await checkDayNight(browser);
-  else if (check === 'weather') await checkWeather(browser);
-  else if (check === 'triggers') await checkTriggers(browser);
-  else rec.record(`unknown-check:${check}`, false, 'no such check');
-}
+// #68: dispatch via the shared helper — an unknown check name fails clean
+// and names the valid checks (never a silent zero-result run)
+process.exit(await dispatchChecks(rec, checks, {
+  roster: () => checkRoster(browser),
+  terrain: () => checkTerrain(browser),
+  bushes: () => checkBushes(browser),
+  sky: () => checkSky(browser),
+  wild: () => checkWild(browser),
+  daynight: () => checkDayNight(browser),
+  weather: () => checkWeather(browser),
+  triggers: () => checkTriggers(browser),
+}, 'session5-gate'));
 await browser.close();
-process.exit(rec.exitCode());

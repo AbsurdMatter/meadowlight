@@ -3,6 +3,7 @@ import {
   loadWorld,
   saveWorld,
   clearSavedWorld,
+  preserveSaveBeforeSeedStart,
 } from '../engine/persistence';
 import type { PlacedItem, PlacedStructure } from '../engine/persistence';
 import { withVisit } from '../engine/visits';
@@ -14,7 +15,8 @@ import {
   seasonProgress,
   setSeasonProgressForTest,
 } from '../engine/seasonClock';
-import { SEASON_ARRIVAL } from '../data/seasons';
+import { SEASON_COPY } from '../data/i18n';
+import { useLocale } from '../engine/locale';
 import { newlyFormed, companionSet } from '../engine/companions';
 import { combReady, fillAfterHarvest } from '../engine/honey';
 import { HONEY_FACTS } from '../data/honey';
@@ -27,6 +29,7 @@ import { groundAt } from '../engine/ground';
 import { selectToolDisarmsGlass } from '../engine/interactionGrammar';
 import type { MilestoneId } from '../data/milestones';
 import { starterPatchFor } from '../engine/starterPatch';
+import { decodeSeedCode } from '../engine/seedCode';
 import { recordForInspection, appendRecord, type JournalRecord } from '../engine/sightingJournal';
 import type { Season as _Season } from '../data/seasons';
 
@@ -64,6 +67,12 @@ export interface PlacementState {
    * ways). Display state, never world state.
    */
   hubOpen: boolean;
+  /** #61: the seed share popover's open state — joins the ESC close-grammar family (one source) */
+  sharePanelOpen: boolean;
+  setSharePanelOpen: (open: boolean) => void;
+  /** #59: the "?" hint panel open state (hosted in the corner row now) */
+  hintOpen: boolean;
+  setHintOpen: (open: boolean) => void;
   /** true while a blocking dialog (reset confirmation) is open: no placement */
   modalOpen: boolean;
   setModalOpen: (open: boolean) => void;
@@ -167,6 +176,15 @@ export interface PlacementState {
   /** full reset: empty world + cleared save + default season/milestones */
   resetWorld: () => void;
   /**
+   * P3 (v4 seed codes): start a fresh world from a friend's seed code.
+   * The current save is preserved via the corrupt-blob backup pattern
+   * (clearSavedWorld already moves it aside), the decoded layout replaces
+   * the world, and the world's named seed becomes the code's seed — so the
+   * same code grows the same meadow across reloads and machines. Returns
+   * false (and changes nothing) for an unknown/corrupt code.
+   */
+  startFromSeedCode: (code: string) => boolean;
+  /**
    * #30: dev-only reload-from-save. Discards ALL in-memory state and
    * rehydrates purely from the localStorage blob — the exact loadWorld()
    * path a fresh page load takes (including the corrupt/unknown-version
@@ -207,6 +225,10 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
   wildSeasons: initial.wildSeasons ?? [],
   onboardingDismissed: initial.onboardingDismissed ?? false,
   hubOpen: false,
+  sharePanelOpen: false,
+  setSharePanelOpen: (open) => set({ sharePanelOpen: open }),
+  hintOpen: false,
+  setHintOpen: (open) => set({ hintOpen: open }),
   dismissOnboarding: () => {
     set({ onboardingDismissed: true });
     get().save();
@@ -285,7 +307,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
           ? [...s.wildSeasons, season]
           : s.wildSeasons;
       const toast = announce
-        ? { id: toastSeq++, title: 'A season drifts in', body: SEASON_ARRIVAL[season] }
+        ? { id: toastSeq++, title: useLocale.getState().t().toastSeasonDriftsIn, body: SEASON_COPY[useLocale.getState().locale][season].arrival }
         : null;
       return toast ? { season, wildSeasons, toasts: [...s.toasts, toast] } : { season, wildSeasons };
     });
@@ -311,7 +333,7 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
         ...s.toasts,
         ...fresh.map((r) => ({
           id: toastSeq++,
-          title: 'A garden recipe!',
+          title: useLocale.getState().t().toastGardenRecipe,
           body: `${r.label} — ${r.fact}`,
         })),
       ],
@@ -433,6 +455,39 @@ export const usePlacementStore = create<PlacementState>((set, get) => ({
     startSeasonAt('summer');
     setSeasonProgressForTest(0);
     get().save();
+  },
+  startFromSeedCode: (code) => {
+    const decoded = decodeSeedCode(code);
+    if (!decoded) return false;
+    // corrupt-blob pattern applied to the incoming world: the player's
+    // current save is copied to _backup, then cleared — never destroyed
+    preserveSaveBeforeSeedStart();
+    clearSavedWorld();
+    set({
+      items: decoded.items,
+      structures: [],
+      milestones: [],
+      season: 'summer',
+      worldSeed: decoded.worldSeed,
+      seedingEpoch: 0,
+      visitorWindows: [],
+      journal: [],
+      nudgesShown: [],
+      toasts: [],
+      modalOpen: false,
+      seenFacts: [],
+      wildSeasons: [],
+      onboardingDismissed: true, // a seeded meadow is not a first visit
+      foundRecipes: [],
+      hiveCombs: {},
+      honeyJars: 0,
+      harvestDips: {},
+      hivePopup: null,
+    });
+    startSeasonAt('summer');
+    setSeasonProgressForTest(0);
+    get().save();
+    return true;
   },
   reloadFromSave: () => {
     const w = loadWorld();
@@ -569,7 +624,7 @@ function seedVolunteers(season: Season, announce: boolean): void {
             ...cur.toasts,
             {
               id: toastSeq++,
-              title: 'The meadow seeds itself',
+              title: useLocale.getState().t().toastMeadowSeedsItself,
               body: SEEDING_FACTS.volunteer,
             },
           ]

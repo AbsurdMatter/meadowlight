@@ -19,7 +19,7 @@ import { PLANT_BY_ID, PLANTS } from '../data/plants';
 import { hash3 } from './seededHash';
 import type { PlacedItem } from './persistence';
 import { inBloom } from './pollinator';
-import { wasVisitedThisSeason } from './visits';
+import { meadowUnobservedThisSeason, wasVisitedThisSeason } from './visits';
 import type { Season } from '../data/seasons';
 
 export interface VolunteerSeed {
@@ -63,6 +63,20 @@ function regionKey(x: number, z: number): string {
 }
 
 /**
+ * #78: the cumulative brake predicate — the ONE source both the seeding
+ * site (rollVolunteers below) and the P panel readout read. No re-derivation
+ * at the readout: the same share comparison the seeding site uses.
+ */
+export function maxVolunteerCap(totalItems: number): number {
+  return Math.floor(totalItems * SEEDING_TUNING.maxVolunteerFraction);
+}
+
+/** brake engaged = volunteers already at/above the tuned share of the meadow */
+export function seedingBrakeEngaged(existingVolunteers: number, totalItems: number): boolean {
+  return totalItems > 0 && existingVolunteers >= maxVolunteerCap(totalItems);
+}
+
+/**
  * Decide this rollover's volunteers.
  *
  * @param items        live meadow (parents = items blooming in `endedSeason`)
@@ -90,15 +104,21 @@ export function rollVolunteers(
   // removes anything — no fail state); planting more or clearing some
   // resumes it. This is the constraint the returning visitor actually feels.
   const existingVolunteers = items.filter((it) => it.volunteer === true).length;
-  const maxVolunteers = Math.floor(items.length * SEEDING_TUNING.maxVolunteerFraction);
-  if (existingVolunteers >= maxVolunteers) return [];
+  if (seedingBrakeEngaged(existingVolunteers, items.length)) return [];
+  const maxVolunteers = maxVolunteerCap(items.length);
   // parents: flowers that bloomed during the season just ended AND were
   // visited by a pollinator during it (N2: unvisited flowers don't set
   // seed — the precondition is a FILTER before the rolls, so the roll
-  // sequence for the surviving parents is byte-identical to pre-N2)
-  const parents = items.filter(
-    (it) => inBloom(it.plantId, endedSeason) && wasVisitedThisSeason(it, endedSeason),
-  );
+  // sequence for the surviving parents is byte-identical to pre-N2).
+  // Session 10 P1 (#53): if NO flower was visited anywhere in the ended
+  // season, the meadow was UNOBSERVED, not unvisited — fall back to all
+  // blooming flowers as parents (the pre-N2 set), so a meadow with no
+  // pollinator presence can still self-seed (reachability rule). The moment
+  // one visit exists, strict per-flower N2 applies again.
+  const unobserved = meadowUnobservedThisSeason(items, endedSeason);
+  const parents = unobserved
+    ? items.filter((it) => inBloom(it.plantId, endedSeason))
+    : items.filter((it) => inBloom(it.plantId, endedSeason) && wasVisitedThisSeason(it, endedSeason));
   if (parents.length === 0) return [];
   const budget = maxVolunteers - existingVolunteers;
   const out: VolunteerSeed[] = [];
