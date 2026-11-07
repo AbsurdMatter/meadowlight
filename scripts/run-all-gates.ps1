@@ -40,7 +40,7 @@ $jobs = @(
   @{ Script = 'scripts\session8-gate.mjs'; Args = @('--url', $Url, '--checks', 'precip') },
   @{ Script = 'scripts\session8-gate.mjs'; Args = @('--url', $Url, '--checks', 'magnifier') },
   @{ Script = 'scripts\session9-gate.mjs'; Args = @('--url', $Url, '--checks', 'keys,chrome') },
-  @{ Script = 'scripts\session9-gate.mjs'; Args = @('--url', $Url, '--checks', 'onboarding,journal,audio,touch') },
+  @{ Script = 'scripts\session9-gate.mjs'; Args = @('--url', $Url, '--checks', 'onboarding,journal,audio,touch,popups') },
   @{ Script = 'scripts\session10-gate.mjs'; Args = @('--url', $Url) }
 )
 

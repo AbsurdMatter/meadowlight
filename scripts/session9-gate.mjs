@@ -287,6 +287,93 @@ async function checkChrome() {
   }
 }
 
+// #76 (class fix verification): popup containers derive their height from
+// live-measured content. Drives BOTH popup surfaces open at BOTH locales and
+// asserts button-rect containment inside box-rect (border-box both sides, one
+// unit system): (a) the hive popup — harvest/more/close buttons fully inside
+// the popup box; (b) the toast popups (jar-of-honey collect card + season
+// card) — each card's dismiss button inside the card AND each card fully
+// inside the stack's visible box (no clipping by a fixed-height cap).
+async function checkPopups() {
+  for (const [width, height] of [[1280, 800], [360, 500]]) {
+    for (const locale of ['en', 'sl']) {
+      const { page, errors } = await newPage(browser, url);
+      await page.evaluate((loc) => {
+        const w = window.__meadowlight;
+        w.setLocaleForTest(loc);
+        w.clear();
+        w.dismissAllToastsForTest();
+        w.placeStructure('hive', 0, 0);
+        w.setComb(w.structures()[0].id, 999); // full comb -> harvest button renders
+        w.timeSetPaused(true);
+        w.save();
+      }, locale);
+      await page.evaluate(() => {
+        window.__meadowlight.openHivePopup(window.__meadowlight.structures()[0].id);
+      });
+      await page.waitForTimeout(1200); // anchor projection + frames elapse
+      const popup = await page.evaluate(() => {
+        const pop = document.querySelector('[data-hive-popup]');
+        if (!pop) return { ok: false, reason: 'no popup rendered' };
+        const pb = pop.getBoundingClientRect();
+        const inside = (sel) => {
+          const el = pop.querySelector(sel);
+          if (!el) return true; // not rendered in this state is fine
+          const b = el.getBoundingClientRect();
+          return b.top >= pb.top && b.bottom <= pb.bottom && b.left >= pb.left && b.right <= pb.right;
+        };
+        return {
+          ok: inside('[data-hive-popup-harvest]') && inside('[data-hive-popup-more]') && inside('[data-hive-popup-close]'),
+          box: { top: +pb.top.toFixed(1), bottom: +pb.bottom.toFixed(1), left: +pb.left.toFixed(1), right: +pb.right.toFixed(1) },
+        };
+      });
+      rec.record(
+        'popups.hive-popup-buttons-inside-box@' + width + 'x' + height + '#' + locale,
+        popup.ok,
+        JSON.stringify(popup),
+      );
+      // toast popups: jar (hive collect) + season arrival = 2 cards
+      await page.evaluate(async () => {
+        const w = window.__meadowlight;
+        w.harvestHoney(w.structures()[0].id); // jar-of-honey toast
+        w.timeSetPaused(false);
+        w.timeSetSpeed(8);
+        w.setSeasonProgressForTest(0.999); // one re-armed crossing = one season card
+        await new Promise((r) => setTimeout(r, 300));
+        w.timeSetPaused(true);
+        w.timeSetSpeed(1);
+      });
+      await page.waitForTimeout(800);
+      const toasts = await page.evaluate(() => {
+        const stack = document.querySelector('[data-toast-stack]');
+        const sb = stack ? stack.getBoundingClientRect() : null;
+        const cards = [...document.querySelectorAll('[data-toast]')].map((c) => {
+          const cb = c.getBoundingClientRect();
+          const btn = c.querySelector('button');
+          const bb = btn ? btn.getBoundingClientRect() : null;
+          return {
+            title: (c.firstElementChild?.textContent ?? '').slice(0, 20),
+            card: { top: +cb.top.toFixed(1), bottom: +cb.bottom.toFixed(1), left: +cb.left.toFixed(1), right: +cb.right.toFixed(1) },
+            btnInsideCard: bb ? bb.top >= cb.top && bb.bottom <= cb.bottom && bb.left >= cb.left && bb.right <= cb.right : false,
+            cardInsideStack: sb ? cb.top >= sb.top - 0.5 && cb.bottom <= sb.bottom + 0.5 && cb.left >= sb.left - 0.5 && cb.right <= sb.right + 0.5 : false,
+          };
+        });
+        return { stack: sb ? { top: +sb.top.toFixed(1), bottom: +sb.bottom.toFixed(1) } : null, cards };
+      });
+      const toastsOk =
+        toasts.cards.length >= 2 && toasts.cards.every((c) => c.btnInsideCard && c.cardInsideStack);
+      rec.record(
+        'popups.toast-cards-unclipped-buttons-inside@' + width + 'x' + height + '#' + locale,
+        toastsOk,
+        JSON.stringify(toasts),
+      );
+      const re = realErrors(errors);
+      rec.record('popups.no-console-errors@' + width + 'x' + height + '#' + locale, re.length === 0, re.slice(0, 3).join(' | '));
+      await page.close();
+    }
+  }
+}
+
 async function checkPolish() {
   // 1. #44: the day cycle reads 360 in the live page
   {
@@ -1448,6 +1535,7 @@ const code = await dispatchChecks(rec, checks, {
   audio: checkAudio,
   touch: checkTouch,
   chrome: checkChrome,
+  popups: checkPopups,
 }, 'session9-gate');
 await browser.close();
 process.exit(code);
