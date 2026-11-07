@@ -970,6 +970,177 @@ async function checkMagnifier() {
   await page.evaluate(() => {
     window.__meadowlight.setMagnifierEntryForTest(null);
   });
+
+  // #88 (R3): claim rules for MOVING solitary foragers — the #85 standard
+  // inherited: ownership-first, stability-read (250ms), on-creature
+  // containment. Own fixture so the earlier checks' fixture is untouched:
+  // hive + hotel + lavender row, summer midday pinned (#82), glass armed.
+  {
+    await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.clear();
+      w.placeStructure('hive', 0, 0);
+      w.placeStructure('hotel', -3, 0);
+      for (let i = 0; i < 6; i++) w.plant('lavender', -6 + i * 1.2, 2);
+      w.setSeason('summer');
+      w.setSeasonProgressForTest(0.5);
+      w.setDayPhase(0.5); // midday pinned (#82)
+      w.timeSetPaused(false);
+      w.timeSetSpeed(1);
+      w.setMagnifierOnForTest(true);
+      await new Promise((r) => setTimeout(r, 8000)); // solitaries out foraging (#88)
+    });
+
+    // (a) ownership-first with a foraging solitary near a bloom: hover the
+    // flower pixel (wiggle off/on — pointer-out releases, pointer-in
+    // re-claims through the REAL mesh path), hold 2s. The STABLE entry must
+    // stay kind 'flower': a moving solitary must NOT steal the mesh-owned hover.
+    const cluster = await page.evaluate(() => {
+      const w = window.__meadowlight;
+      const sightings = w.wildlifeSightings();
+      const solo = sightings.find((s) => s.kind === 'solitarybee');
+      if (!solo) return { ok: false, reason: 'no live solitarybee', total: sightings.length };
+      let best = null;
+      let bestD = Infinity;
+      for (const it of w.items()) {
+        const d = Math.hypot(it.position[0] - solo.x, it.position[2] - solo.z);
+        if (d < bestD) { bestD = d; best = it; }
+      }
+      if (!best) return { ok: false, reason: 'no flowers' };
+      const cam = w.__three?.camera;
+      if (!cam) return { ok: false, reason: 'no camera' };
+      const p = best.position;
+      const proj = cam.projectionMatrix.elements;
+      const view = cam.matrixWorldInverse.elements;
+      const mul = (a, v3) => ({
+        x: a[0] * v3.x + a[4] * v3.y + a[8] * v3.z + a[12],
+        y: a[1] * v3.x + a[5] * v3.y + a[9] * v3.z + a[13],
+        z: a[2] * v3.x + a[6] * v3.y + a[10] * v3.z + a[14],
+        w: a[3] * v3.x + a[7] * v3.y + a[11] * v3.z + a[15],
+      });
+      const eye = mul(view, { x: p[0], y: p[1] + 0.5, z: p[2], w: 1 });
+      const clip = mul(proj, eye);
+      const ndc = { x: clip.x / clip.w, y: clip.y / clip.w };
+      return {
+        ok: true,
+        soloDist: +bestD.toFixed(2),
+        screen: { x: ((ndc.x + 1) / 2) * window.innerWidth, y: ((-ndc.y + 1) / 2) * window.innerHeight },
+      };
+    });
+    if (cluster.ok) {
+      await page.mouse.move(cluster.screen.x - 60, cluster.screen.y - 60);
+      await page.waitForTimeout(400);
+      await page.mouse.move(cluster.screen.x, cluster.screen.y);
+      await page.waitForTimeout(2000); // hold past resolver frames + the 250ms stability standard
+    }
+    const clusterStable = await readStableEntry();
+    rec.record(
+      'magnifier.solitary-near-flower-keeps-mesh-ownership',
+      cluster.ok && clusterStable.stable?.kind === 'flower',
+      !cluster.ok
+        ? 'setup failed: ' + cluster.reason
+        : 'solitary ' + cluster.soloDist + 'u from bloom — instant: ' + JSON.stringify(clusterStable.instant) +
+          ' — stable: ' + JSON.stringify(clusterStable.stable) + ' — side: ' + clusterStable.side,
+    );
+
+    // (b) attribution of the foraging solitary ITSELF: pin the clock for the
+    // targeting walk (deterministic ecology — same convention as the hivebee
+    // walk), walk pixels where a solitarybee is the nearest creature, drive
+    // the real claim path per candidate; then unpause, hold past the 250ms
+    // stability standard, and assert the stable entry is the solitarybee AND
+    // the journal recorded it (the card's stability-debounced write, #85 r2).
+    const soloHover = await page.evaluate(() => {
+      const w = window.__meadowlight;
+      const cam = w.__three?.camera;
+      if (!cam) return { ok: false, reason: 'no camera' };
+      const sightings = w.wildlifeSightings();
+      const solos = sightings.filter((s) => s.kind === 'solitarybee');
+      if (solos.length === 0) return { ok: false, reason: 'no live solitarybee', total: sightings.length };
+      w.timeSetPaused(true); // pin the creatures for the walk
+      const proj = cam.projectionMatrix.elements;
+      const view = cam.matrixWorldInverse.elements;
+      const mul = (a, v3) => ({
+        x: a[0] * v3.x + a[4] * v3.y + a[8] * v3.z + a[12],
+        y: a[1] * v3.x + a[5] * v3.y + a[9] * v3.z + a[13],
+        z: a[2] * v3.x + a[6] * v3.y + a[10] * v3.z + a[14],
+        w: a[3] * v3.x + a[7] * v3.y + a[11] * v3.z + a[15],
+      });
+      const project = (p3) => {
+        const clip = mul(proj, mul(view, { x: p3.x, y: p3.y, z: p3.z, w: 1 }));
+        return { x: ((clip.x / clip.w + 1) / 2) * window.innerWidth, y: ((-clip.y / clip.w + 1) / 2) * window.innerHeight, depth: clip.w };
+      };
+      const candidates = [];
+      for (const solo of solos) {
+        const base = project(solo);
+        const others = sightings.filter((s) => s !== solo);
+        for (let step = 0; step < 8; step++) {
+          const ang = (step / 8) * Math.PI * 2;
+          const cand = { x: base.x + Math.cos(ang) * step * 6, y: base.y + Math.sin(ang) * step * 6 };
+          const soloD = Math.hypot(cand.x - base.x, cand.y - base.y);
+          const otherD = Math.min(...others.map((o) => { const op = project(o); return Math.hypot(cand.x - op.x, cand.y - op.y); }), Infinity);
+          if (soloD < 12 && otherD > soloD && cand.x >= 0 && cand.x < window.innerWidth && cand.y >= 0 && cand.y < window.innerHeight) {
+            candidates.push({ x: cand.x, y: cand.y, depth: base.depth });
+          }
+        }
+      }
+      candidates.sort((a, b) => a.depth - b.depth);
+      if (candidates.length === 0) return { ok: false, reason: 'no pixel where a solitarybee wins', total: sightings.length };
+      return { ok: true, candidates: candidates.slice(0, 8) };
+    });
+    let soloTarget = null;
+    if (soloHover.ok) {
+      const vp = page.viewportSize() ?? { width: 1280, height: 720 };
+      for (const cand of soloHover.candidates) {
+        const ax = Math.min(Math.max(cand.x - 80, 4), vp.width - 4);
+        const ay = Math.min(Math.max(cand.y - 80, 4), vp.height - 4);
+        await page.mouse.move(ax, ay);
+        await page.waitForTimeout(300);
+        await page.mouse.move(cand.x, cand.y);
+        await page.waitForTimeout(300);
+        const entry = await page.evaluate(() => window.__meadowlight.magnifierReadback().entry);
+        if (entry && entry.kind === 'visitor' && entry.visitorId === 'solitarybee') {
+          soloTarget = { x: cand.x, y: cand.y, entry };
+          break;
+        }
+      }
+    }
+    // resume the clock, hold the resolved position past the stability standard
+    await page.evaluate(() => window.__meadowlight.timeSetPaused(false));
+    if (soloTarget) {
+      await page.mouse.move(soloTarget.x, soloTarget.y);
+      await page.waitForTimeout(1500); // > 250ms stability + card debounce
+    }
+    const soloStable = await readStableEntry();
+    const soloCard = await page.evaluate(() => {
+      const el = document.querySelector('[data-magnifier-card="true"]');
+      const r = el ? el.getBoundingClientRect() : null;
+      return {
+        visible: !!r && r.width > 0 && r.height > 0 && r.top <= window.innerHeight && r.bottom >= 0,
+        entry: window.__meadowlight.magnifierReadback().entry,
+      };
+    });
+    const journal = await page.evaluate(() => window.__meadowlight.journalReadback());
+    const journalHasSolo = journal.some((r) => r.kind === 'visitor' && r.subject === 'solitarybee');
+    const claimedSolo = soloCard.entry?.kind === 'visitor' ? soloCard.entry.visitorId : null;
+    rec.record(
+      'magnifier.foraging-solitary-attributed-and-journaled',
+      soloHover.ok && !!soloTarget && soloStable.stable?.kind === 'visitor' && claimedSolo === 'solitarybee' && soloCard.visible && journalHasSolo,
+      !soloHover.ok
+        ? 'setup failed: ' + soloHover.reason
+        : 'targeted solitarybee pixel ' + JSON.stringify(soloTarget ? { x: Math.round(soloTarget.x), y: Math.round(soloTarget.y) } : null) +
+          ' — stable: ' + JSON.stringify(soloStable.stable) + ' — card visible: ' + soloCard.visible +
+          ' — journal has solitarybee: ' + journalHasSolo,
+    );
+    // restore glass + clock for the closing error scan
+    await page.evaluate(() => {
+      const w = window.__meadowlight;
+      w.setMagnifierEntryForTest(null);
+      w.setMagnifierOnForTest(false);
+      w.timeSetPaused(false);
+      w.timeSetSpeed(1);
+    });
+  }
+
   const re = realErrors(errors);
   rec.record('magnifier.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
   await page.close();
