@@ -65,6 +65,35 @@ The session-3 DoD above is met and extended. Final state at the PR #57 head:
   evidence (the #59–#86 sweep plus #67/#76/#78 close-out fixes); the v4
   post-mortem with 13 lessons is posted on PR #57 under `## v4`.
 
+### Session 11 DoD (v5 — the bee year, issue #91, kickoff)
+
+The session-3 DoD and the session-10 final state above stand. Session 11
+(branch `vibe/session11-beeyear`, master issue #91) is done when all of
+the following hold:
+
+1. Kickoff (R1): the suite re-verified at 202 PASS / 0 FAIL on the user's
+   machine at the merged head (the first post-merge run doubles as the live
+   Pages deploy check — eyeball the horizon once), this DoD and the
+   check-writing canon below recorded in AGENTS.md, kickoff commit landed.
+2. #87 the population curve (R2, propose-first — screenshots before any
+   commit): winter keeps a lively visible cluster (never die-off), spring
+   ramps as busy as summer; one shared population source read by the swarm
+   and assertable by the gate (winter floor, spring slope, summer plateau);
+   EDUCATION.md fact first if missing.
+3. #88 solitary foraging (R3): solitary bees leave the hotel and forage all
+   season; journal/magnifier claims follow the #85 ownership-first standard;
+   EDUCATION.md foraging/nesting fact first.
+4. #89 shorter seed codes (R4): deterministic + reversible + migration for
+   existing codes (saved worlds keep loading); the postcard stamp reads
+   pleasant (20 chars, not 212); fitSeedCode stays as the safety net.
+5. #77 volunteer brake 40% (R5): maxVolunteerFraction 0.15 → 0.40, then the
+   #87/#88 gates re-verified against the new volunteer rates.
+6. Standing rules carry over unchanged: the committed runner on the user's
+   machine is the verdict; propose-first for world look changes; one issue
+   per cold start; a FAIL names its side (WORLD vs DETECTOR); fresh server
+   before eyeball verdicts; stability-read probes; no new scope without an
+   issue.
+
 ## Workflow rules
 
 - After completing each numbered session goal in ROADMAP.md, commit with a
@@ -194,6 +223,13 @@ session 9 round 2 onward; commits and issues keep their existing
 conventions. The purpose is review forensics: when reading a session thread
 later, the reader can tell implementation reports from verdict relays,
 diagnoses, and process directives at a glance.
+
+### Check-writing canon (session 11, issue #91)
+
+- Toy fixtures pass vacuously — a check green on a 1-plant fixture says nothing about the real 24-plant payload (#67).
+- A gate must measure the artifact the user receives — the exported JPG canvas, not the preview compose (#67).
+- Green-without-a-named-reason is not closed — name the cause or harden the check (#84).
+- Restart-before-verdict — stale HMR reads as a FAIL byte-identical to the pre-fix run (#65).
 
 ## Session 1 decisions (context for later sessions)
 - Rendering: one InstancedMesh per species-part; instance colors are written
