@@ -94,7 +94,7 @@ const { colonyIntensityTarget, LIFECYCLE_LINES, LIFECYCLE_TUNING } = require(OUT
 const { HABITAT_TUNING, cornerFoldCells, cornerKey, pondSegments, fringeCells, pondClusters } = require(OUT + '/data/habitatScenery.js');
 const { NIGHT_SKY_TUNING, CLOUDS_OPACITY_BEFORE } = require(OUT + '/data/nightSky.js');
 const { hash2 } = require(OUT + '/engine/seededHash.js');
-const { encodeSeedCode, decodeSeedCode, SEED_CODE_PREFIX } = require(OUT + '/engine/seedCode.js');
+const { encodeSeedCode, encodeSeedCodeLegacyML1, decodeSeedCode, SEED_CODE_PREFIX, LEGACY_SEED_CODE_PREFIX } = require(OUT + '/engine/seedCode.js');
 const { starVisibility } = require(OUT + '/engine/nightSky.js');
 const { treePlacements, pondExclusionRadius } = require(OUT + '/engine/treeLayout.js');
 const { advanceColony, colonyIntensity: colonyIntensityExport, colonyReadback: colonyReadbackExport, setColonyIntensityForTest } = require(OUT + '/engine/lifecycle.js');
@@ -2048,15 +2048,18 @@ test('P3 seed code: round-trip — same seed -> same layout, across "machines" (
   ];
   const code = encodeSeedCode(424242, items);
   assert.ok(code.startsWith(SEED_CODE_PREFIX + '.'), 'versioned prefix: ' + code.slice(0, 6));
-  assert.ok(/^ML1\.[0-9a-z.]+$/.test(code), 'URL-safe charset only: ' + code);
+  assert.ok(/^ML2\.[0-9a-z.]+$/.test(code), 'URL-safe charset only: ' + code);
   const dec = decodeSeedCode(code);
   assert.ok(dec, 'decodes');
   assert.strictEqual(dec.worldSeed, 424242, 'the code carries the world seed');
   assert.strictEqual(dec.items.length, 4, 'all items round-trip');
+  // ML2 records are position-sorted — compare in the decoded (sorted) order
+  const byPos = (arr) => [...arr].sort((a, b) => a.position[0] - b.position[0] || a.position[2] - b.position[2]);
+  const origSorted = byPos(items);
   for (let i = 0; i < 4; i++) {
-    assert.strictEqual(dec.items[i].plantId, items[i].plantId, 'species preserved');
-    assert.ok(Math.abs(dec.items[i].position[0] - items[i].position[0]) < 0.011, 'x within quantization');
-    assert.ok(Math.abs(dec.items[i].position[2] - items[i].position[2]) < 0.011, 'z within quantization');
+    assert.strictEqual(dec.items[i].plantId, origSorted[i].plantId, 'species preserved');
+    assert.ok(Math.abs(dec.items[i].position[0] - origSorted[i].position[0]) < 0.026, 'x within 0.05u quantization');
+    assert.ok(Math.abs(dec.items[i].position[2] - origSorted[i].position[2]) < 0.026, 'z within 0.05u quantization');
     assert.ok(isPlantableCell(dec.items[i].position[0], dec.items[i].position[2]), 'decoded cell is plantable');
   }
   // determinism: same inputs -> byte-identical code, regardless of order
@@ -2068,16 +2071,84 @@ test('P3 seed code: round-trip — same seed -> same layout, across "machines" (
 
 test('P3 seed code: unknown/corrupt codes are rejected (fresh world + backup path)', () => {
   assert.strictEqual(decodeSeedCode(''), null);
-  assert.strictEqual(decodeSeedCode('ML2.abc'), null, 'unknown version');
-  assert.strictEqual(decodeSeedCode('ML1.'), null, 'empty payload');
-  assert.strictEqual(decodeSeedCode('ML1.zz.00'), null, 'bad seed field');
-  assert.strictEqual(decodeSeedCode('ML1.abc.zzzz'), null, 'garbage records');
+  assert.strictEqual(decodeSeedCode('ML9.abc'), null, 'unknown version');
+  assert.strictEqual(decodeSeedCode('ML2.abc'), null, 'ML2 with no record separator');
+  assert.strictEqual(decodeSeedCode('ML2.7.0'), null, 'ML2 record not 5 chars');
+  assert.strictEqual(decodeSeedCode('ML1.'), null, 'legacy empty payload');
+  assert.strictEqual(decodeSeedCode('ML1.zz.00'), null, 'legacy bad seed field');
+  assert.strictEqual(decodeSeedCode('ML1.abc.zzzz'), null, 'legacy garbage records');
   const good = encodeSeedCode(7, [mkSeedItem('p0', 'lavender', 2, 2)]);
   assert.strictEqual(decodeSeedCode(good + 'x'), null, 'trailing garbage rejected');
   assert.strictEqual(decodeSeedCode(good.slice(0, -2)), null, 'truncated record rejected');
   // out-of-range position (water) -> whole code rejected (exact layout or nothing)
   const waterCode = encodeSeedCode(7, [mkSeedItem('p0', 'lavender', 36, -14)]); // pond center
   assert.strictEqual(decodeSeedCode(waterCode), null, 'a code landing in water is rejected wholesale');
+});
+
+test('P3 #89: ML2 is short (5 chars/plant) and ML1 legacy codes migrate (decode-old, write-new)', () => {
+  // a 24-plant fixture — the payload class that produced 212-char ML1 codes
+  const ids = ['lavender', 'poppy', 'cosmos', 'clover', 'sunflower', 'thyme', 'crocus', 'borage', 'aster', 'forget-me-not'];
+  const big = [];
+  for (let i = 0; i < 24; i++) big.push(mkSeedItem('p' + i, ids[i % ids.length], -9 + (i % 6) * 3.2, -9 + Math.floor(i / 6) * 3.2));
+  const legacy = encodeSeedCodeLegacyML1(424242, big);
+  const code = encodeSeedCode(424242, big);
+  assert.ok(legacy.startsWith(LEGACY_SEED_CODE_PREFIX + '.'), 'legacy encoder emits ML1');
+  assert.ok(legacy.length > 200, 'the legacy 24-plant code is the long class: ' + legacy.length);
+  assert.ok(code.startsWith(SEED_CODE_PREFIX + '.'), 'new encoder emits ML2');
+  // 5 chars per plant + header (prefix 4 + seed + dot): well under the legacy length
+  const records = code.slice(code.indexOf('.', SEED_CODE_PREFIX.length + 1) + 1);
+  assert.strictEqual(records.length % 5, 0, 'fixed 5-char records');
+  assert.ok(code.length < legacy.length * 0.65, 'ML2 ' + code.length + ' chars vs legacy ' + legacy.length + ' (>=35% shorter)');
+  // legacy decodes EXACTLY (centi precision preserved — old codes load untouched)
+  const decLegacy = decodeSeedCode(legacy);
+  assert.ok(decLegacy && decLegacy.items.length === 24, 'legacy code decodes');
+  const byPos = (arr) => [...arr].sort((a, b) => a.position[0] - b.position[0] || a.position[2] - b.position[2]);
+  const origSorted = byPos(big);
+  const legSorted = byPos(decLegacy.items);
+  for (let i = 0; i < 24; i++) {
+    assert.ok(Math.abs(legSorted[i].position[0] - origSorted[i].position[0]) < 0.011, 'legacy x exact (centi)');
+    assert.ok(Math.abs(legSorted[i].position[2] - origSorted[i].position[2]) < 0.011, 'legacy z exact (centi)');
+    assert.strictEqual(legSorted[i].plantId, origSorted[i].plantId, 'legacy species exact');
+  }
+  // re-export writes the new format; the ML2 world matches within the 0.05u quant
+  const decNew = decodeSeedCode(code);
+  assert.ok(decNew && decNew.items.length === 24 && decNew.worldSeed === 424242, 'ML2 decodes');
+  const newSorted = byPos(decNew.items);
+  for (let i = 0; i < 24; i++) {
+    assert.strictEqual(newSorted[i].plantId, legSorted[i].plantId, 'same species after migration');
+    assert.ok(Math.abs(newSorted[i].position[0] - legSorted[i].position[0]) <= 0.026, 'migrated x within quant');
+  }
+  // idempotent: encode(decode(ML2)) === ML2
+  assert.strictEqual(encodeSeedCode(decNew.worldSeed, decNew.items), code, 'ML2 round-trip is byte-stable');
+});
+
+test('P3 #89: uniqueness across the fixture payload (300 seeded random meadows)', () => {
+  // deterministic LCG — no Math.random in tests
+  let s = 0x2f6e2b1;
+  const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const ids = ['lavender', 'poppy', 'cosmos', 'clover', 'sunflower', 'thyme', 'crocus', 'borage', 'aster', 'forget-me-not'];
+  const codes = new Set();
+  let generated = 0;
+  for (let m = 0; m < 300; m++) {
+    const n = 1 + Math.floor(rnd() * 20);
+    const items = [];
+    for (let i = 0; i < n; i++) {
+      const x = Math.round((rnd() * 40 - 20) * 20) / 20;
+      const z = Math.round((rnd() * 40 - 20) * 20) / 20;
+      if (!isPlantableCell(x, z)) continue;
+      items.push(mkSeedItem('p' + i, ids[Math.floor(rnd() * ids.length)], x, z));
+    }
+    if (items.length === 0) continue; // all-water draw — nothing to encode
+    generated++;
+    const code = encodeSeedCode(1000 + m, items);
+    codes.add(code);
+    const dec = decodeSeedCode(code);
+    assert.ok(dec, 'decodes');
+    assert.strictEqual(dec.items.length, items.length, 'count round-trips');
+    assert.strictEqual(encodeSeedCode(dec.worldSeed, dec.items), code, 'idempotent re-encode');
+  }
+  assert.strictEqual(codes.size, generated, generated + ' distinct meadows -> ' + generated + ' distinct codes (no collisions)');
+  assert.ok(generated >= 290, 'the fixture actually drew meadows: ' + generated);
 });
 
 

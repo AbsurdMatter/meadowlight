@@ -88,6 +88,41 @@ async function checkSeeds() {
     );
   }
 
+  // 2b. #89 migration: a LEGACY ML1 code (the long 212-char class) still loads
+  //     through the front door, and the world re-exports in the NEW ML2 format
+  //     (read-old on load, write-new on encode)
+  {
+    const r = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.resetWorld();
+      const ids = ['lavender', 'poppy', 'cosmos', 'clover', 'sunflower', 'thyme', 'crocus', 'borage'];
+      for (let i = 0; i < 24; i++) w.plant(ids[i % ids.length], -9 + (i % 6) * 3.2, -9 + Math.floor(i / 6) * 3.2);
+      w.save();
+      const legacy = w.seedCodeEncodeLegacyForTest(); // ML1, 8 chars/plant — the old shared-code class
+      const legacyLen = legacy.length;
+      const okLegacy = w.startFromSeedCode(legacy); // decode-old path
+      const itemsAfterLegacy = w.items().length;
+      const seedAfterLegacy = w.worldSeedReadback();
+      const codeNow = w.seedCodeEncode(); // write-new path
+      const okNew = w.startFromSeedCode(codeNow); // ML2 loads too
+      const codeAgain = w.seedCodeEncode();
+      const itemsAfterNew = w.items().length;
+      return { legacyLen, okLegacy, itemsAfterLegacy, seedAfterLegacy, codeNow, codeNowPrefix: codeNow.slice(0, 4), codeNowLen: codeNow.length, okNew, codeAgain, itemsAfterNew };
+    });
+    rec.record(
+      'seeds.legacy-ML1-code-loads-and-rexports-ML2',
+      r.okLegacy === true &&
+        r.itemsAfterLegacy === 24 &&
+        r.legacyLen > 200 && // the long-code class the issue is about
+        r.codeNowPrefix === 'ML2.' &&
+        r.codeNowLen < r.legacyLen * 0.65 &&
+        r.okNew === true &&
+        r.codeAgain === r.codeNow && // idempotent past 10 items (position-sorted records)
+        r.itemsAfterNew === 24,
+      JSON.stringify(r) + ' codeNow=' + r.codeNow.slice(0, 40) + '… codeAgain=' + r.codeAgain.slice(0, 40) + '…',
+    );
+  }
+
   // 3. the seed input lives ONLY inside the confirm modal (never a one-click path)
   {
     const r = await page.evaluate(async () => {
@@ -407,6 +442,25 @@ async function checkPostcard() {
       'postcard.seed-ink-only-in-stamp@' + loc,
       rr.ok && !!rr.stamp && rr.stamp.inkPx >= 40 && rr.stamp.insideFrame && rr.stamp.outsideStampDiffPx <= 40,
       'locale=' + loc + ' stamp=' + JSON.stringify(rr.stamp) + ' seedCodeLen=' + rr.seedCode.length,
+    );
+  }
+  // #89: with the ML2 format a TYPICAL meadow (8 plants, ~50-char code) renders
+  // the stamp as ONE line in its corner box — fitSeedCode wrap stays as the
+  // safety net for the big payloads the checks above exercise
+  {
+    const rr = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.setLocaleForTest('en');
+      w.resetWorld();
+      const ids = ['lavender', 'cosmos', 'poppy', 'clover', 'thyme', 'crocus'];
+      for (let i = 0; i < 8; i++) w.plant(ids[i % ids.length], -6 + (i % 4) * 4, -3 + Math.floor(i / 4) * 6);
+      await new Promise((res) => setTimeout(res, 1200));
+      return await w.postcardComposeReadback();
+    });
+    rec.record(
+      'postcard.seed-stamp-single-line-typical-meadow@en',
+      rr.ok && !!rr.stamp && rr.stamp.inkPx >= 40 && rr.stamp.insideFrame && rr.stamp.codeLines === 1 && rr.seedCode.startsWith('ML2.'),
+      'stamp=' + JSON.stringify(rr.stamp) + ' seedCodeLen=' + rr.seedCode.length + ' prefix=' + rr.seedCode.slice(0, 4),
     );
   }
   await page.evaluate(() => window.__meadowlight.setLocaleForTest('en'));

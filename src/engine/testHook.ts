@@ -10,7 +10,7 @@ import { beeDebug } from '../render/BeeSwarm';
 import { wildDebug } from '../render/WildPollinators';
 import { fireflyDebug } from '../render/Fireflies';
 import { setDayPhase, isDaylight } from './dayCycle';
-import { encodeSeedCode } from './seedCode';
+import { encodeSeedCode, encodeSeedCodeLegacyML1 } from './seedCode';
 import { useLocale } from './locale';
 import { precipitationVisual } from './weather';
 import { precipReadback, tickPrecipScheduleForTest } from './rainSchedule';
@@ -197,6 +197,10 @@ declare global {
       reloadFromSave: () => void;
       /** P3: seed codes — encode the live meadow / start from a code */
       seedCodeEncode: () => string;
+      /** #89 migration gate: encode the live meadow in the LEGACY ML1 format
+       *  (test-only — the app always writes ML2) so the gate can start from a
+       *  real old shared code and assert it re-exports as ML2 */
+      seedCodeEncodeLegacyForTest: () => string;
     /** #60: run the REAL save path and report the observable (blob present + size), not the handler */
     postcardSaveForTest: () => Promise<{ ok: boolean; bytes: number; error: string | null }>;
     /** #67: run the REAL compose path and return the caption-band readback — the
@@ -509,6 +513,10 @@ export function installTestHook() {
     seedCodeEncode: () => {
       const s = usePlacementStore.getState();
       return encodeSeedCode(s.worldSeed, s.items);
+    },
+    seedCodeEncodeLegacyForTest: () => {
+      const s = usePlacementStore.getState();
+      return encodeSeedCodeLegacyML1(s.worldSeed, s.items);
     },
     postcardComposeReadback: async () => {
       try {
