@@ -105,28 +105,30 @@ export function computeCaptionLayout(
     statBaselines.push(statsTop + i * lineStride + metrics.lineAscent);
   }
   const lowestInk = statBaselines[statBaselines.length - 1] + metrics.lineDescent;
-  const captionH = lowestInk + bottomPad;
-  const bottomPadding = captionH - lowestInk;
+  const baseCaptionH = lowestInk + bottomPad;
 
   let seedStamp = null;
+  let captionH = baseCaptionH;
   if (options?.stamp) {
     const st = options.stamp;
     const height = st.padTop + st.labelAscent + st.labelDescent + st.gap + st.codeAscent + st.codeDescent + st.padBottom;
-    const top = topPad; // stamp top aligns with the title's top pad
+    // #67 close-out: the stamp is a CONTAINED BOTTOM-RIGHT corner section of
+    // the caption band (the postmark reading) — bottom-aligned above the
+    // band's bottom pad, right-aligned with a real padX margin from the
+    // frame. Never the full-width bottom edge, never flush to the border.
+    const top = Math.max(topPad, baseCaptionH - bottomPad - height);
+    // the band extends if the stamp is taller than it — the stamp never clips
+    captionH = Math.max(baseCaptionH, top + height + bottomPad);
     seedStamp = {
-      right: st.cardWidth - st.border - st.padX * 0, // right edge of the stamp box; drawn right-aligned at cardWidth - border
+      right: st.cardWidth - st.border - st.padX, // stamp box right edge, padX inside the frame
       top,
       width: st.stampWidth,
       height,
       labelBaseline: top + st.padTop + st.labelAscent,
       codeBaseline: top + st.padTop + st.labelAscent + st.labelDescent + st.gap + st.codeAscent,
     };
-    // the stamp must fit inside the band vertically
-    if (top + height > captionH) {
-      // extend the band so the stamp never clips (measured, not assumed)
-      seedStamp = { ...seedStamp };
-    }
   }
+  const bottomPadding = captionH - lowestInk;
   return {
     captionH,
     titleBaseline,

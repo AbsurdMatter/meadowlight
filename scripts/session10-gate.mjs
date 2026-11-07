@@ -384,6 +384,15 @@ async function checkPostcard() {
       rr.ok && rr.seedCode === code && rr.seedLabel.length > 0,
       'locale=' + loc + ' seedLabel=' + JSON.stringify(rr.seedLabel) + ' seedCode==shareCode: ' + (rr.seedCode === code),
     );
+    // #67 close-out: draw-then-measure — the composed canvas actually carries
+    // ink inside the stamp box (the seed code is drawn, not just returned by
+    // the readback) and the stamp box is a contained corner section fully
+    // inside the card frame with margin
+    rec.record(
+      'postcard.seed-stamp-drawn-contained@' + loc,
+      rr.ok && !!rr.stamp && rr.stamp.inkPx >= 40 && rr.stamp.insideFrame,
+      'locale=' + loc + ' stamp=' + JSON.stringify(rr.stamp),
+    );
   }
   await page.evaluate(() => window.__meadowlight.setLocaleForTest('en'));
   const re = realErrors(errors);

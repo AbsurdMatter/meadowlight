@@ -23,6 +23,7 @@ import { usePlacementStore } from '../render/placementStore';
 import {
   computeCaptionLayout,
   fallbackMetrics,
+  type CaptionLayout,
   type CaptionMetrics,
 } from './postcardLayout';
 
@@ -102,6 +103,10 @@ export async function composePostcard(
   capturePng: string,
   stats: PostcardStat[],
   seed?: PostcardSeed,
+  /** #67 close-out: optional out-param receiving the drawn seed-stamp box in
+   *  CARD coordinates (so the gate can draw-then-measure the composed canvas:
+   *  ink inside the box + box fully inside the frame with margin). */
+  layoutOut?: { seedStamp: ({ bandTop: number; canvasW: number; canvasH: number } & NonNullable<CaptionLayout['seedStamp']>) | null },
 ): Promise<string | null> {
   const img = await loadImage(capturePng);
   if (!img) return null;
@@ -119,10 +124,19 @@ export async function composePostcard(
   // stamp box is computed from real metrics, never assumed
   let stampOpts: Parameters<typeof computeCaptionLayout>[2] extends infer O ? O : never;
   if (seed) {
+    // #67 close-out: measureText().width reports 0 on platforms with no text
+    // metrics (headless shells) — a bare +20 pad then drew a 20px sliver box
+    // and the code overflowed past the card's right edge (unreadable). Fall
+    // back to a per-character estimate when the platform reports none:
+    // measured when real, estimated when zero — never assumed fixed.
+    const measureW = (text: string, size: number) => {
+      const w = ctx.measureText(text).width;
+      return w > 0 ? w : text.length * size * 0.7;
+    };
     ctx.font = `700 ${STAMP_LABEL_SIZE}px ${FONT_FAMILY}`;
-    const labelW = ctx.measureText(seed.label.toUpperCase()).width;
+    const labelW = measureW(seed.label.toUpperCase(), STAMP_LABEL_SIZE);
     ctx.font = `700 ${STAMP_CODE_SIZE}px ${TITLE_FAMILY}`;
-    const codeW = ctx.measureText(seed.code).width;
+    const codeW = measureW(seed.code, STAMP_CODE_SIZE);
     const mLabel = ctx.measureText(seed.label.toUpperCase());
     const mCode = ctx.measureText(seed.code);
     const fb = fallbackMetrics(STAMP_LABEL_SIZE, STAMP_CODE_SIZE);
@@ -191,7 +205,9 @@ export async function composePostcard(
   // HEADING role (Jersey 25), both measured and placed by the layout
   if (seed && layout.seedStamp) {
     const st = layout.seedStamp;
-    const stampX = canvas.width - border - st.width;
+    // right-aligned against the layout's stamp right edge (padX margin inside
+    // the frame) — the box fully contains the code with margin
+    const stampX = st.right - st.width;
     const stampY = bandTop + st.top;
     ctx.save();
     ctx.translate(stampX + st.width / 2, stampY + st.height / 2);
@@ -215,6 +231,11 @@ export async function composePostcard(
     ctx.restore();
   }
 
+  if (layoutOut) {
+    layoutOut.seedStamp = layout.seedStamp
+      ? { ...layout.seedStamp, bandTop, canvasW: canvas.width, canvasH: canvas.height }
+      : null;
+  }
   return canvas.toDataURL('image/png');
 }
 

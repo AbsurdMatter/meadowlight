@@ -169,8 +169,24 @@ test('#67: caption layout computes the seed stamp box from measured metrics, ins
   assert.ok(l.seedStamp.top >= 0 && l.seedStamp.top + l.seedStamp.height <= l.captionH + 0.5, 'stamp vertically inside the caption band');
   assert.ok(l.seedStamp.width > 0 && l.seedStamp.right > 0, 'stamp box has real size');
   assert.ok(l.seedStamp.codeBaseline > l.seedStamp.labelBaseline, 'code sits below the label');
+  // #67 close-out: contained BOTTOM-RIGHT corner section, padX margin from
+  // the frame — bottom-aligned above the band's bottom pad, right edge at
+  // cardWidth - border - padX, never flush to the border, never full-width
+  assert.strictEqual(l.seedStamp.right, 1248 - 24 - 10, 'stamp right edge = cardWidth - border - padX (real margin)');
+  assert.ok(
+    Math.abs(l.seedStamp.top + l.seedStamp.height - (l.captionH - 26)) <= 1,
+    'stamp is bottom-aligned in the caption band (bottom pad 26), got top=' + l.seedStamp.top + ' h=' + l.seedStamp.height + ' captionH=' + l.captionH,
+  );
   const none = computeCaptionLayout(m, 6);
   assert.strictEqual(none.seedStamp, null, 'no stamp without stamp metrics');
+  // a stamp taller than the band extends the band instead of clipping
+  const tallStamp = computeCaptionLayout(m, 6, {
+    stamp: { cardWidth: 1248, border: 24, padX: 10, padTop: 8, padBottom: 8, labelAscent: 60, labelDescent: 20, gap: 4, codeAscent: 60, codeDescent: 20, stampWidth: 220 },
+  });
+  assert.ok(
+    tallStamp.seedStamp.top + tallStamp.seedStamp.height <= tallStamp.captionH + 0.5,
+    'tall stamp extends the caption band, never clips (captionH=' + tallStamp.captionH + ')',
+  );
 });
 
 test('#67: i18n carries the facts-stat + seed-stamp copy in BOTH locales', () => {

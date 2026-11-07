@@ -210,6 +210,13 @@ declare global {
       seedCode: string;
       seedLabel: string;
       seenFacts: number;
+      /** #67 close-out: draw-then-measure of the seed stamp on the composed
+       *  canvas — box in card coords, ink pixels inside it, frame containment */
+      stamp: {
+        box: { left: number; top: number; right: number; bottom: number };
+        inkPx: number;
+        insideFrame: boolean;
+      } | null;
       error: string | null;
     }>;
       startFromSeedCode: (code: string) => boolean;
@@ -502,15 +509,50 @@ export function installTestHook() {
     postcardComposeReadback: async () => {
       try {
         const capture = capturePostcardPng();
-        if (!capture) return { ok: false, bytes: 0, stats: [], seedCode: '', seedLabel: '', seenFacts: 0, error: 'no capture' };
+        if (!capture) return { ok: false, bytes: 0, stats: [], seedCode: '', seedLabel: '', seenFacts: 0, stamp: null, error: 'no capture' };
         const { composePostcard, postcardSeedText } = await import('./postcardCompose');
         const { postcardStatText } = await import('../ui/PostcardStats');
         const stats = postcardStatText().map((l) => ({ label: l.label, value: l.value }));
         const seed = postcardSeedText();
-        const composed = await composePostcard(capture, stats, seed);
+        // #67 close-out: draw-then-measure — the layout out-param gives the
+        // stamp box in card coordinates; decode the composed PNG and scan
+        // that box for ink vs the parchment background
+        const layoutOut: { seedStamp: any } = { seedStamp: null };
+        const composed = await composePostcard(capture, stats, seed, layoutOut);
         const dataUrl = composed ?? capture;
         const res = await fetch(dataUrl);
         const blob = await res.blob();
+        let stamp: {
+          box: { left: number; top: number; right: number; bottom: number };
+          inkPx: number;
+          insideFrame: boolean;
+        } | null = null;
+        const st = layoutOut.seedStamp;
+        if (st) {
+          const img = new Image();
+          await new Promise<void>((res2, rej) => { img.onload = () => res2(); img.onerror = () => rej(new Error('decode')); img.src = dataUrl; });
+          const c = document.createElement('canvas');
+          c.width = img.width; c.height = img.height;
+          const cx = c.getContext('2d')!;
+          cx.drawImage(img, 0, 0);
+          const border = 24;
+          const left = Math.round(st.right - st.width);
+          const top = Math.round(st.bandTop + st.top);
+          const w = Math.ceil(st.width), h = Math.ceil(st.height);
+          const d = cx.getImageData(left, top, w, h).data;
+          let ink = 0;
+          for (let i = 0; i < d.length; i += 4) {
+            // parchment panelSolid is #fff6e0 — ink = anything clearly off it
+            if (Math.abs(d[i] - 255) + Math.abs(d[i + 1] - 246) + Math.abs(d[i + 2] - 224) > 90) ink++;
+          }
+          stamp = {
+            box: { left, top, right: left + w, bottom: top + h },
+            inkPx: ink,
+            insideFrame:
+              left >= border && top >= border &&
+              left + w <= c.width - border && top + h <= c.height - border,
+          };
+        }
         return {
           ok: blob.size > 1000 && blob.type.startsWith('image/'),
           bytes: blob.size,
@@ -518,10 +560,11 @@ export function installTestHook() {
           seedCode: seed.code,
           seedLabel: seed.label,
           seenFacts: usePlacementStore.getState().seenFacts.length,
+          stamp,
           error: null,
         };
       } catch (e) {
-        return { ok: false, bytes: 0, stats: [], seedCode: '', seedLabel: '', seenFacts: 0, error: String(e) };
+        return { ok: false, bytes: 0, stats: [], seedCode: '', seedLabel: '', seenFacts: 0, stamp: null, error: String(e) };
       }
     },
     startFromSeedCode: (code) => usePlacementStore.getState().startFromSeedCode(code),
