@@ -10,7 +10,24 @@ export const FOG = {
    * visible detail while only the far horizon melts into the sky.
    */
   near: 34,
-  far: 120,
+  /**
+   * #90 reopened: far 120 -> 160 so the distant-ridge band (cell centers
+   * r 90..100, depth ~67..125 from the resting camera r~28) sits INSIDE the
+   * live fog gradient instead of at/beyond its end. At far 120 the ridge
+   * was fogged to ~100% fog color and read as sky ("nothing past the rim");
+   * c5e4180's opt-out (fog={false} + baked 45% blend) made it visible but
+   * IMMUNE to fog — a constant standing in for a live condition. With far
+   * 160 the ridge takes real per-fragment scene fog (live palette fog
+   * color flows through, so the ridge fades when mist/night fog rolls in)
+   * while staying softer than the rim in front of it (rim depth ~60-90
+   * gets a much smaller fog factor). Audit of the shift: the sky texture
+   * and fog COLOR are untouched (golden-hour horizon unchanged); the #66
+   * sky-above invariant is geometry-based (unit sweep over the layout) and
+   * unaffected; nearer families get proportionally less haze than before,
+   * which the rim's look was re-tuned against in #36 — kept soft by far
+   * ending just past the ridge band, not deep into empty sky.
+   */
+  far: 160,
 };
 
 /**

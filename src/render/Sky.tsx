@@ -156,8 +156,14 @@ export function DistantRidge() {
     })();
     const mat = new THREE.Matrix4();
     const color = new THREE.Color();
-    const fogColor = new THREE.Color(FOG.color);
-    // the HILLS renderer's own palette + fog blend — terrain, not sky
+    // the HILLS renderer's own palette — terrain, not sky. #90 reopened: NO
+    // baked fog blend in the instance colors anymore. The material keeps
+    // scene fog ON (fog removed below) and FOG.far now ends past the ridge
+    // band, so three.js applies the LIVE per-fragment fog (palette fog color
+    // included) exactly as it does for the rim — the ridge is visible but
+    // hazed, softer than the terrain in front, and fades when fog rolls in.
+    // c5e4180's fog={false} + fixed ~45% blend made the family immune to
+    // live fog (a constant standing in for a live condition).
     const hillColors = HILLS.hillColors.map((c) => new THREE.Color(c));
     let i = 0;
     for (const box of ridgeBoxes()) {
@@ -170,14 +176,7 @@ export function DistantRidge() {
       mat.makeScale(size, boxH, size);
       mat.setPosition(box.x, (box.top + box.bottom) / 2, box.z);
       mesh.setMatrixAt(i, mat);
-      const local = Math.hypot(box.x, box.z);
-      const t = THREE.MathUtils.clamp(
-        (local - HILLS.fogBlendStart) / (HILLS.fogBlendEnd - HILLS.fogBlendStart),
-        0,
-        1,
-      );
-      const base = hillColors[Math.floor(rng() * hillColors.length)];
-      color.copy(base).lerp(fogColor, t * HILLS.fogBlendStrength);
+      color.copy(hillColors[Math.floor(rng() * hillColors.length)]);
       mesh.setColorAt(i, color);
       i++;
     }
@@ -194,14 +193,14 @@ export function DistantRidge() {
   return (
     <instancedMesh ref={meshRef} args={[undefined, undefined, count]} frustumCulled={false} receiveShadow>
       <boxGeometry args={[1, 1, 1]} />
-      {/* #90: the rebuilt ridge band (r in (rimOuter, ridgeOuterRadius] = 90..100)
-          sits at depth >= ~118 from the resting camera — at/beyond FOG.far
-          (120), so with scene fog on every fragment was fogged to ~100%
-          horizon color and the family rendered but never read as a silhouette.
-          The ridge opts out of scene fog; its instance colors already carry
-          the fogBlend mix (45% terrain at the band), so it reads past the rim
-          in fog AND no-fog cases. */}
-      <meshLambertMaterial side={THREE.DoubleSide} fog={false} />
+      {/* #90 reopened: the material keeps scene fog ON. The rebuilt ridge
+          band (r in (rimOuter, ridgeOuterRadius] = 90..100) sat at/beyond
+          FOG.far (120) and was fogged to ~100% horizon color (invisible);
+          FOG.far now ends at 160, past the band, so the ridge sits inside
+          the live gradient: real per-fragment fog with the palette's live
+          fog color — visible silhouette, softer than the rim in front,
+          fading when mist/night fog rolls in. No baked blend constant. */}
+      <meshLambertMaterial side={THREE.DoubleSide} />
     </instancedMesh>
   );
 }
