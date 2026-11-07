@@ -261,6 +261,17 @@ export function BeeSwarm() {
         beeDebug.targetLost++;
       }
 
+      // #13 canon, made total: real colonies stop foraging in the dark and
+      // cluster until morning — a bee HOLDING a flower target at nightfall
+      // abandons it now and heads home immediately (rain keeps the #14
+      // mid-trip-finishes behavior; the night curfew covers every foraging
+      // state, so the whole swarm is home within one flight)
+      if (!isDaylight(dayPhase()) && bee.targetFlowerId !== null) {
+        bee.targetFlowerId = null;
+        bee.headingHome = true;
+        bee.wanderTarget = null;
+      }
+
       if (bee.restingUntil <= t && bee.targetFlowerId === null) {
         // #14: rain sends the colony home - cozy, never punished; a bee
         // mid-trip finishes it, the next pick is the hive
