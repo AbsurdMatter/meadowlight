@@ -753,7 +753,16 @@ async function checkJournal() {
       seenFacts: w.seenFactsReadback(),
     };
   });
-  // inspect a flower through the REAL glass path: arm + hover its pixels
+  // inspect a flower through the REAL glass path: arm + hover its pixels.
+  // Pre-merge FAIL 4/5 residue (DETECTOR race, not a world bug — local runs
+  // pass, the user's loaded full-suite machine flaked): the journal write is
+  // the card's 250ms stability debounce (async by design, #85 standard), but
+  // the fixture hovered once for a fixed 800ms and saved BEFORE polling the
+  // write — on a slow machine the entry flaps (foragers crossing the ray) or
+  // the debounce lands after the save (blob 0 vs live 1). Pin the ecology with
+  // the frozen-clock convention (bees static -> the mesh-owned flower entry is
+  // stable immediately) and POLL the write, bounded — predicates unchanged.
+  await page.evaluate(() => window.__meadowlight.timeSetPaused(true));
   const hover = await page.evaluate(() => {
     const w = window.__meadowlight;
     w.toggleMagnifier();
@@ -780,11 +789,19 @@ async function checkJournal() {
   });
   if (hover) {
     await page.mouse.move(hover.x, hover.y);
-    await page.waitForTimeout(800);
+    // poll the async write (the card's 250ms stability debounce), bounded —
+    // never a fixed-instant sample of an async observable
+    const deadline = Date.now() + 5000;
+    let jlen = before.journal.length;
+    while (Date.now() < deadline) {
+      await page.waitForTimeout(300);
+      jlen = await page.evaluate(() => window.__meadowlight.journalReadback().length);
+      if (jlen > before.journal.length) break;
+    }
   }
   const after = await page.evaluate((itemId) => {
     const w = window.__meadowlight;
-    w.save();
+    w.save(); // save AFTER the polled write so blob and live agree
     return {
       journal: w.journalReadback(),
       save: JSON.parse(localStorage.getItem('meadowlight.world.v2') || 'null'),
@@ -793,6 +810,7 @@ async function checkJournal() {
       wanted: itemId,
     };
   }, hover ? hover.itemId : null);
+  await page.evaluate(() => window.__meadowlight.timeSetPaused(false));
   const added = after.journal.filter((r) => !before.journal.some((b) => JSON.stringify(b) === JSON.stringify(r)));
   // the record must name the inspected flower (exact-identity predicate —
   // the session-8 lesson: never accept "a record appeared")
