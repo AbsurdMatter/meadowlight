@@ -11,6 +11,8 @@ import { wildDebug } from '../render/WildPollinators';
 import { fireflyDebug } from '../render/Fireflies';
 import { setDayPhase, isDaylight } from './dayCycle';
 import { encodeSeedCode, encodeSeedCodeLegacyML1 } from './seedCode';
+import { seedingBrakeEngaged, maxVolunteerCap } from './seeding';
+import { SEEDING_TUNING } from '../data/seeding';
 import { useLocale } from './locale';
 import { precipitationVisual } from './weather';
 import { precipReadback, tickPrecipScheduleForTest } from './rainSchedule';
@@ -59,6 +61,17 @@ declare global {
       /** U1 (session 7): the world's named seed state + epoch (readback) */
       worldSeedReadback: () => number;
       seedingEpochReadback: () => number;
+      /** #77/#78: the brake readout the P panel renders — the ONE predicate
+       *  (seedingBrakeEngaged) + cap + the tuned fraction, so gates derive
+       *  expectations from the source instead of pinning the taste value */
+      seedingBrakeReadback: () => {
+        volunteers: number;
+        total: number;
+        cap: number;
+        engaged: boolean;
+        maxVolunteerFraction: number;
+        maxPerSeason: number;
+      };
       /** U1: id -> volunteer flag for every item (persisted in the save) */
       volunteersReadback: () => { id: string; plantId: string; volunteer: boolean }[];
       /** N2: per-flower visit ledger (id -> visited seasons) */
@@ -357,6 +370,19 @@ export function installTestHook() {
     setSeasonProgressForTest: (p) => usePlacementStore.getState().setSeasonProgressForTest(p),
     worldSeedReadback: () => usePlacementStore.getState().worldSeed,
     seedingEpochReadback: () => usePlacementStore.getState().seedingEpoch,
+    seedingBrakeReadback: () => {
+      const s = usePlacementStore.getState();
+      const volunteers = s.items.filter((it) => it.volunteer === true).length;
+      const total = s.items.length;
+      return {
+        volunteers,
+        total,
+        cap: maxVolunteerCap(total),
+        engaged: seedingBrakeEngaged(volunteers, total),
+        maxVolunteerFraction: SEEDING_TUNING.maxVolunteerFraction,
+        maxPerSeason: SEEDING_TUNING.maxPerSeason,
+      };
+    },
     /** N2: per-flower visit ledger readback (persisted v8) */
     visitsReadback: () =>
       usePlacementStore.getState().items.map((it) => ({

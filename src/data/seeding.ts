@@ -51,8 +51,13 @@ export const SEEDING_TUNING = {
    * the total meadow. Above the fraction, seeding pauses (never reverses
    * — a volunteer is never removed, no fail state) until the player
    * clears some or plants more of their own.
+   *
+   * #77 (v5, user taste decision 2026-11-02): raised 0.15 -> 0.40 — the
+   * meadow is allowed to grow fuller self-grown; the per-season/regional
+   * caps still dominate on small meadows, so this only binds on
+   * large/compounded ones. Brake semantics unchanged.
    */
-  maxVolunteerFraction: 0.15,
+  maxVolunteerFraction: 0.4,
 } as const;
 
 /**

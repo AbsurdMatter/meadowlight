@@ -867,27 +867,33 @@ test('seeding: rare + capped — a 4-season accelerated run never grows invasive
   );
 });
 
-test('seeding: the cumulative brake pauses seeding above the share — never removes (#37 finding 2)', () => {
+test('seeding: the cumulative brake pauses seeding above the share — never removes (#37 finding 2, #77 rate)', () => {
   const mk = (plantId, x, z, i, vol) => ({ id: (vol ? 'v' : 'p') + i, plantId, position: [x, 0, z], rotationY: 0, phase: 0, volunteer: vol });
-  // a 20-flower meadow already at the 15% share (3 volunteers):
+  // #77: taste values are never gate-pinned — derive the share/cap from the
+  // ONE source (SEEDING_TUNING) so this test moves with the verdict
+  const TOTAL = 20;
+  const cap = maxVolunteerCap(TOTAL);
+  assert.strictEqual(cap, Math.floor(TOTAL * SEEDING_TUNING.maxVolunteerFraction), 'cap = floor(total * maxVolunteerFraction)');
+  // a 20-flower meadow already AT the tuned share (cap volunteers):
   const items = [];
-  for (let i = 0; i < 17; i++) items.push(mk('lavender', -9 + (i % 6) * 3, -9 + Math.floor(i / 6) * 3, i, false));
-  for (let i = 0; i < 3; i++) items.push(mk('cosmos', -6 + i * 3, 6, 100 + i, true));
+  for (let i = 0; i < TOTAL - cap; i++) items.push(mk('lavender', -9 + (i % 6) * 3, -9 + Math.floor(i / 6) * 3, i, false));
+  for (let i = 0; i < cap; i++) items.push(mk('cosmos', -6 + i * 3, 6, 100 + i, true));
+  assert.strictEqual(items.length, TOTAL, 'fixture is exactly TOTAL items');
   // ...at the share: NO further seeding, no matter the season crossing
   const atShare = rollVolunteers(items, 'summer', 'autumn', 42, 0, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
-  assert.strictEqual(atShare.length, 0, 'at the share, seeding pauses');
+  assert.strictEqual(atShare.length, 0, 'at the tuned share, seeding pauses');
+  // one below the share: the brake reads active again
+  assert.strictEqual(seedingBrakeEngaged(cap - 1, TOTAL), false, 'below the tuned share the brake reads active');
   // planting more of one's own flowers RAISES the ceiling (the meadow
   // grows, so the share grows — self-seeding resumes: richer, not frozen)
   for (let i = 0; i < 20; i++) items.push(mk('poppy', -20 + (i % 7) * 3, -20 + Math.floor(i / 7) * 3, 200 + i, false));
   const resumed = rollVolunteers(items, 'summer', 'autumn', 42, 0, isPlantableCell, (x, z) => flowerBlocked(x, z, []));
   assert.ok(resumed.length >= 0, 'seeding may resume under the new, higher ceiling');
   // and the brake NEVER removes: at-the-share items are untouched
-  assert.strictEqual(items.filter((it) => it.volunteer).length, 3, 'no volunteer was removed');
+  assert.strictEqual(items.filter((it) => it.volunteer).length, cap, 'no volunteer was removed');
   // #78: the P panel readout reads the SAME predicate the roll uses
-  assert.strictEqual(seedingBrakeEngaged(3, 20), true, 'at the 15% share the brake reads engaged (3/20)');
-  assert.strictEqual(seedingBrakeEngaged(2, 20), false, 'below the share the brake reads active (2/20)');
+  assert.strictEqual(seedingBrakeEngaged(cap, TOTAL), true, 'at the tuned share the brake reads engaged (' + cap + '/' + TOTAL + ')');
   assert.strictEqual(seedingBrakeEngaged(0, 0), false, 'an empty meadow never reads engaged');
-  assert.strictEqual(maxVolunteerCap(20), 3, 'cap = floor(20 * maxVolunteerFraction)');
 });
 
 test('seeding: volunteers land only in plantable cells, roster-compatible, blooming in the new season', () => {

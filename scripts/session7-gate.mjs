@@ -85,7 +85,8 @@ async function checkSeeding() {
       w.timeSetSpeed(8);
       const samples = [];
       const startSeason = 'summer';
-      let lastEpoch = w.seedingEpochReadback();
+      const startEpoch = w.seedingEpochReadback();
+      let lastEpoch = startEpoch;
       const perSeason = [];
       let lastCount = 0;
       // session 10 P1 (#53): log the visit ledger per sample — the chain
@@ -106,28 +107,44 @@ async function checkSeeding() {
         lastEpoch = epoch;
       }
       w.timeSetSpeed(1);
-      return { before, before0, samples, perSeason, startSeason, visitCounts };
+      return { before, before0, beforeEpoch: startEpoch, samples, perSeason, startSeason, visitCounts };
     });
-    // the samples are CUMULATIVE volunteer counts; the per-season cap
-    // governs the DELTA between samples (the first run asserted cumulative
-    // <= 5 and failed its own brake: 6 cumulative with +1/season is the
-    // designed 15%-share behavior, not a cap violation)
-    const capsHold = run.samples.every(
-      (s, i) => s.volunteers - (i === 0 ? run.before0 : run.samples[i - 1].volunteers) <= 5,
-    );
+    // the samples are CUMULATIVE volunteer counts taken every ~92s at 8x,
+    // but a season is only ~67s at 8x — a sample can span TWO rollovers (the
+    // epoch counter says how many). The per-season cap governs the delta
+    // PER EPOCH crossed, never the raw per-sample delta (a double-epoch
+    // sample legitimately shows up to 2x maxPerSeason).
+    const brake0 = await page.evaluate(() => window.__meadowlight.seedingBrakeReadback());
+    const capsHold = run.samples.every((s, i) => {
+      const prevV = i === 0 ? run.before0 : run.samples[i - 1].volunteers;
+      const prevE = i === 0 ? run.beforeEpoch : run.samples[i - 1].epoch;
+      const epochsCrossed = Math.max(1, s.epoch - prevE);
+      return (s.volunteers - prevV) / epochsCrossed <= brake0.maxPerSeason;
+    });
     const totalVolunteers = run.samples[run.samples.length - 1].volunteers;
     // growth pattern: volunteers appear (a meadow that never seeds in 4
-    // seasons is broken), but stay a small fraction — never invasive.
-    // #37 finding 2: the constraint the visitor FEELS is the CUMULATIVE
-    // share (per-season caps alone let volunteers compound season over
-    // season — the gate's first run measured 20/36, a third self-grown).
+    // seasons is broken), but stay within the CUMULATIVE share — never
+    // invasive. #37 finding 2: the share is the constraint the visitor
+    // FEELS; #77: the rate is a taste value, so the gate derives the
+    // expectation from the ONE source (the brake readback), never pins 15%/40%
+    const brake = await page.evaluate(() => window.__meadowlight.seedingBrakeReadback());
     const final = run.samples[run.samples.length - 1].total;
     const fraction = totalVolunteers / final;
-    const invasive = fraction > 0.2; // the brake targets 15%; headroom for the roll's own shape
+    const invasive = fraction > brake.maxVolunteerFraction + 0.05; // headroom for the roll's own shape
     rec.record(
       'seeding.accelerated-4season-caps-hold',
       capsHold && !invasive && totalVolunteers >= 1,
-      JSON.stringify(run.samples) + ` (volunteers ${totalVolunteers}/${final} = ${(fraction * 100).toFixed(0)}%, cumulative brake target 15%, visitedFlowersPerSample=${JSON.stringify(run.visitCounts)})`,
+      JSON.stringify(run.samples) + ` (volunteers ${totalVolunteers}/${final} = ${(fraction * 100).toFixed(0)}%, cumulative brake target ${(brake.maxVolunteerFraction * 100).toFixed(0)}% from SEEDING_TUNING, visitedFlowersPerSample=${JSON.stringify(run.visitCounts)})`,
+    );
+    // #77/#78: the brake readout (what the P panel prints) derives from the
+    // ONE predicate at the NEW rate — engaged iff volunteers >= floor(total * fraction)
+    const volsNow = await page.evaluate(() => window.__meadowlight.volunteersReadback().filter((v) => v.volunteer).length);
+    const totalNow = await page.evaluate(() => window.__meadowlight.items().length);
+    const expectedEngaged = volsNow >= Math.floor(totalNow * brake.maxVolunteerFraction);
+    rec.record(
+      'seeding.brake-readout-matches-predicate-at-new-rate',
+      brake.total === totalNow && brake.volunteers === volsNow && brake.engaged === expectedEngaged && brake.cap === Math.floor(totalNow * brake.maxVolunteerFraction),
+      JSON.stringify({ brake, volsNow, totalNow, expectedEngaged }) + ' (readout = predicate, no parallel constant)',
     );
   }
 
