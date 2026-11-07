@@ -20,29 +20,34 @@ import type { Season } from './seasons';
  * hive's bees that are out and about. It is the ONE source consumed by
  * the swarm render, the hive popup, the info panel, and the P inspector.
  *
- * Shape (a real colony's year, gently idealized):
- *   spring 0.0 -> 0.85 : the colony wakes and grows (the queen lays; the
- *                        first warm days bring the first foragers out)
- *   summer flat 0.85   : the colony holds its full strength
- *   autumn 0.85 -> 0.5 : foraging thins as days shorten (stragglers,
+ * Shape (a real colony's year, gently idealized) — the bee-year curve (#87):
+ *   spring wakeFloor -> peak : the colony wakes and rebuilds to FULL summer
+ *                        strength by season's end (the queen ramps up to
+ *                        ~1,500–2,000 eggs a day in the spring build-up —
+ *                        EDUCATION.md); springShape 1 = steady ramp,
+ *                        2 = rushing (ease-out: the year's most active
+ *                        growth early in the season)
+ *   summer flat peak   : the colony holds its full strength (plateau)
+ *   autumn peak -> autumnFloor : foraging thins as days shorten (stragglers,
  *                        not decline — the hoverfly straggler's cousin)
- *   winter 0.5 -> 0.0 -> 0.1 : the cluster — everyone tucks into the
- *                        hive around the queen; a rare warm midday lets
- *                        one or two stretch their wings (cleansing
- *                        flights — a real thing, and the coziest read
- *                        in the whole model)
+ *   winter winterFloor (+ a small late-winter stir) : the LIVING cluster —
+ *                        a visible share stays out around the hive all
+ *                        winter, never a die-off (the cozy-winter
+ *                        non-negotiable); late winter stirs as the earliest
+ *                        days lengthen (cleansing flights, then the first
+ *                        foragers with the crocuses)
  *   back to spring: reawakening.
  */
 export const LIFECYCLE_TUNING = {
   /** spring: intensity rises from wakeFloor to peak across the season */
-  wakeFloor: 0.12,
-  peak: 0.85,
+  wakeFloor: 0.35,
+  peak: 0.9,
+  /** spring ramp shape: 1 = steady (linear), 2 = rushing (ease-out) */
+  springShape: 2,
   /** autumn: thins toward the cluster, never below the straggler floor */
-  autumnFloor: 0.5,
-  /** winter: the cluster itself — the in-hive share; rare cleansing flights */
-  clusterFloor: 0.0,
-  /** the population never renders as ZERO bees visible at the hive in
-   *  winter at midday — the cluster is INSIDE, visible as a warm glow */
+  autumnFloor: 0.55,
+  /** winter: the cluster itself — a LIVING visible share, never die-off */
+  winterFloor: 0.45,
 } as const;
 
 /**
@@ -74,23 +79,27 @@ export const WINTER_CLUSTER_FACT =
  */
 export function colonyIntensityTarget(season: Season, progress: number): number {
   const p = Math.max(0, Math.min(1, progress));
-  const { wakeFloor, peak, autumnFloor } = LIFECYCLE_TUNING;
+  const { wakeFloor, peak, autumnFloor, winterFloor, springShape } = LIFECYCLE_TUNING;
   switch (season) {
-    case 'spring':
-      // wake -> grow: wakeFloor rising to peak across the season
-      return wakeFloor + (peak - wakeFloor) * p;
+    case 'spring': {
+      // wake -> grow to FULL strength by season's end; springShape shapes
+      // the ramp (1 = steady, 2 = rushing ease-out) — the year's steepest
+      // growth is spring either way
+      const e = 1 - Math.pow(1 - p, springShape);
+      return wakeFloor + (peak - wakeFloor) * e;
+    }
     case 'summer':
-      // hold: full strength all season (no decline mid-summer)
+      // hold: full strength all season (plateau, no mid-summer decline)
       return peak;
     case 'autumn':
       // peak -> autumnFloor: the gentle thinning
       return peak - (peak - autumnFloor) * p;
     case 'winter':
-      // the cluster: tuck through midwinter; a tiny late-winter stir
-      // as the earliest days lengthen (cleansing flights, then the
-      // first foragers with the crocuses)
+      // the LIVING cluster: a visible share all winter (never die-off);
+      // a small late-winter stir as the earliest days lengthen
+      // (cleansing flights, then the first foragers with the crocuses)
       return p < 0.75
-        ? Math.max(LIFECYCLE_TUNING.clusterFloor, 0.08 * (1 - p / 0.75))
-        : 0.08 * ((p - 0.75) / 0.25) + 0.02;
+        ? winterFloor + 0.05 * (1 - p / 0.75)
+        : winterFloor + 0.05 + 0.05 * ((p - 0.75) / 0.25);
   }
 }

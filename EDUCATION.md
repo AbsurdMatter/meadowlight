@@ -22,6 +22,10 @@ where possible. Never lecture; imagine a beekeeper friend chatting over a fence.
   butterflies a place to overwinter.
 - In winter, the honeybee colony clusters around the queen and shivers to
   keep her at a cozy ~21°C, feeding on stored honey.
+- In spring the queen ramps up to about 1,500–2,000 eggs a day, so a colony
+  that tucked in for winter rebuilds to full strength in a matter of weeks
+  (verified, session 11: standard beekeeping figures for the spring
+  build-up laying rate).
 - Bees can see ultraviolet — many flowers have landing-strip patterns
   invisible to us, guiding bees straight to the nectar.
 - One in three bites of food depends on pollinators.

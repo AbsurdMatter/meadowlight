@@ -7,6 +7,7 @@ import { PLANT_BY_ID } from '../data/plants';
 import { usePlacementStore } from './placementStore';
 import { registerWildlifeProbe } from './magnifierProbes';
 import { inBloom } from '../engine/pollinator';
+import { colonyIntensity } from '../engine/lifecycle';
 import { noVariation } from '../engine/variation';
 import type { PlacedStructure } from '../engine/persistence';
 
@@ -127,9 +128,11 @@ export function SolitaryBees() {
     const hotels = s.structures.filter((st) => st.structureId === 'hotel');
     const corners = s.structures.filter((st) => st.structureId === 'wildcorner');
 
-    // --- solitary bees: up to perHotel per placed hotel, if flowers bloom nearby
-    const perHotelNow = foraging ? SOLITARY_BEE_TUNING.perHotel : 1;
-    const key = hotels.map((h) => h.id).join(',') + '|' + season;
+    // --- solitary bees: up to perHotel per placed hotel, scaled by the SAME
+    // shared population curve the hive swarm reads (one source —
+    // engine/lifecycle colonyIntensity, no parallel constants)
+    const perHotelNow = Math.max(1, Math.round(SOLITARY_BEE_TUNING.perHotel * colonyIntensity()));
+    const key = hotels.map((h) => h.id).join(',') + '|' + perHotelNow;
     if (key !== lastKey.current) {
       lastKey.current = key;
       const want = Math.min(MAX_SOLO, hotels.length * perHotelNow);

@@ -90,7 +90,7 @@ const { choosePlantFact, chooseStructureFact, chooseMeadowFact } = require(OUT +
 const { flowerBlocked, structureBlocked } = require(OUT + '/engine/collision.js');
 const { computeCaptionLayout, fallbackMetrics, fitSeedCode } = require(OUT + '/engine/postcardLayout.js');
 const { rollVolunteers, compatibleSeedling, seedingBrakeEngaged, maxVolunteerCap } = require(OUT + '/engine/seeding.js');
-const { colonyIntensityTarget, LIFECYCLE_LINES } = require(OUT + '/data/lifecycle.js');
+const { colonyIntensityTarget, LIFECYCLE_LINES, LIFECYCLE_TUNING } = require(OUT + '/data/lifecycle.js');
 const { HABITAT_TUNING, cornerFoldCells, cornerKey, pondSegments, fringeCells, pondClusters } = require(OUT + '/data/habitatScenery.js');
 const { NIGHT_SKY_TUNING, CLOUDS_OPACITY_BEFORE } = require(OUT + '/data/nightSky.js');
 const { hash2 } = require(OUT + '/engine/seededHash.js');
@@ -998,7 +998,7 @@ test('visitors: notebook windows are one per (visitor, season) and round-trip', 
 
 // ---------- session 7 U3: bee lifecycles, gently ----------
 
-test('lifecycle: full-year trace — rise, hold, cluster, reawaken', () => {
+test('lifecycle: full-year trace — rise, hold, LIVING cluster, reawaken', () => {
   const spring = [0, 0.25, 0.5, 0.75, 1].map((p) => colonyIntensityTarget('spring', p));
   const summer = [0, 0.5, 1].map((p) => colonyIntensityTarget('summer', p));
   const autumn = [0, 0.5, 1].map((p) => colonyIntensityTarget('autumn', p));
@@ -1006,17 +1006,44 @@ test('lifecycle: full-year trace — rise, hold, cluster, reawaken', () => {
   assert.ok(spring[4] > spring[0], 'spring grows');
   assert.ok(Math.abs(summer[0] - summer[2]) < 1e-9, 'summer holds (no mid-summer decline)');
   assert.ok(summer[0] >= spring[4] - 1e-9, 'summer is the peak');
-  assert.ok(autumn[2] < autumn[0] && autumn[2] >= 0.49, 'autumn thins to the straggler floor, no further');
-  assert.ok(winter[2] <= 0.08, 'midwinter is the tucked cluster');
+  assert.ok(autumn[2] < autumn[0] && autumn[2] >= LIFECYCLE_TUNING.autumnFloor - 1e-9, 'autumn thins to the straggler floor, no further');
+  assert.ok(winter[2] >= LIFECYCLE_TUNING.winterFloor - 1e-9, 'midwinter keeps the LIVING cluster floor — never die-off (#87)');
   assert.ok(winter[4] > winter[3], 'late winter stirs (cleansing flights -> first foragers)');
   assert.ok(spring[0] < spring[4], 'the breath repeats');
+});
+
+test('lifecycle #87: the bee-year curve — winter floor everywhere, rushing spring slope, summer plateau', () => {
+  const { winterFloor, peak } = LIFECYCLE_TUNING;
+  // winter: never below the living floor at ANY progress (the old die-off read <= 0.08)
+  for (let p = 0; p <= 1.0001; p += 0.05) {
+    assert.ok(colonyIntensityTarget('winter', p) >= winterFloor - 1e-9, 'winter floor holds at p=' + p.toFixed(2));
+  }
+  // spring: monotone growth every tick, ending at full summer strength
+  const spring = [0, 0.25, 0.5, 0.75, 1].map((p) => colonyIntensityTarget('spring', p));
+  for (let i = 1; i < spring.length; i++) assert.ok(spring[i] > spring[i - 1], 'spring grows every tick');
+  assert.ok(spring[4] >= peak - 1e-9, 'spring ends at the summer peak');
+  // rushing shape (verdict B, springShape 2): front-loaded — first tick clears
+  // minSlope per 0.25-progress tick and the first half beats the second by >2x
+  const minSlope = 0.2; // shape 2 gives ~0.2406 on the first tick
+  const firstHalf = spring[2] - spring[0];
+  const secondHalf = spring[4] - spring[2];
+  assert.ok(spring[1] - spring[0] >= minSlope, 'rushing spring: first-tick growth >= minSlope');
+  assert.ok(firstHalf > 2 * secondHalf, 'rushing spring is front-loaded — most active growth is early in the season');
+  // spring is the steepest season: average spring slope outpaces autumn's |slope|
+  const avgSpring = spring[4] - spring[0];
+  const avgAutumn = Math.abs(colonyIntensityTarget('autumn', 1) - colonyIntensityTarget('autumn', 0));
+  assert.ok(avgSpring > avgAutumn, 'spring growth outpaces autumn thinning');
+  // summer plateau at the peak
+  for (const p of [0, 0.25, 0.5, 0.75, 1]) {
+    assert.ok(Math.abs(colonyIntensityTarget('summer', p) - peak) < 1e-9, 'summer plateau at peak, p=' + p);
+  }
 });
 
 test('lifecycle: the live breath eases toward the target and freezes under pause (dt=0)', () => {
   setColonyIntensityForTest(0.2);
   for (let i = 0; i < 40; i++) advanceColony('summer', 0.5, 0.5);
   const eased = colonyIntensityExport();
-  assert.ok(eased > 0.2 && eased <= 0.86, 'eases up gently: ' + eased.toFixed(3));
+  assert.ok(eased > 0.2 && eased <= colonyIntensityTarget('summer', 0.5) + 1e-9, 'eases up gently toward the peak: ' + eased.toFixed(3));
   const before = colonyIntensityExport();
   for (let i = 0; i < 10; i++) advanceColony('winter', 0.5, 0);
   assert.strictEqual(colonyIntensityExport(), before, 'pause (dt 0) = full freeze');
@@ -1034,7 +1061,7 @@ test('lifecycle: NO DECLINE FRAMING — every surface line is winter-safe (the c
   assert.ok(LIFECYCLE_LINES.winter.includes('21'), 'carries the verified 21\u00b0C fact (EDUCATION.md)');
   const rb = colonyReadbackExport('winter', 0.5);
   assert.strictEqual(rb.line, LIFECYCLE_LINES.winter, 'the readback renders the one source');
-  assert.ok(rb.target <= 0.08, 'midwinter target is the cluster');
+  assert.ok(rb.target >= LIFECYCLE_TUNING.winterFloor - 1e-9, 'midwinter target is the LIVING cluster floor, not a die-off (#87)');
 });
 
 // ---------- #83 redesign: the outer rim ring (square blocks, new band) ----------
