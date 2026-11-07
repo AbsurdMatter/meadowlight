@@ -1119,13 +1119,17 @@ async function checkMagnifier() {
         }
       }
     }
-    // resume the clock, hold the resolved position past the stability standard
-    await page.evaluate(() => window.__meadowlight.timeSetPaused(false));
+    // hold the resolved position past the stability standard WITH THE CLOCK
+    // STILL FROZEN (the walk pinned it): unpausing mid-hold lets another
+    // creature cross the ray and flip the stable entry before the read —
+    // that was a flake, not a claim-rule change. The card's 250ms debounce is
+    // wall-clock and fires while paused, so the journal write is unaffected.
     if (soloTarget) {
       await page.mouse.move(soloTarget.x, soloTarget.y);
       await page.waitForTimeout(1500); // > 250ms stability + card debounce
     }
     const soloStable = await readStableEntry();
+    // resume the clock only after the stable read + journal read below
     const soloCard = await page.evaluate(() => {
       const el = document.querySelector('[data-magnifier-card="true"]');
       const r = el ? el.getBoundingClientRect() : null;
