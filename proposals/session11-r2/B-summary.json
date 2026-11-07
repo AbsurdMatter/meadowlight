@@ -1,0 +1,87 @@
+{
+  "label": "B",
+  "fixture": {
+    "hives": 1,
+    "hotels": 1,
+    "flowers": 38,
+    "daylight": true,
+    "season": "summer"
+  },
+  "curve": {
+    "spring": [
+      0.35,
+      0.5906,
+      0.7625,
+      0.8656,
+      0.9
+    ],
+    "summer": [
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9
+    ],
+    "autumn": [
+      0.9,
+      0.8125,
+      0.725,
+      0.6375,
+      0.55
+    ],
+    "winter": [
+      0.5,
+      0.4833,
+      0.4667,
+      0.5,
+      0.55
+    ]
+  },
+  "shots": [
+    {
+      "name": "winter-mid",
+      "season": "winter",
+      "progress": 0.517,
+      "target": 0.4655,
+      "intensity": 0.4689,
+      "beeCount": 4,
+      "solitary": 2,
+      "daylight": true,
+      "file": "/workspace/github__AbsurdMatter__meadowlight/proposals/session11-r2/B-winter-mid.png"
+    },
+    {
+      "name": "spring-mid",
+      "season": "spring",
+      "progress": 0.516,
+      "target": 0.7714,
+      "intensity": 0.7654,
+      "beeCount": 8,
+      "solitary": 3,
+      "daylight": true,
+      "file": "/workspace/github__AbsurdMatter__meadowlight/proposals/session11-r2/B-spring-mid.png"
+    },
+    {
+      "name": "spring-late",
+      "season": "spring",
+      "progress": 0.967,
+      "target": 0.8994,
+      "intensity": 0.8975,
+      "beeCount": 9,
+      "solitary": 4,
+      "daylight": true,
+      "file": "/workspace/github__AbsurdMatter__meadowlight/proposals/session11-r2/B-spring-late.png"
+    },
+    {
+      "name": "summer-mid",
+      "season": "summer",
+      "progress": 0.517,
+      "target": 0.9,
+      "intensity": 0.9,
+      "beeCount": 11,
+      "solitary": 4,
+      "daylight": true,
+      "file": "/workspace/github__AbsurdMatter__meadowlight/proposals/session11-r2/B-summer-mid.png"
+    }
+  ],
+  "errors": []
+}
