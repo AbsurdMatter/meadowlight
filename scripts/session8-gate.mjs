@@ -837,101 +837,116 @@ async function checkMagnifier() {
     // resolves to the queen. The check no longer fights the resolver's
     // correct nearest-wins; it finds a pointer position the resolver
     // AGREES resolves to the queen. Frozen clock = deterministic ecology.
-    const pos = await page.evaluate((qPre) => {
-      const w = window.__meadowlight;
-      w.timeSetPaused(true); // pin the creatures for the targeting walk
-      // #85 round 3: re-read the queen AFTER the freeze — the argument is the
-      // pre-freeze position and she may have drifted in the gap, which would
-      // stale every candidate pixel (the containment rule needs the ray
-      // within 0.2u of her PINNED body, not the old 1.1u reach).
-      const q = w.wildlifeSightings().find((s) => s.kind === 'queenbumble') ?? qPre;
-      const cam = w.__three?.camera;
-      const proj = cam.projectionMatrix.elements;
-      const view = cam.matrixWorldInverse.elements;
-      function mul(a, v3) {
-        return {
-          x: a[0] * v3.x + a[4] * v3.y + a[8] * v3.z + a[12],
-          y: a[1] * v3.x + a[5] * v3.y + a[9] * v3.z + a[13],
-          z: a[2] * v3.x + a[6] * v3.y + a[10] * v3.z + a[14],
-          w: a[3] * v3.x + a[7] * v3.y + a[11] * v3.z + a[15],
-        };
+    // BUSY-SEASON RESOLUTION PATH (R2 made spring the year's busiest season):
+    // one pinned sample can land with the queen on the hive-occluded side of
+    // her patrol or crowded by hive bees, and the walk then legitimately
+    // exhausts on a mesh claim (ownership-first — the hive owns those pixels).
+    // The honest fix is more SAMPLES of her real patrol, not a looser
+    // predicate: retry the pinned walk (short unpause between attempts so she
+    // patrols on). Acceptance is UNCHANGED — the real resolver must claim
+    // kind:'visitor' AND visitorId:'queenbumble' at the held pixel.
+    const MAX_ATTEMPTS = 6;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS && !queenPos; attempt++) {
+      if (attempt > 0) {
+        await page.evaluate(() => window.__meadowlight.timeSetPaused(false));
+        await page.waitForTimeout(350);
       }
-      const project = (p3) => {
-        const pv = { x: p3.x, y: p3.y, z: p3.z, w: 1 };
-        const eye = mul(view, pv);
-        const clip = mul(proj, eye);
-        return {
-          x: ((clip.x / clip.w + 1) / 2) * window.innerWidth,
-          y: ((-clip.y / clip.w + 1) / 2) * window.innerHeight,
+      const pos = await page.evaluate((qPre) => {
+        const w = window.__meadowlight;
+        w.timeSetPaused(true); // pin the creatures for the targeting walk
+        // #85 round 3: re-read the queen AFTER the freeze — the argument is the
+        // pre-freeze position and she may have drifted in the gap, which would
+        // stale every candidate pixel (the containment rule needs the ray
+        // within 0.2u of her PINNED body, not the old 1.1u reach).
+        const q = w.wildlifeSightings().find((s) => s.kind === 'queenbumble') ?? qPre;
+        const cam = w.__three?.camera;
+        const proj = cam.projectionMatrix.elements;
+        const view = cam.matrixWorldInverse.elements;
+        function mul(a, v3) {
+          return {
+            x: a[0] * v3.x + a[4] * v3.y + a[8] * v3.z + a[12],
+            y: a[1] * v3.x + a[5] * v3.y + a[9] * v3.z + a[13],
+            z: a[2] * v3.x + a[6] * v3.y + a[10] * v3.z + a[14],
+            w: a[3] * v3.x + a[7] * v3.y + a[11] * v3.z + a[15],
+          };
+        }
+        const project = (p3) => {
+          const pv = { x: p3.x, y: p3.y, z: p3.z, w: 1 };
+          const eye = mul(view, pv);
+          const clip = mul(proj, eye);
+          return {
+            x: ((clip.x / clip.w + 1) / 2) * window.innerWidth,
+            y: ((-clip.y / clip.w + 1) / 2) * window.innerHeight,
+          };
         };
-      };
-      // #6387436249: the walk's acceptance must match the QUEEN EXACTLY —
-      // the old screen-space approximation ignored that the ray through the
-      // candidate pixel also hits MESH geometry (the hive): a mesh claim
-      // legitimately beats the queen's visitor claim when the pointer is
-      // nearer the hive, so the walk converged on the hive ('Skep Hive'
-      // card) while its creature-only distance test said 'queen wins'.
-      // The walk now drives the REAL resolver loop: hover the candidate
-      // pixel, let the resolver + meshes run frames, and READ THE ACTUAL
-      // ENTRY — acceptance is kind:'visitor' AND visitorId:'queenbumble',
-      // not 'an entry resolved'. If no candidate in the walk window ever
-      // resolves to the queen alone (the hive mesh dominating her foraging
-      // area under forced spring), that is a REAL placement finding —
-      // reported, never papered over by a loose predicate.
-      const candidates = [];
-      const base = project(q);
-      const sightings = w.wildlifeSightings();
-      const others = sightings.filter((s) => s !== q);
-      // candidate pixels: the queen's own projection first, then pixels
-      // whose ray passes THROUGH her body. #85 round 3 made containment
-      // (perp <= 0.2u) the claim rule for every wildlife entry, so the old
-      // screen-space ring walk (pixels within the 1.1u reach but often
-      // outside the 0.2u body) no longer claims by design — project points
-      // on a small sphere around her live position instead (radius 0.15u
-      // < the 0.2u containment radius => the ray through each such pixel
-      // passes within her body). The real read below stays the acceptance.
-      candidates.push(base);
-      const R = 0.15;
-      for (let i = 0; i < 26; i++) {
-        const k = i + 0.5;
-        const z = 1 - 2 * (k / 26);
-        const rr = Math.sqrt(Math.max(0, 1 - z * z));
-        const phi = k * 2.399963229728653; // golden-angle sphere sample
-        const cand = project({
-          x: q.x + R * rr * Math.cos(phi),
-          y: q.y + R * z,
-          z: q.z + R * rr * Math.sin(phi),
+        // #6387436249: the walk's acceptance must match the QUEEN EXACTLY —
+        // the old screen-space approximation ignored that the ray through the
+        // candidate pixel also hits MESH geometry (the hive): a mesh claim
+        // legitimately beats the queen's visitor claim when the pointer is
+        // nearer the hive, so the walk converged on the hive ('Skep Hive'
+        // card) while its creature-only distance test said 'queen wins'.
+        // The walk now drives the REAL resolver loop: hover the candidate
+        // pixel, let the resolver + meshes run frames, and READ THE ACTUAL
+        // ENTRY — acceptance is kind:'visitor' AND visitorId:'queenbumble',
+        // not 'an entry resolved'. If no candidate in the walk window ever
+        // resolves to the queen alone (the hive mesh dominating her foraging
+        // area under forced spring), that is a REAL placement finding —
+        // reported, never papered over by a loose predicate.
+        const candidates = [];
+        const base = project(q);
+        const sightings = w.wildlifeSightings();
+        const others = sightings.filter((s) => s !== q);
+        // candidate pixels: the queen's own projection first, then pixels
+        // whose ray passes THROUGH her body. #85 round 3 made containment
+        // (perp <= 0.2u) the claim rule for every wildlife entry, so the old
+        // screen-space ring walk (pixels within the 1.1u reach but often
+        // outside the 0.2u body) no longer claims by design — project points
+        // on a small sphere around her live position instead (radius 0.15u
+        // < the 0.2u containment radius => the ray through each such pixel
+        // passes within her body). The real read below stays the acceptance.
+        candidates.push(base);
+        const R = 0.15;
+        for (let i = 0; i < 26; i++) {
+          const k = i + 0.5;
+          const z = 1 - 2 * (k / 26);
+          const rr = Math.sqrt(Math.max(0, 1 - z * z));
+          const phi = k * 2.399963229728653; // golden-angle sphere sample
+          const cand = project({
+            x: q.x + R * rr * Math.cos(phi),
+            y: q.y + R * z,
+            z: q.z + R * rr * Math.sin(phi),
+          });
+          const queenD = Math.hypot(cand.x - base.x, cand.y - base.y);
+          const otherD = Math.min(
+            ...others.map((o) => {
+              const op = project(o);
+              return Math.hypot(cand.x - op.x, cand.y - op.y);
+            }),
+            Infinity,
+          );
+          // pre-filter: the pixel must be plausibly queen-nearest among
+          // CREATURES (meshes checked by the real read below)
+          if (otherD > queenD) candidates.push(cand);
+        }
+        return { ok: true, candidates };
+      }, queenSeen.queen);
+      // drive the real resolver: for each candidate pixel, reset the claim,
+      // hover, let frames run, read the ACTUAL entry — accept only the queen
+      for (const cand of pos.candidates ?? []) {
+        await page.evaluate(() => {
+          window.__meadowlight.setMagnifierEntryForTest(null);
         });
-        const queenD = Math.hypot(cand.x - base.x, cand.y - base.y);
-        const otherD = Math.min(
-          ...others.map((o) => {
-            const op = project(o);
-            return Math.hypot(cand.x - op.x, cand.y - op.y);
-          }),
-          Infinity,
-        );
-        // pre-filter: the pixel must be plausibly queen-nearest among
-        // CREATURES (meshes checked by the real read below)
-        if (otherD > queenD) candidates.push(cand);
-      }
-      return { ok: true, candidates };
-    }, queenSeen.queen);
-    // drive the real resolver: for each candidate pixel, reset the claim,
-    // hover, let frames run, read the ACTUAL entry — accept only the queen
-    for (const cand of pos.candidates ?? []) {
-      await page.evaluate(() => {
-        window.__meadowlight.setMagnifierEntryForTest(null);
-      });
-      await page.mouse.move(cand.x, cand.y);
-      await page.waitForTimeout(250); // resolver + mesh frames
-      const claimed = await page.evaluate(() => {
-        const e = window.__meadowlight.magnifierReadback().entry;
-        return e && e.kind === 'visitor' ? e.visitorId : e?.kind ?? null;
-      });
-      lastClaimed = claimed;
-      if (claimed === 'queenbumble') {
-        queenPos = cand;
-        break;
+        await page.mouse.move(cand.x, cand.y);
+        await page.waitForTimeout(250); // resolver + mesh frames
+        const claimed = await page.evaluate(() => {
+          const e = window.__meadowlight.magnifierReadback().entry;
+          return e && e.kind === 'visitor' ? e.visitorId : e?.kind ?? null;
+        });
+        lastClaimed = claimed;
+        if (claimed === 'queenbumble') {
+          queenPos = cand;
+          break;
+        }
       }
     }
     if (queenPos) {
