@@ -48,6 +48,14 @@ const TITLE_SIZE = 44;
 const LINE_SIZE = 20;
 const STAMP_LABEL_SIZE = 13;
 const STAMP_CODE_SIZE = 15;
+// #67 taste round: readability at a glance is the acceptance — the code font
+// never drops below 11px, and the stamp's width cap may grow to ~60% of the
+// card when that buys a larger font (containment mechanism unchanged)
+const STAMP_CODE_MIN_SIZE = 11;
+const STAMP_WIDTH_CAP_FRACTION = 0.6;
+// the postmark tilt softens to a hint (~1.1°) — the corner-section containment
+// is the style now; the tilt must not fight readability
+const STAMP_TILT = -0.02;
 
 /** Await the self-hosted faces so fillText uses them, not a fallback.
  *  Race with a timeout: a hung load (offline edge case) must never stall the
@@ -144,9 +152,9 @@ export async function composePostcard(
     };
     const maxStampTextW = Math.max(
       60,
-      Math.min(canvas.width - 2 * border - 2 * 10, Math.floor(canvas.width * 0.5)) - 20,
+      Math.min(canvas.width - 2 * border - 2 * 10, Math.floor(canvas.width * STAMP_WIDTH_CAP_FRACTION)) - 20,
     );
-    const fit = fitSeedCode(seed.code, maxStampTextW, STAMP_CODE_SIZE, 8, measureW);
+    const fit = fitSeedCode(seed.code, maxStampTextW, STAMP_CODE_SIZE, STAMP_CODE_MIN_SIZE, measureW);
     codeLines = fit.lines;
     codeSize = fit.size;
     ctx.font = `700 ${STAMP_LABEL_SIZE}px ${FONT_FAMILY}`;
@@ -229,7 +237,7 @@ export async function composePostcard(
     const stampY = bandTop + st.top;
     ctx.save();
     ctx.translate(stampX + st.width / 2, stampY + st.height / 2);
-    ctx.rotate(-0.06); // a gentle postmark tilt
+    ctx.rotate(STAMP_TILT); // a hint of postmark tilt (~1.1°) — readability first
     ctx.translate(-(stampX + st.width / 2), -(stampY + st.height / 2));
     // dashed stamp frame
     ctx.strokeStyle = theme.color.honeyDark;

@@ -209,11 +209,12 @@ test('#67 round 2: fitSeedCode shrinks the font to fit, wraps only when the floo
   const medium = fitSeedCode('x'.repeat(30), 200, 15, 8, est);
   assert.strictEqual(medium.lines.length, 1, 'medium code stays one line');
   assert.ok(medium.size < 15 && est(medium.lines[0], medium.size) <= 200, 'shrunk until it fits the cap, size=' + medium.size);
-  // long code (a real meadow: ~8 chars per plant): wraps at the floor size,
+  // long code (a real meadow: ~8 chars per plant): wraps at the floor size
+  // (#67 taste round: the floor is 11px for readability at a glance),
   // every line within the cap, and the joined lines reproduce the code exactly
   const long = 'y'.repeat(200);
-  const fitted = fitSeedCode(long, 200, 15, 8, est);
-  assert.ok(fitted.size === 8, 'long code drops to the floor size, got ' + fitted.size);
+  const fitted = fitSeedCode(long, 200, 15, 11, est);
+  assert.ok(fitted.size === 11, 'long code drops to the 11px floor, got ' + fitted.size);
   assert.ok(fitted.lines.length > 1, 'long code wraps into multiple lines');
   assert.strictEqual(fitted.lines.join(''), long, 'wrapping is lossless — the full code is preserved');
   for (const l of fitted.lines) assert.ok(est(l, fitted.size) <= 200, 'every line fits the stamp cap');
