@@ -211,11 +211,15 @@ declare global {
       seedLabel: string;
       seenFacts: number;
       /** #67 close-out: draw-then-measure of the seed stamp on the composed
-       *  canvas — box in card coords, ink pixels inside it, frame containment */
+       *  canvas — box in card coords, ink pixels inside it, frame containment,
+       *  wrapped line count, and the negative assertion (diff pixels outside
+       *  the stamp box vs the unseeded compose) */
       stamp: {
         box: { left: number; top: number; right: number; bottom: number };
         inkPx: number;
         insideFrame: boolean;
+        codeLines: number;
+        outsideStampDiffPx: number;
       } | null;
       error: string | null;
     }>;
@@ -526,6 +530,11 @@ export function installTestHook() {
           box: { left: number; top: number; right: number; bottom: number };
           inkPx: number;
           insideFrame: boolean;
+          codeLines: number;
+          /** #67 round 2 negative assertion: pixels that differ between the
+           *  seeded and the unseeded compose OUTSIDE the stamp box — the seed
+           *  must appear ONLY in the stamp, never as a full-width string */
+          outsideStampDiffPx: number;
         } | null = null;
         const st = layoutOut.seedStamp;
         if (st) {
@@ -545,12 +554,46 @@ export function installTestHook() {
             // parchment panelSolid is #fff6e0 — ink = anything clearly off it
             if (Math.abs(d[i] - 255) + Math.abs(d[i + 1] - 246) + Math.abs(d[i + 2] - 224) > 90) ink++;
           }
+          // negative assertion: compose the SAME capture+stats WITHOUT the
+          // seed and diff the two canvases — every differing pixel must lie
+          // inside the stamp box (inflated a few px for the postmark tilt)
+          const plain = await composePostcard(capture, stats, undefined);
+          const img2 = new Image();
+          await new Promise<void>((res2, rej) => { img2.onload = () => res2(); img2.onerror = () => rej(new Error('decode')); img2.src = plain ?? dataUrl; });
+          const c2 = document.createElement('canvas');
+          c2.width = c.width; c2.height = c.height;
+          const cx2 = c2.getContext('2d')!;
+          cx2.fillStyle = '#fff6e0';
+          cx2.fillRect(0, 0, c2.width, c2.height);
+          cx2.drawImage(img2, 0, 0);
+          const a = cx.getImageData(0, 0, c.width, c.height).data;
+          const b = cx2.getImageData(0, 0, c.width, c.height).data;
+          // the stamp is drawn tilted (postmark), so its ink can bleed past
+          // the box by ~sin(tilt)*half-diagonal — inflate the box accordingly;
+          // the card's chunky border also moves when the band extends, so the
+          // diff only counts the frame INTERIOR (a full-width seed string
+          // lives there and is still caught)
+          const bleed = Math.ceil(0.07 * Math.max(w, h)) + 4;
+          const edge = border + 2;
+          let outside = 0;
+          for (let y = edge; y < c.height - edge; y++) {
+            for (let x = edge; x < c.width - edge; x++) {
+              const i = (y * c.width + x) * 4;
+              const diff = Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
+              if (diff > 30) {
+                const inBox = x >= left - bleed && x <= left + w + bleed && y >= top - bleed && y <= top + h + bleed;
+                if (!inBox) outside++;
+              }
+            }
+          }
           stamp = {
             box: { left, top, right: left + w, bottom: top + h },
             inkPx: ink,
             insideFrame:
               left >= border && top >= border &&
               left + w <= c.width - border && top + h <= c.height - border,
+            codeLines: st.codeBaselines.length,
+            outsideStampDiffPx: outside,
           };
         }
         return {

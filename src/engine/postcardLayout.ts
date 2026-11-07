@@ -46,7 +46,46 @@ export interface CaptionLayout {
     height: number;
     labelBaseline: number;
     codeBaseline: number;
+    /** #67 round 2: one baseline per wrapped code line (codeBaseline = first) */
+    codeBaselines: number[];
   } | null;
+}
+
+/**
+ * #67 round 2: fit a seed code into a corner stamp — pure, measure-injected.
+ * Picks the largest font size in [maxSize..minSize] whose width fits
+ * maxTextW; if even minSize overflows (long codes encode every plant), wraps
+ * greedily into lines that each fit. Returns the lines + the chosen size, so
+ * the stamp box can be sized from the RESULT (never overflows the corner).
+ */
+export function fitSeedCode(
+  code: string,
+  maxTextW: number,
+  maxSize: number,
+  minSize: number,
+  measureW: (text: string, size: number) => number,
+): { lines: string[]; size: number } {
+  let size = maxSize;
+  while (size > minSize && measureW(code, size) > maxTextW) size -= 1;
+  if (measureW(code, size) <= maxTextW) return { lines: [code], size };
+  // wrap greedily: longest prefix that fits at the floor size
+  const lines: string[] = [];
+  let rest = code;
+  while (rest.length > 0) {
+    let lo = 1, hi = rest.length, best = 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (measureW(rest.slice(0, mid), size) <= maxTextW) {
+        best = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    lines.push(rest.slice(0, best));
+    rest = rest.slice(best);
+  }
+  return { lines, size };
 }
 
 /** Fallback metrics when a browser reports no font bounding boxes:
@@ -90,6 +129,9 @@ export function computeCaptionLayout(
       codeAscent: number;
       codeDescent: number;
       stampWidth: number;
+      /** #67 round 2: wrapped code lines (default 1) + the stride between them */
+      codeLineCount?: number;
+      codeLineGap?: number;
     };
   },
 ): CaptionLayout {
@@ -111,7 +153,10 @@ export function computeCaptionLayout(
   let captionH = baseCaptionH;
   if (options?.stamp) {
     const st = options.stamp;
-    const height = st.padTop + st.labelAscent + st.labelDescent + st.gap + st.codeAscent + st.codeDescent + st.padBottom;
+    const codeLineCount = Math.max(1, st.codeLineCount ?? 1);
+    const codeLineGap = st.codeLineGap ?? 2;
+    const codeBlock = codeLineCount * (st.codeAscent + st.codeDescent) + (codeLineCount - 1) * codeLineGap;
+    const height = st.padTop + st.labelAscent + st.labelDescent + st.gap + codeBlock + st.padBottom;
     // #67 close-out: the stamp is a CONTAINED BOTTOM-RIGHT corner section of
     // the caption band (the postmark reading) — bottom-aligned above the
     // band's bottom pad, right-aligned with a real padX margin from the
@@ -119,13 +164,18 @@ export function computeCaptionLayout(
     const top = Math.max(topPad, baseCaptionH - bottomPad - height);
     // the band extends if the stamp is taller than it — the stamp never clips
     captionH = Math.max(baseCaptionH, top + height + bottomPad);
+    const codeBaselines: number[] = [];
+    for (let i = 0; i < codeLineCount; i++) {
+      codeBaselines.push(top + st.padTop + st.labelAscent + st.labelDescent + st.gap + i * (st.codeAscent + st.codeDescent + codeLineGap) + st.codeAscent);
+    }
     seedStamp = {
       right: st.cardWidth - st.border - st.padX, // stamp box right edge, padX inside the frame
       top,
       width: st.stampWidth,
       height,
       labelBaseline: top + st.padTop + st.labelAscent,
-      codeBaseline: top + st.padTop + st.labelAscent + st.labelDescent + st.gap + st.codeAscent,
+      codeBaseline: codeBaselines[0],
+      codeBaselines,
     };
   }
   const bottomPadding = captionH - lowestInk;

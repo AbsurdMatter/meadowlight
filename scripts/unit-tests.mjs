@@ -88,7 +88,7 @@ const { checkMilestones } = require(OUT + '/engine/milestones.js');
 const { variationFor, rollVariation, noVariation, VARIATION_TUNING } = require(OUT + '/engine/variation.js');
 const { choosePlantFact, chooseStructureFact, chooseMeadowFact } = require(OUT + '/engine/factSelection.js');
 const { flowerBlocked, structureBlocked } = require(OUT + '/engine/collision.js');
-const { computeCaptionLayout, fallbackMetrics } = require(OUT + '/engine/postcardLayout.js');
+const { computeCaptionLayout, fallbackMetrics, fitSeedCode } = require(OUT + '/engine/postcardLayout.js');
 const { rollVolunteers, compatibleSeedling, seedingBrakeEngaged, maxVolunteerCap } = require(OUT + '/engine/seeding.js');
 const { colonyIntensityTarget, LIFECYCLE_LINES } = require(OUT + '/data/lifecycle.js');
 const { HABITAT_TUNING, cornerFoldCells, cornerKey, pondSegments, fringeCells, pondClusters } = require(OUT + '/data/habitatScenery.js');
@@ -187,6 +187,36 @@ test('#67: caption layout computes the seed stamp box from measured metrics, ins
     tallStamp.seedStamp.top + tallStamp.seedStamp.height <= tallStamp.captionH + 0.5,
     'tall stamp extends the caption band, never clips (captionH=' + tallStamp.captionH + ')',
   );
+  // #67 round 2: wrapped code lines — one baseline per line, band grows
+  const wrapped = computeCaptionLayout(m, 6, {
+    stamp: { cardWidth: 1248, border: 24, padX: 10, padTop: 8, padBottom: 8, labelAscent: 15, labelDescent: 4, gap: 4, codeAscent: 12, codeDescent: 4, stampWidth: 300, codeLineCount: 3, codeLineGap: 2 },
+  });
+  assert.strictEqual(wrapped.seedStamp.codeBaselines.length, 3, 'one baseline per wrapped code line');
+  assert.ok(wrapped.seedStamp.codeBaselines[2] > wrapped.seedStamp.codeBaselines[0], 'later lines sit lower');
+  assert.ok(
+    wrapped.seedStamp.top + wrapped.seedStamp.height <= wrapped.captionH + 0.5,
+    'multi-line stamp fits the (extended) band',
+  );
+});
+
+test('#67 round 2: fitSeedCode shrinks the font to fit, wraps only when the floor overflows, never exceeds the cap', () => {
+  const est = (text, size) => text.length * size * 0.7; // the no-metrics fallback
+  // short code: one line at full size
+  const short = fitSeedCode('ML1.abc', 200, 15, 8, est);
+  assert.deepStrictEqual(short.lines, ['ML1.abc']);
+  assert.strictEqual(short.size, 15, 'short code keeps the full size');
+  // medium code: shrinks to fit the cap, still one line
+  const medium = fitSeedCode('x'.repeat(30), 200, 15, 8, est);
+  assert.strictEqual(medium.lines.length, 1, 'medium code stays one line');
+  assert.ok(medium.size < 15 && est(medium.lines[0], medium.size) <= 200, 'shrunk until it fits the cap, size=' + medium.size);
+  // long code (a real meadow: ~8 chars per plant): wraps at the floor size,
+  // every line within the cap, and the joined lines reproduce the code exactly
+  const long = 'y'.repeat(200);
+  const fitted = fitSeedCode(long, 200, 15, 8, est);
+  assert.ok(fitted.size === 8, 'long code drops to the floor size, got ' + fitted.size);
+  assert.ok(fitted.lines.length > 1, 'long code wraps into multiple lines');
+  assert.strictEqual(fitted.lines.join(''), long, 'wrapping is lossless — the full code is preserved');
+  for (const l of fitted.lines) assert.ok(est(l, fitted.size) <= 200, 'every line fits the stamp cap');
 });
 
 test('#67: i18n carries the facts-stat + seed-stamp copy in BOTH locales', () => {

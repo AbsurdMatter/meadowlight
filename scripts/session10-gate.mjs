@@ -355,6 +355,12 @@ async function checkPostcard() {
     const w = window.__meadowlight;
     w.resetWorld();
     w.plant('lavender', 2, 2);
+    // #67 round 2: plant a real-sized meadow so the seed code is LONG
+    // (~8 chars per plant) — the overflow path the user's saved JPG hit
+    // (full-width string, no visible stamp) is only exercised with a long
+    // code; a 1-plant code is short and the gate would pass vacuously
+    const ids = ['lavender', 'poppy', 'cosmos', 'clover', 'sunflower', 'thyme'];
+    for (let i = 0; i < 24; i++) w.plant(ids[i % ids.length], -9 + (i % 6) * 3.2, -9 + Math.floor(i / 6) * 3.2);
     await new Promise((res) => setTimeout(res, 1200));
     return await w.postcardSaveForTest();
   });
@@ -391,7 +397,16 @@ async function checkPostcard() {
     rec.record(
       'postcard.seed-stamp-drawn-contained@' + loc,
       rr.ok && !!rr.stamp && rr.stamp.inkPx >= 40 && rr.stamp.insideFrame,
-      'locale=' + loc + ' stamp=' + JSON.stringify(rr.stamp),
+      'locale=' + loc + ' stamp=' + JSON.stringify(rr.stamp) + ' seedCodeLen=' + rr.seedCode.length,
+    );
+    // #67 round 2 NEGATIVE assertion against the exported compose: diff the
+    // seeded vs unseeded compose of the same capture — every differing pixel
+    // must lie inside the stamp box. No seed ink outside the stamp = no
+    // full-width bottom string on the saved JPG.
+    rec.record(
+      'postcard.seed-ink-only-in-stamp@' + loc,
+      rr.ok && !!rr.stamp && rr.stamp.inkPx >= 40 && rr.stamp.insideFrame && rr.stamp.outsideStampDiffPx <= 40,
+      'locale=' + loc + ' stamp=' + JSON.stringify(rr.stamp) + ' seedCodeLen=' + rr.seedCode.length,
     );
   }
   await page.evaluate(() => window.__meadowlight.setLocaleForTest('en'));

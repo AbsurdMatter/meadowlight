@@ -23,6 +23,7 @@ import { usePlacementStore } from '../render/placementStore';
 import {
   computeCaptionLayout,
   fallbackMetrics,
+  fitSeedCode,
   type CaptionLayout,
   type CaptionMetrics,
 } from './postcardLayout';
@@ -123,23 +124,38 @@ export async function composePostcard(
   // #67: measure the stamp's own fonts and width, pass to the layout so the
   // stamp box is computed from real metrics, never assumed
   let stampOpts: Parameters<typeof computeCaptionLayout>[2] extends infer O ? O : never;
+  // #67 round 2: the code encodes every plant (8 chars each), so on a real
+  // meadow it is hundreds of chars — the old stamp let the box grow to the
+  // code's full width, pushing stampX negative and the text across the whole
+  // card bottom (the user's saved JPG: full-width string, no visible stamp).
+  // The stamp is a CONTAINED corner section: cap its text width at half the
+  // card, shrink the code font to fit, and wrap into lines if even the floor
+  // size overflows — the box is sized from the RESULT and can never overflow.
+  let codeLines: string[] = [];
+  let codeSize = STAMP_CODE_SIZE;
   if (seed) {
-    // #67 close-out: measureText().width reports 0 on platforms with no text
-    // metrics (headless shells) — a bare +20 pad then drew a 20px sliver box
-    // and the code overflowed past the card's right edge (unreadable). Fall
-    // back to a per-character estimate when the platform reports none:
-    // measured when real, estimated when zero — never assumed fixed.
+    // measureText().width reports 0 on platforms with no text metrics
+    // (headless shells) — fall back to a per-character estimate when the
+    // platform reports none: measured when real, estimated when zero.
     const measureW = (text: string, size: number) => {
+      ctx.font = `700 ${size}px ${TITLE_FAMILY}`;
       const w = ctx.measureText(text).width;
       return w > 0 ? w : text.length * size * 0.7;
     };
+    const maxStampTextW = Math.max(
+      60,
+      Math.min(canvas.width - 2 * border - 2 * 10, Math.floor(canvas.width * 0.5)) - 20,
+    );
+    const fit = fitSeedCode(seed.code, maxStampTextW, STAMP_CODE_SIZE, 8, measureW);
+    codeLines = fit.lines;
+    codeSize = fit.size;
     ctx.font = `700 ${STAMP_LABEL_SIZE}px ${FONT_FAMILY}`;
     const labelW = measureW(seed.label.toUpperCase(), STAMP_LABEL_SIZE);
-    ctx.font = `700 ${STAMP_CODE_SIZE}px ${TITLE_FAMILY}`;
-    const codeW = measureW(seed.code, STAMP_CODE_SIZE);
     const mLabel = ctx.measureText(seed.label.toUpperCase());
-    const mCode = ctx.measureText(seed.code);
-    const fb = fallbackMetrics(STAMP_LABEL_SIZE, STAMP_CODE_SIZE);
+    ctx.font = `700 ${codeSize}px ${TITLE_FAMILY}`;
+    const mCode = ctx.measureText(codeLines[0]);
+    const codeW = Math.max(...codeLines.map((l) => measureW(l, codeSize)));
+    const fb = fallbackMetrics(STAMP_LABEL_SIZE, codeSize);
     const num = (v: number | undefined, fbv: number) =>
       typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : fbv;
     stampOpts = {
@@ -154,7 +170,9 @@ export async function composePostcard(
         gap: 4,
         codeAscent: num((mCode as TextMetrics).actualBoundingBoxAscent, fb.lineAscent),
         codeDescent: num((mCode as TextMetrics).actualBoundingBoxDescent, fb.lineDescent),
-        stampWidth: Math.max(labelW, codeW) + 20,
+        stampWidth: Math.min(Math.max(labelW, codeW) + 20, maxStampTextW + 20),
+        codeLineCount: codeLines.length,
+        codeLineGap: 2,
       },
     };
   }
@@ -224,10 +242,12 @@ export async function composePostcard(
     ctx.font = `700 ${STAMP_LABEL_SIZE}px ${FONT_FAMILY}`;
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(seed.label.toUpperCase(), stampX + 10, bandTop + st.labelBaseline);
-    // the share code (heading role)
+    // the share code (heading role), wrapped lines at the fitted size
     ctx.fillStyle = theme.color.text;
-    ctx.font = `700 ${STAMP_CODE_SIZE}px ${TITLE_FAMILY}`;
-    ctx.fillText(seed.code, stampX + 10, bandTop + st.codeBaseline);
+    ctx.font = `700 ${codeSize}px ${TITLE_FAMILY}`;
+    st.codeBaselines.forEach((b, i) => {
+      ctx.fillText(codeLines[i], stampX + 10, bandTop + b);
+    });
     ctx.restore();
   }
 
