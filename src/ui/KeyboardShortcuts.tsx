@@ -210,9 +210,19 @@ export function KeyboardShortcuts() {
   // mirrored from the solver's live measurement so the style's maxWidth
   // (border-box) and the solver's content-box maxWidth share one conversion
   const chromeXRef = useRef(36);
+  // #65 round-13: sticky unclamped rendered height — recorded only while no
+  // clamp is applied, so the content readback's under-measurement cannot
+  // make the clamp flicker (clamp -> rendered shrinks -> readback says "fits"
+  // -> unclamp -> rendered grows -> clamp ...). With the sticky value the
+  // clamp decision is stable and the band can still grow back over it.
+  const contentHRef = useRef(0);
   const [panelTop, setPanelTop] = useState<number | null>(null);
   const [panelMaxWidth, setPanelMaxWidth] = useState<number | null>(null);
   const [panelMaxHeight, setPanelMaxHeight] = useState<number | null>(null);
+  // #65 round-13: block padding when the measured lane is tighter than the
+  // panel's chrome (padding+border is a hard rendered-height floor — CSS
+  // cannot shrink it, so a max-height clamp alone cannot clear a short lane)
+  const [panelPadY, setPanelPadY] = useState<number | null>(null);
   const toastCount = usePlacementStore((s) => s.toasts.length);
   // closed: drop the measured placement so a reopen re-measures fresh
   useEffect(() => {
@@ -220,6 +230,8 @@ export function KeyboardShortcuts() {
       setPanelTop(null);
       setPanelMaxWidth(null);
       setPanelMaxHeight(null);
+      setPanelPadY(null);
+      contentHRef.current = 0;
     }
   }, [hintOpen]);
   useEffect(() => {
@@ -358,13 +370,35 @@ export function KeyboardShortcuts() {
       // border-box element: css maxHeight == border-box max, no subtraction.
       // #65 round-12: the lane is the HARD constraint — clamp to the exact
       // measured band (floor(realBand)); the old 48px minimum floor let the
-      // rendered bottom exceed floorY when the band was shorter than 48
-      // (panel∩cornerRow@360x500: band 20.8, clamp 48, bottom 387 > floorY
-      // 360). A short lane scrolls inside, it never overlaps the floor.
-      const cssMaxHeight = naturalHeight > realBand ? Math.floor(realBand) : null;
-      if (top !== panelTop || cssMaxHeight !== panelMaxHeight) {
+      // rendered bottom exceed floorY when the band was shorter than 48.
+      // A short lane scrolls inside, it never overlaps the floor.
+      // #65 round-13 (aefcd1b residue, panel∩cornerRow@360x500 only): measure
+      // the RENDERED rect at each attempt too, not only the content readback —
+      // the lastChild/scrollHeight readback can under-measure the true
+      // rendered height (fractional rows, margin collapse), which left
+      // cssMaxHeight null while the rendered panel still overshot the lane
+      // (user's machine: band 9.6, readback <= band, rendered 28, panel bottom
+      // 378.4 vs cornerRow top 368 — 10.4u of overlap). Clamp whenever EITHER
+      // measure exceeds the band, so the rendered bottom never passes floorY
+      // (which is already the corner row's measured top - 8) at any viewport.
+      const renderedH = panel.getBoundingClientRect().height;
+      if (panelMaxHeight === null) contentHRef.current = Math.max(contentHRef.current, renderedH);
+      const effectiveNatural = Math.max(naturalHeight, contentHRef.current);
+      const needClamp = effectiveNatural > realBand + 0.5;
+      const cssMaxHeight = needClamp ? Math.floor(realBand) : null;
+      // #65 round-13: the rendered height has a hard floor of padding+border
+      // (12+12+2+2 = 28px here) — CSS cannot shrink chrome, so when the
+      // measured band is tighter than that floor a max-height clamp alone
+      // still overshoots (aefcd1b residue: panel∩cornerRow@360x500, band
+      // 9.6-20.8 < chrome 28, rendered bottom 378.4 vs cornerRow top 368).
+      // Shrink the block padding so the rendered box can fit the lane; the
+      // corner row's measured top stays the hard ceiling for the bottom.
+      const chromeY = padTop + padBottom + borderY;
+      const padY = needClamp && realBand < chromeY ? Math.max(0, Math.floor((realBand - borderY) / 2)) : null;
+      if (top !== panelTop || cssMaxHeight !== panelMaxHeight || padY !== panelPadY) {
         setPanelTop(top);
         setPanelMaxHeight(cssMaxHeight);
+        setPanelPadY(padY);
       }
     };
     // measure after paint, on every toast-stack change, on resize, on
@@ -407,7 +441,7 @@ export function KeyboardShortcuts() {
       ro?.disconnect();
       roCorner?.disconnect();
     };
-  }, [hintOpen, toastCount, panelMaxWidth, panelMaxHeight, panelTop]);
+  }, [hintOpen, toastCount, panelMaxWidth, panelMaxHeight, panelTop, panelPadY]);
 
   return (
     <>
@@ -437,7 +471,13 @@ export function KeyboardShortcuts() {
             maxWidth: panelMaxWidth !== null ? panelMaxWidth + chromeXRef.current : undefined,
             maxHeight: panelMaxHeight ?? undefined,
             overflowY: panelMaxHeight !== null ? 'auto' : undefined,
-            padding: theme.spacing.panelPadding,
+            // #65 round-13: block padding shrinks when the measured lane is
+            // tighter than the chrome floor (see place()); horizontal padding
+            // is unchanged (theme value's second component)
+            padding:
+              panelPadY !== null
+                ? `${panelPadY}px ${theme.spacing.panelPadding.split(' ')[1] ?? '16px'}`
+                : theme.spacing.panelPadding,
             borderRadius: theme.border.radiusPanel,
             background: theme.color.panel,
             border: `${theme.border.chunk}px solid ${theme.color.honey}`,
