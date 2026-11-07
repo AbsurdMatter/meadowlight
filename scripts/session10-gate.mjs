@@ -147,6 +147,84 @@ async function checkSeeds() {
     );
   }
 
+  // #94 share panel: the ML2 code shows as a truncated preview (ellipsis in a
+  // max-width block) — NEVER horizontal scroll; the FULL code is in the DOM
+  // and is what the copy path writes. Long-code fixture (25+ plants), both
+  // viewports, both locales. The copy write is captured by intercepting
+  // navigator.clipboard.writeText on the real click (headless has no
+  // clipboard permission and zero text metrics — intercept, don't fake).
+  {
+    await page.evaluate(() => {
+      const w = window.__meadowlight;
+      w.resetWorld();
+      const ids = ['lavender', 'poppy', 'cosmos', 'clover', 'sunflower', 'thyme', 'crocus', 'borage', 'aster', 'forget-me-not'];
+      for (let i = 0; i < 26; i++) w.plant(ids[i % ids.length], -10 + (i % 6) * 3.4, -10 + Math.floor(i / 6) * 3.4);
+      // capture what the copy path writes
+      window.__clip = undefined;
+      const nav = navigator;
+      if (nav.clipboard) {
+        const orig = nav.clipboard.writeText.bind(nav.clipboard);
+        nav.clipboard.writeText = (t) => { window.__clip = t; return orig(t).catch(() => undefined); };
+      }
+    });
+    await page.waitForTimeout(1200);
+    for (const vp of [{ w: 1280, h: 800 }, { w: 360, h: 800 }]) {
+      await page.setViewportSize({ width: vp.w, height: vp.h });
+      for (const loc of ['en', 'sl']) {
+        await page.evaluate((l) => window.__meadowlight.setLocaleForTest(l), loc);
+        await page.waitForTimeout(300);
+        // the real user path: click the share button (copies the FULL code and
+        // opens the popover)
+        await page.click('[data-seed-share-button]');
+        await page.waitForTimeout(700);
+        const m = await page.evaluate(() => {
+          const w = window.__meadowlight;
+          const pop = document.querySelector('[data-seed-share-popover]');
+          const block = document.querySelector('[data-seed-code]');
+          if (!pop || !block) return { open: false };
+          const cs = getComputedStyle(block);
+          const pr = pop.getBoundingClientRect();
+          const br = block.getBoundingClientRect();
+          const full = w.seedCodeEncode();
+          const clip = window.__clip ?? null;
+          return {
+            open: true,
+            popSW: pop.scrollWidth, popCW: pop.clientWidth,
+            popInViewport: pr.right <= window.innerWidth + 0.5 && pr.left >= -0.5,
+            blockOX: cs.overflowX, blockTO: cs.textOverflow, blockWS: cs.whiteSpace,
+            blockInViewport: br.right <= window.innerWidth + 0.5,
+            domFull: block.textContent === full,
+            clipFull: clip === null ? null : clip === full,
+            codeLen: full.length,
+            prefix: full.slice(0, 4),
+          };
+        });
+        rec.record(
+          `seeds.share-panel-code-preview-no-hscroll@${vp.w}x${vp.h}@${loc}`,
+          m.open === true &&
+            m.popSW <= m.popCW &&
+            m.popInViewport &&
+            m.blockOX === 'hidden' &&
+            m.blockTO === 'ellipsis' &&
+            m.blockWS === 'nowrap' &&
+            m.blockInViewport &&
+            m.domFull &&
+            m.clipFull === true && // the copy path wrote the FULL code
+            m.codeLen > 120 &&
+            m.prefix === 'ML2.',
+          JSON.stringify(m) + (m.clipFull === false ? ' — COPY MISMATCH' : ''),
+        );
+        // close the popover for the next iteration
+        await page.evaluate(() => {
+          const b = document.querySelector('[data-seed-share-close]');
+          if (b) b.click();
+        });
+        await page.waitForTimeout(250);
+      }
+    }
+    await page.evaluate(() => window.__meadowlight.setLocaleForTest('en'));
+  }
+
   const re = realErrors(errors);
   rec.record('seeds.no-console-errors', re.length === 0, re.slice(0, 3).join(' | '));
   await page.close();
@@ -404,63 +482,63 @@ async function checkPostcard() {
     r.ok && r.bytes > 1000,
     JSON.stringify(r),
   );
-  // #67: the composed card carries the facts-learned stat matching the live
-  // journal count, and the seed string matching the share code (both locales)
+  // #67 facts stat stays (the other half of that issue); #94: the seed is GONE
+  // from the postcard — the honest negative: the composed canvas contains NO
+  // seed ink anywhere. Pixel-level, with a POSITIVE CONTROL: draw the live
+  // seed code into the scan region on a copy and require the diff > 0, so a
+  // vacuous all-blank detector cannot pass. Dense 25+ plant fixture (the 24
+  // planted above), both locales.
   for (const loc of ['en', 'sl']) {
     const rr = await page.evaluate(async (l) => {
       const w = window.__meadowlight;
       w.setLocaleForTest(l);
-      return await w.postcardComposeReadback();
+      const rb = await w.postcardComposeReadback();
+      if (!rb.ok || !rb.png) return { ok: false, error: rb.error };
+      const code = w.seedCodeEncode();
+      const img = new Image();
+      await new Promise((res2, rej) => { img.onload = () => res2(); img.onerror = () => rej(new Error('decode')); img.src = rb.png; });
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      const cx = c.getContext('2d');
+      cx.drawImage(img, 0, 0);
+      // scan region: bottom-right of the card (where the stamp used to live) —
+      // x > 60% width, y > 72% height (the caption band's bottom strip)
+      const scan = (context) => {
+        // inside the chunky frame (border 24 + margin): the region the stamp
+        // used to occupy — the card's own border must NOT count as ink
+        const x0 = Math.floor(c.width * 0.6), y0 = Math.floor(c.height * 0.72);
+        const d = context.getImageData(x0, y0, c.width - x0 - 30, c.height - y0 - 30).data;
+        let ink = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          // parchment panelSolid is #fff6e0 — ink = anything clearly off it
+          if (Math.abs(d[i] - 255) + Math.abs(d[i + 1] - 246) + Math.abs(d[i + 2] - 224) > 90) ink++;
+        }
+        return ink;
+      };
+      const ink = scan(cx);
+      // positive control: paint an ink RECTANGLE into the region — the scan
+      // MUST see it (proves the pixel detector is not vacuously zero; fillText
+      // is unusable headless — zero text metrics render no glyphs)
+      cx.fillStyle = '#4a3527';
+      cx.fillRect(c.width * 0.62, c.height * 0.78, 60, 20);
+      const inkAfterControl = scan(cx);
+      const factsLine = rb.stats.find((st) => /fact/i.test(st.label) || /dejstv/i.test(st.label));
+      const factsOk = !!factsLine && factsLine.value === String(rb.seenFacts);
+      return {
+        ok: rb.ok, locale: l, ink, controlInk: inkAfterControl - ink, codeLen: code.length,
+        codePrefix: code.slice(0, 4), factsOk, seenFacts: rb.seenFacts, w: c.width, h: c.height,
+      };
     }, loc);
-    const factsLine = rr.stats.find((s) => /fact/i.test(s.label) || /dejstv/i.test(s.label));
-    const factsOk = !!factsLine && factsLine.value === String(rr.seenFacts);
-    const code = await page.evaluate(() => window.__meadowlight.seedCodeEncode());
     rec.record(
       'postcard.facts-stat-matches-journal@' + loc,
-      rr.ok && factsOk,
-      'locale=' + loc + ' factsLine=' + JSON.stringify(factsLine) + ' seenFacts=' + rr.seenFacts,
+      rr.ok === true && rr.factsOk,
+      'locale=' + loc + ' seenFacts=' + rr.seenFacts + ' factsOk=' + rr.factsOk,
     );
     rec.record(
-      'postcard.seed-stamp-matches-share-code@' + loc,
-      rr.ok && rr.seedCode === code && rr.seedLabel.length > 0,
-      'locale=' + loc + ' seedLabel=' + JSON.stringify(rr.seedLabel) + ' seedCode==shareCode: ' + (rr.seedCode === code),
-    );
-    // #67 close-out: draw-then-measure — the composed canvas actually carries
-    // ink inside the stamp box (the seed code is drawn, not just returned by
-    // the readback) and the stamp box is a contained corner section fully
-    // inside the card frame with margin
-    rec.record(
-      'postcard.seed-stamp-drawn-contained@' + loc,
-      rr.ok && !!rr.stamp && rr.stamp.inkPx >= 40 && rr.stamp.insideFrame,
-      'locale=' + loc + ' stamp=' + JSON.stringify(rr.stamp) + ' seedCodeLen=' + rr.seedCode.length,
-    );
-    // #67 round 2 NEGATIVE assertion against the exported compose: diff the
-    // seeded vs unseeded compose of the same capture — every differing pixel
-    // must lie inside the stamp box. No seed ink outside the stamp = no
-    // full-width bottom string on the saved JPG.
-    rec.record(
-      'postcard.seed-ink-only-in-stamp@' + loc,
-      rr.ok && !!rr.stamp && rr.stamp.inkPx >= 40 && rr.stamp.insideFrame && rr.stamp.outsideStampDiffPx <= 40,
-      'locale=' + loc + ' stamp=' + JSON.stringify(rr.stamp) + ' seedCodeLen=' + rr.seedCode.length,
-    );
-  }
-  // #89: with the ML2 format a TYPICAL meadow (8 plants, ~50-char code) renders
-  // the stamp as ONE line in its corner box — fitSeedCode wrap stays as the
-  // safety net for the big payloads the checks above exercise
-  {
-    const rr = await page.evaluate(async () => {
-      const w = window.__meadowlight;
-      w.setLocaleForTest('en');
-      w.resetWorld();
-      const ids = ['lavender', 'cosmos', 'poppy', 'clover', 'thyme', 'crocus'];
-      for (let i = 0; i < 8; i++) w.plant(ids[i % ids.length], -6 + (i % 4) * 4, -3 + Math.floor(i / 4) * 6);
-      await new Promise((res) => setTimeout(res, 1200));
-      return await w.postcardComposeReadback();
-    });
-    rec.record(
-      'postcard.seed-stamp-single-line-typical-meadow@en',
-      rr.ok && !!rr.stamp && rr.stamp.inkPx >= 40 && rr.stamp.insideFrame && rr.stamp.codeLines === 1 && rr.seedCode.startsWith('ML2.'),
-      'stamp=' + JSON.stringify(rr.stamp) + ' seedCodeLen=' + rr.seedCode.length + ' prefix=' + rr.seedCode.slice(0, 4),
+      'postcard.seed-absent@' + loc,
+      rr.ok === true && rr.ink === 0 && rr.controlInk > 0 && rr.codeLen > 100 && rr.codePrefix === 'ML2.',
+      'locale=' + loc + ' seedInkPxInRegion=' + rr.ink + ' (must be 0) — positiveControlDiffPx=' + rr.controlInk +
+        ' (must be > 0) — dense-fixture codeLen=' + rr.codeLen + ' prefix=' + rr.codePrefix + ' card=' + rr.w + 'x' + rr.h,
     );
   }
   await page.evaluate(() => window.__meadowlight.setLocaleForTest('en'));

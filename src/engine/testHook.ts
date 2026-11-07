@@ -220,24 +220,14 @@ declare global {
      *  drawn stat lines + seed code are re-read from the composed canvas pixels
      *  is not possible headlessly, so instead the compose inputs (stats, seed)
      *  plus the live journal count are returned for the gate to assert against */
+    /** #94: compose readback — no seed in the postcard path; returns the
+     *  composed PNG data URL for pixel-level seed-absent assertions */
     postcardComposeReadback: () => Promise<{
       ok: boolean;
       bytes: number;
       stats: { label: string; value: string }[];
-      seedCode: string;
-      seedLabel: string;
+      png: string;
       seenFacts: number;
-      /** #67 close-out: draw-then-measure of the seed stamp on the composed
-       *  canvas — box in card coords, ink pixels inside it, frame containment,
-       *  wrapped line count, and the negative assertion (diff pixels outside
-       *  the stamp box vs the unseeded compose) */
-      stamp: {
-        box: { left: number; top: number; right: number; bottom: number };
-        inkPx: number;
-        insideFrame: boolean;
-        codeLines: number;
-        outsideStampDiffPx: number;
-      } | null;
       error: string | null;
     }>;
       startFromSeedCode: (code: string) => boolean;
@@ -520,10 +510,10 @@ export function installTestHook() {
       try {
         const capture = capturePostcardPng();
         if (!capture) return { ok: false, bytes: 0, error: 'no capture' };
-        const { composePostcard, postcardSeedText } = await import('./postcardCompose');
+        const { composePostcard } = await import('./postcardCompose');
         const { postcardStatText } = await import('../ui/PostcardStats');
         const stats = postcardStatText().map((l) => ({ label: l.label, value: l.value }));
-        const composed = await composePostcard(capture, stats, postcardSeedText());
+        const composed = await composePostcard(capture, stats);
         const dataUrl = composed ?? capture;
         // the observable: a non-empty image blob — decode the data URL and measure
         const res = await fetch(dataUrl);
@@ -545,103 +535,28 @@ export function installTestHook() {
       return encodeSeedCodeLegacyML1(s.worldSeed, s.items);
     },
     postcardComposeReadback: async () => {
+      // #94: the compose path takes NO seed — the readback returns the composed
+      // PNG itself so the gate can assert pixel-level that no seed ink exists
       try {
         const capture = capturePostcardPng();
-        if (!capture) return { ok: false, bytes: 0, stats: [], seedCode: '', seedLabel: '', seenFacts: 0, stamp: null, error: 'no capture' };
-        const { composePostcard, postcardSeedText } = await import('./postcardCompose');
+        if (!capture) return { ok: false, bytes: 0, stats: [], png: '', seenFacts: 0, error: 'no capture' };
+        const { composePostcard } = await import('./postcardCompose');
         const { postcardStatText } = await import('../ui/PostcardStats');
         const stats = postcardStatText().map((l) => ({ label: l.label, value: l.value }));
-        const seed = postcardSeedText();
-        // #67 close-out: draw-then-measure — the layout out-param gives the
-        // stamp box in card coordinates; decode the composed PNG and scan
-        // that box for ink vs the parchment background
-        const layoutOut: { seedStamp: any } = { seedStamp: null };
-        const composed = await composePostcard(capture, stats, seed, layoutOut);
+        const composed = await composePostcard(capture, stats);
         const dataUrl = composed ?? capture;
         const res = await fetch(dataUrl);
         const blob = await res.blob();
-        let stamp: {
-          box: { left: number; top: number; right: number; bottom: number };
-          inkPx: number;
-          insideFrame: boolean;
-          codeLines: number;
-          /** #67 round 2 negative assertion: pixels that differ between the
-           *  seeded and the unseeded compose OUTSIDE the stamp box — the seed
-           *  must appear ONLY in the stamp, never as a full-width string */
-          outsideStampDiffPx: number;
-        } | null = null;
-        const st = layoutOut.seedStamp;
-        if (st) {
-          const img = new Image();
-          await new Promise<void>((res2, rej) => { img.onload = () => res2(); img.onerror = () => rej(new Error('decode')); img.src = dataUrl; });
-          const c = document.createElement('canvas');
-          c.width = img.width; c.height = img.height;
-          const cx = c.getContext('2d')!;
-          cx.drawImage(img, 0, 0);
-          const border = 24;
-          const left = Math.round(st.right - st.width);
-          const top = Math.round(st.bandTop + st.top);
-          const w = Math.ceil(st.width), h = Math.ceil(st.height);
-          const d = cx.getImageData(left, top, w, h).data;
-          let ink = 0;
-          for (let i = 0; i < d.length; i += 4) {
-            // parchment panelSolid is #fff6e0 — ink = anything clearly off it
-            if (Math.abs(d[i] - 255) + Math.abs(d[i + 1] - 246) + Math.abs(d[i + 2] - 224) > 90) ink++;
-          }
-          // negative assertion: compose the SAME capture+stats WITHOUT the
-          // seed and diff the two canvases — every differing pixel must lie
-          // inside the stamp box (inflated a few px for the postmark tilt)
-          const plain = await composePostcard(capture, stats, undefined);
-          const img2 = new Image();
-          await new Promise<void>((res2, rej) => { img2.onload = () => res2(); img2.onerror = () => rej(new Error('decode')); img2.src = plain ?? dataUrl; });
-          const c2 = document.createElement('canvas');
-          c2.width = c.width; c2.height = c.height;
-          const cx2 = c2.getContext('2d')!;
-          cx2.fillStyle = '#fff6e0';
-          cx2.fillRect(0, 0, c2.width, c2.height);
-          cx2.drawImage(img2, 0, 0);
-          const a = cx.getImageData(0, 0, c.width, c.height).data;
-          const b = cx2.getImageData(0, 0, c.width, c.height).data;
-          // the stamp is drawn tilted (postmark), so its ink can bleed past
-          // the box by ~sin(tilt)*half-diagonal — inflate the box accordingly;
-          // the card's chunky border also moves when the band extends, so the
-          // diff only counts the frame INTERIOR (a full-width seed string
-          // lives there and is still caught)
-          const bleed = Math.ceil(0.07 * Math.max(w, h)) + 4;
-          const edge = border + 2;
-          let outside = 0;
-          for (let y = edge; y < c.height - edge; y++) {
-            for (let x = edge; x < c.width - edge; x++) {
-              const i = (y * c.width + x) * 4;
-              const diff = Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
-              if (diff > 30) {
-                const inBox = x >= left - bleed && x <= left + w + bleed && y >= top - bleed && y <= top + h + bleed;
-                if (!inBox) outside++;
-              }
-            }
-          }
-          stamp = {
-            box: { left, top, right: left + w, bottom: top + h },
-            inkPx: ink,
-            insideFrame:
-              left >= border && top >= border &&
-              left + w <= c.width - border && top + h <= c.height - border,
-            codeLines: st.codeBaselines.length,
-            outsideStampDiffPx: outside,
-          };
-        }
         return {
           ok: blob.size > 1000 && blob.type.startsWith('image/'),
           bytes: blob.size,
           stats,
-          seedCode: seed.code,
-          seedLabel: seed.label,
+          png: dataUrl,
           seenFacts: usePlacementStore.getState().seenFacts.length,
-          stamp,
           error: null,
         };
       } catch (e) {
-        return { ok: false, bytes: 0, stats: [], seedCode: '', seedLabel: '', seenFacts: 0, stamp: null, error: String(e) };
+        return { ok: false, bytes: 0, stats: [], png: '', seenFacts: 0, error: String(e) };
       }
     },
     startFromSeedCode: (code) => usePlacementStore.getState().startFromSeedCode(code),

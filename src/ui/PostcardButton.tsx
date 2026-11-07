@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { capturePostcardPng, downloadPostcard } from '../engine/postcard';
-import { composePostcard, postcardSeedText } from '../engine/postcardCompose';
+import { composePostcard } from '../engine/postcardCompose';
 import { theme, headingStyle } from './theme';
 import { CHROME_TUNING } from '../data/chrome';
 import { PostcardStats, postcardStatText } from './PostcardStats';
@@ -93,7 +93,8 @@ export function PostcardButton() {
       // the user-facing button produces the COMPOSED card (plain capture
       // stays available to the P harness via capturePostcardPng)
       const stats = postcardStatText().map((l) => ({ label: l.label, value: l.value }));
-      const composed = await composePostcard(capture, stats, postcardSeedText());
+      // #94: the postcard carries no seed — compose(capture, stats) only
+      const composed = await composePostcard(capture, stats);
       const ok = downloadPostcard(composed ?? capture);
       setSaved(ok);
       if (ok) setTimeout(() => setSaved(false), 2500);
@@ -209,6 +210,8 @@ export function PostcardButton() {
             fontFamily: theme.font.family,
             fontSize: theme.font.smallSize,
             maxWidth: 260,
+            // #94: never horizontal scroll — the popover itself never overflows
+            overflowX: 'hidden',
             pointerEvents: 'auto',
           }}
         >
@@ -225,11 +228,20 @@ export function PostcardButton() {
           </div>
           <div
             data-seed-code
+            // #94 (user scope decision): the code is a machine interface —
+            // the visible text is a truncated PREVIEW (ellipsis in a max-width
+            // block, never horizontal scroll); the FULL code stays in the DOM
+            // (select-all still copies it) and on the clipboard via the copy
+            // button, which writes the full encodeSeedCode(...) result.
+            title={encodeSeedCode(usePlacementStore.getState().worldSeed, usePlacementStore.getState().items)}
             style={{
               padding: '4px 8px',
               borderRadius: theme.border.radius,
               background: theme.color.parchment,
-              wordBreak: 'break-all',
+              maxWidth: '100%',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
               userSelect: 'all',
             }}
           >

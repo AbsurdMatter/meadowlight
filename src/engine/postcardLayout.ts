@@ -34,58 +34,6 @@ export interface CaptionLayout {
   fits: boolean;
   /** bottom padding actually left below the last line's ink */
   bottomPadding: number;
-  /**
-   * #67: the seed stamp's box, relative to the caption band's top edge and
-   * the card's right edge (right-aligned): { right, top, width, height,
-   * labelBaseline, codeBaseline }. Null when no seed stamp is drawn.
-   */
-  seedStamp: {
-    right: number;
-    top: number;
-    width: number;
-    height: number;
-    labelBaseline: number;
-    codeBaseline: number;
-    /** #67 round 2: one baseline per wrapped code line (codeBaseline = first) */
-    codeBaselines: number[];
-  } | null;
-}
-
-/**
- * #67 round 2: fit a seed code into a corner stamp — pure, measure-injected.
- * Picks the largest font size in [maxSize..minSize] whose width fits
- * maxTextW; if even minSize overflows (long codes encode every plant), wraps
- * greedily into lines that each fit. Returns the lines + the chosen size, so
- * the stamp box can be sized from the RESULT (never overflows the corner).
- */
-export function fitSeedCode(
-  code: string,
-  maxTextW: number,
-  maxSize: number,
-  minSize: number,
-  measureW: (text: string, size: number) => number,
-): { lines: string[]; size: number } {
-  let size = maxSize;
-  while (size > minSize && measureW(code, size) > maxTextW) size -= 1;
-  if (measureW(code, size) <= maxTextW) return { lines: [code], size };
-  // wrap greedily: longest prefix that fits at the floor size
-  const lines: string[] = [];
-  let rest = code;
-  while (rest.length > 0) {
-    let lo = 1, hi = rest.length, best = 1;
-    while (lo <= hi) {
-      const mid = (lo + hi) >> 1;
-      if (measureW(rest.slice(0, mid), size) <= maxTextW) {
-        best = mid;
-        lo = mid + 1;
-      } else {
-        hi = mid - 1;
-      }
-    }
-    lines.push(rest.slice(0, best));
-    rest = rest.slice(best);
-  }
-  return { lines, size };
 }
 
 /** Fallback metrics when a browser reports no font bounding boxes:
@@ -113,26 +61,6 @@ export function computeCaptionLayout(
     topPad?: number;
     titleGap?: number;
     bottomPad?: number;
-    /** #67: seed stamp metrics — measured stamp-label ascent/descent + code
-     *  ascent/descent, the stamp's horizontal padding, and the card's total
-     *  width (to right-align the stamp against the border). When omitted the
-     *  stamp is not drawn (seedStamp: null). */
-    stamp?: {
-      cardWidth: number;
-      border: number;
-      padX: number;
-      padTop: number;
-      padBottom: number;
-      labelAscent: number;
-      labelDescent: number;
-      gap: number;
-      codeAscent: number;
-      codeDescent: number;
-      stampWidth: number;
-      /** #67 round 2: wrapped code lines (default 1) + the stride between them */
-      codeLineCount?: number;
-      codeLineGap?: number;
-    };
   },
 ): CaptionLayout {
   const topPad = options?.topPad ?? 28;
@@ -147,37 +75,7 @@ export function computeCaptionLayout(
     statBaselines.push(statsTop + i * lineStride + metrics.lineAscent);
   }
   const lowestInk = statBaselines[statBaselines.length - 1] + metrics.lineDescent;
-  const baseCaptionH = lowestInk + bottomPad;
-
-  let seedStamp = null;
-  let captionH = baseCaptionH;
-  if (options?.stamp) {
-    const st = options.stamp;
-    const codeLineCount = Math.max(1, st.codeLineCount ?? 1);
-    const codeLineGap = st.codeLineGap ?? 2;
-    const codeBlock = codeLineCount * (st.codeAscent + st.codeDescent) + (codeLineCount - 1) * codeLineGap;
-    const height = st.padTop + st.labelAscent + st.labelDescent + st.gap + codeBlock + st.padBottom;
-    // #67 close-out: the stamp is a CONTAINED BOTTOM-RIGHT corner section of
-    // the caption band (the postmark reading) — bottom-aligned above the
-    // band's bottom pad, right-aligned with a real padX margin from the
-    // frame. Never the full-width bottom edge, never flush to the border.
-    const top = Math.max(topPad, baseCaptionH - bottomPad - height);
-    // the band extends if the stamp is taller than it — the stamp never clips
-    captionH = Math.max(baseCaptionH, top + height + bottomPad);
-    const codeBaselines: number[] = [];
-    for (let i = 0; i < codeLineCount; i++) {
-      codeBaselines.push(top + st.padTop + st.labelAscent + st.labelDescent + st.gap + i * (st.codeAscent + st.codeDescent + codeLineGap) + st.codeAscent);
-    }
-    seedStamp = {
-      right: st.cardWidth - st.border - st.padX, // stamp box right edge, padX inside the frame
-      top,
-      width: st.stampWidth,
-      height,
-      labelBaseline: top + st.padTop + st.labelAscent,
-      codeBaseline: codeBaselines[0],
-      codeBaselines,
-    };
-  }
+  const captionH = lowestInk + bottomPad;
   const bottomPadding = captionH - lowestInk;
   return {
     captionH,
@@ -185,6 +83,5 @@ export function computeCaptionLayout(
     statBaselines,
     fits: bottomPadding >= bottomPad * 0.5,
     bottomPadding,
-    seedStamp,
   };
 }
