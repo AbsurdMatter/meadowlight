@@ -41,6 +41,12 @@ export const SOLITARY_BEE_TUNING = {
   bobAmplitude: 0.1,
   bobSpeed: 7,
   restSeconds: [0.8, 2.2] as [number, number],
+  /** #88: departure eagerness — departChance = base + curve × colonyIntensity()
+   *  (the SAME shared population source the swarm reads — the season tuning
+   *  comes from the curve, no parallel constants). Winter foraging is off,
+   *  so solitaries rest at the hotel; active seasons forage eagerly. */
+  departChanceBase: 0.25,
+  departChanceCurve: 0.65,
   /** body: smaller and rust-toned, clearly not hive bees */
   bodySize: [0.14, 0.11, 0.2] as [number, number, number],
   bodyColor: '#b06a3c',

@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { scaledDelta, scaledElapsed } from '../engine/scaledTime';
 import * as THREE from 'three';
-import { SOLITARY_BEE_TUNING, RARE_POLLINATOR_TUNING } from '../data/bees';
+import { SOLITARY_BEE_TUNING, RARE_POLLINATOR_TUNING, BEE_TUNING } from '../data/bees';
 import { PLANT_BY_ID } from '../data/plants';
 import { usePlacementStore } from './placementStore';
 import { registerWildlifeProbe } from './magnifierProbes';
 import { inBloom } from '../engine/pollinator';
+import { colonyIntensity } from '../engine/lifecycle';
 import { noVariation } from '../engine/variation';
 import type { PlacedStructure } from '../engine/persistence';
 
@@ -121,17 +122,25 @@ export function SolitaryBees() {
     if (!body || !stripes || !wings || !rareBody || !rareStripes || !rareWings) return;
     const s = usePlacementStore.getState();
     const season = s.season;
-    const foraging = ['spring', 'summer', 'autumn'].includes(season);
+    // one source for the active seasons (src/data/bees.ts), no parallel list
+    const foraging = BEE_TUNING.foragingSeasons.includes(season);
     syncFlowers();
 
     const hotels = s.structures.filter((st) => st.structureId === 'hotel');
     const corners = s.structures.filter((st) => st.structureId === 'wildcorner');
 
-    // --- solitary bees: up to perHotel per placed hotel, if flowers bloom nearby
-    const perHotelNow = foraging ? SOLITARY_BEE_TUNING.perHotel : 1;
-    const key = hotels.map((h) => h.id).join(',') + '|' + season;
+    // --- solitary bees: up to perHotel per placed hotel, scaled by the SAME
+    // shared population curve the hive swarm reads (one source —
+    // engine/lifecycle colonyIntensity, no parallel constants)
+    const perHotelNow = Math.max(1, Math.round(SOLITARY_BEE_TUNING.perHotel * colonyIntensity()));
+    const key = hotels.map((h) => h.id).join(',') + '|' + perHotelNow;
     if (key !== lastKey.current) {
       lastKey.current = key;
+      // drop bees whose hotel vanished FIRST, then size the list to the
+      // survivors — growing before the drop under-counts (the old list
+      // length includes bees about to be filtered out)
+      const hotelIds = new Set(hotels.map((h) => h.id));
+      bees.current = bees.current.filter((b) => hotelIds.has(b.hotelId));
       const want = Math.min(MAX_SOLO, hotels.length * perHotelNow);
       const list = bees.current;
       while (list.length > want) list.pop();
@@ -153,9 +162,6 @@ export function SolitaryBees() {
           restingUntil: 0,
         });
       }
-      // drop bees whose hotel vanished
-      const hotelIds = new Set(hotels.map((h) => h.id));
-      bees.current = bees.current.filter((b) => hotelIds.has(b.hotelId));
     }
 
     const t = scaledElapsed();
@@ -180,9 +186,26 @@ export function SolitaryBees() {
       }
       if (bee.restingUntil <= t && bee.targetFlowerId === null) {
         const near = bloomingNear(hotel.position[0], hotel.position[2], SOLITARY_BEE_TUNING.forageRadius, season);
-        if (foraging && near.length > 0 && Math.random() > 0.2) {
+        // #88: departures are curve-tuned — the SAME colonyIntensity() the swarm
+        // reads sets how eagerly solitaries leave the hotel this season (the
+        // hotel is a nest they return to, not a perch). Winter: foraging off,
+        // so they stay home and rest.
+        const departChance = foraging
+          ? SOLITARY_BEE_TUNING.departChanceBase + SOLITARY_BEE_TUNING.departChanceCurve * colonyIntensity()
+          : 0;
+        if (near.length > 0 && Math.random() < departChance) {
           bee.targetFlowerId = near[Math.floor(Math.random() * near.length)];
-          bee.headingHome = false;
+          // re-resolve the target IMMEDIATELY (the bees-idle-at-hive pattern):
+          // without this the bee steers home this same frame, "arrives" at the
+          // hotel, and parks there forever — the #88 observable
+          flowerInfo = flowerById.get(bee.targetFlowerId) ?? undefined;
+          if (flowerInfo && !inBloom(flowerInfo.plantId, season)) flowerInfo = undefined;
+          if (flowerInfo) {
+            bee.headingHome = false;
+          } else {
+            bee.targetFlowerId = null;
+            bee.headingHome = true;
+          }
         } else {
           bee.headingHome = true;
         }

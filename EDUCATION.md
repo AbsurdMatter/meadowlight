@@ -12,6 +12,11 @@ where possible. Never lecture; imagine a beekeeper friend chatting over a fence.
   most are gentle stingers because they have no colony to defend.
 - A single mason bee can pollinate as many flowers as roughly 100 honeybees —
   wild bees often outperform hives at pollination.
+- A mason bee treats a bee hotel as her NEST, not her perch: she shuttles
+  flower to flower all day carrying pollen on her belly, then returns to the
+  tube to stock a cell and seal it with mud — one female may visit about
+  2,000 blossoms a day (verified, session 11: UC ANR / SARE mason-bee
+  lifecycle figures).
 - A shallow dish of water with pebbles gives bees a safe place to drink;
   without a perch, they can drown in even a birdbath.
 - Lavender at peak bloom can feed dozens of bumblebees at once — plant enough
@@ -22,6 +27,10 @@ where possible. Never lecture; imagine a beekeeper friend chatting over a fence.
   butterflies a place to overwinter.
 - In winter, the honeybee colony clusters around the queen and shivers to
   keep her at a cozy ~21°C, feeding on stored honey.
+- In spring the queen ramps up to about 1,500–2,000 eggs a day, so a colony
+  that tucked in for winter rebuilds to full strength in a matter of weeks
+  (verified, session 11: standard beekeeping figures for the spring
+  build-up laying rate).
 - Bees can see ultraviolet — many flowers have landing-strip patterns
   invisible to us, guiding bees straight to the nectar.
 - One in three bites of food depends on pollinators.

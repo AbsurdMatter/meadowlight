@@ -53,9 +53,14 @@ $anyFailed = $false
 foreach ($job in $jobs) {
   $label = $job.Script + ' ' + ($job.Args -join ' ')
   Write-Host "=== $label"
+  # PS 5.1-safe invocation: ProcessStartInfo.ArgumentList is .NET Core 2.1+ /
+  # PowerShell 7+ only (null on 5.1). Build a single Arguments string instead.
+  $argString = ($job.Args | ForEach-Object {
+      if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\\"') + '"' } else { $_ }
+    }) -join ' '
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName = $node
-  foreach ($a in $job.Args) { [void]$psi.ArgumentList.Add($a) }
+  $psi.Arguments = ('"' + $job.Script + '" ' + $argString)
   $psi.WorkingDirectory = $root
   $psi.RedirectStandardOutput = $true
   $psi.RedirectStandardError = $true

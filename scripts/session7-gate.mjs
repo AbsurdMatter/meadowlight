@@ -524,7 +524,9 @@ async function checkColony() {
       seasons.spring.target > 0.4 &&
       seasons.summer.target > seasons.spring.target &&
       Math.abs(seasons.summer.target - seasons.autumn.target) < 0.5 &&
-      seasons.winter.target < 0.15 &&
+      // #87 verdict B: winter keeps the LIVING cluster floor (winterFloor 0.45);
+      // the old die-off curve read < 0.15 here
+      seasons.winter.target >= 0.4 &&
       seasons.winter.line.includes('clustered snug') &&
       seasons.spring.line.includes('waking');
     rec.record(
@@ -582,14 +584,94 @@ async function checkColony() {
       w.timeSetSpeed(1);
       return samples;
     });
-    // the breath shape across the trace: some rise, some low cluster phase
+    // the breath shape across the trace: some rise, a tucked winter band — and
+    // #87: never a die-off (the old curve dropped under 0.15; verdict-B winter
+    // band is ~0.45–0.55, so assert the band exists AND the floor never collapses)
     const rises = trace.some((s, i) => i > 0 && s.intensity > trace[i - 1].intensity + 0.05);
-    const clusters = trace.some((s) => s.target < 0.15);
+    const tucked = trace.some((s) => s.target <= 0.7);
+    const neverDieOff = trace.every((s) => s.target >= 0.3);
     const peaks = trace.some((s) => s.intensity > 0.5);
     rec.record(
       'colony.full-year-accelerated-trace',
-      rises && clusters && peaks,
-      JSON.stringify(trace) + ' (rise + hold + cluster phases observed)',
+      rises && tucked && neverDieOff && peaks,
+      JSON.stringify(trace) + ' (rise + hold + lively-cluster phases observed, no die-off)',
+    );
+  }
+
+  // 2b. #87 (verdict B): the bee-year curve — SLOPE assertions read from the SAME
+  //     source the swarm uses (colonyReadback().target = the pure data curve).
+  //     Deterministic: progress stepped directly; the target read is pure/instant.
+  {
+    const curve = await page.evaluate(() => {
+      const w = window.__meadowlight;
+      const read = (season, p) => {
+        w.setSeason(season);
+        w.setSeasonProgressForTest(p);
+        return +w.colonyReadback().target.toFixed(4);
+      };
+      return {
+        spring: [0, 0.25, 0.5, 0.75, 1].map((p) => read('spring', p)),
+        summer: [0, 0.5, 1].map((p) => read('summer', p)),
+        autumn: [0, 0.5, 1].map((p) => read('autumn', p)),
+        winter: [0, 0.25, 0.5, 0.75, 1].map((p) => read('winter', p)),
+      };
+    });
+    const minWinter = Math.min(...curve.winter);
+    rec.record(
+      'colony.winter-floor-never-die-off',
+      minWinter >= 0.4, // verdict-B winterFloor 0.45; the old die-off curve read ~0.0–0.08
+      JSON.stringify(curve.winter),
+    );
+    const ticks = curve.spring.slice(1).map((v, i) => +(v - curve.spring[i]).toFixed(4));
+    const monotone = ticks.every((d) => d > 0);
+    const firstTick = ticks[0];
+    const minSlope = 0.2; // per 0.25-progress tick; verdict-B shape 2 gives ~0.2406 on tick 1
+    const endsAtPeak = curve.spring[4] >= 0.89;
+    const avgSpring = +(curve.spring[4] - curve.spring[0]).toFixed(4);
+    const avgAutumn = +Math.abs(curve.autumn[2] - curve.autumn[0]).toFixed(4);
+    const frontLoaded = curve.spring[2] - curve.spring[0] > 2 * (curve.spring[4] - curve.spring[2]);
+    rec.record(
+      'colony.spring-slope-steepest',
+      monotone && firstTick >= minSlope && endsAtPeak && avgSpring > avgAutumn && frontLoaded,
+      JSON.stringify({ ticks, firstTick, minSlope, endsAtPeak, avgSpring, avgAutumn, frontLoaded }),
+    );
+    const plateau =
+      curve.summer.every((v) => Math.abs(v - curve.summer[0]) < 1e-9) && curve.summer[0] >= 0.89;
+    rec.record('colony.summer-plateau', plateau, JSON.stringify(curve.summer));
+  }
+
+  // 2c. #87 (verdict B): the winter floor is VISIBLE — live swarm + solitary counts
+  //     in a deterministic fixture (hive + bath + hedge + hotel + winter bloom,
+  //     day phase pinned per the #82 lesson) after the live breath settles.
+  {
+    const live = await page.evaluate(async () => {
+      const w = window.__meadowlight;
+      w.clear();
+      w.placeStructure('hive', 0, 0);
+      w.placeStructure('bath', 2.5, 0.5);
+      w.placeStructure('hedge', -6, -5);
+      w.placeStructure('hotel', -3, 3);
+      const spots = [[3, 1], [4.5, 2.5], [2, 3.5], [-2, 4], [-4, 2], [3.5, -2.5], [-3, -3], [5.5, 0.5], [1.5, -3], [6, 2]];
+      for (const [x, z] of spots) if (w.isPlantableCellReadback(x, z)) w.plant('crocus', x, z);
+      w.setSeason('winter');
+      w.setSeasonProgressForTest(0.5);
+      w.setDayPhase(0.5); // midday pinned
+      w.timeSetPaused(false);
+      w.timeSetSpeed(1);
+      await new Promise((r) => setTimeout(r, 8000)); // ease onto the winter target (k=dt/2.5)
+      const rb = w.colonyReadback();
+      return {
+        target: +rb.target.toFixed(4),
+        intensity: +rb.intensity.toFixed(4),
+        bees: w.beeCount(),
+        solitary: w.solitaryBeeCount(),
+        daylight: w.daylightReadback(),
+      };
+    });
+    rec.record(
+      'colony.winter-floor-visible',
+      live.target >= 0.4 && live.bees >= 4 && live.solitary >= 2 && live.daylight,
+      JSON.stringify(live) + ' (verdict B: winter floor 0.45 -> >=4 hive bees + >=2 solitary visible at midday)',
     );
   }
 
