@@ -376,9 +376,16 @@ function PerfOverlayPanel() {
         fontSize: 13,
         lineHeight: 1.6,
         pointerEvents: 'auto',
-        whiteSpace: 'pre',
+        // #95: rows must WRAP within the panel width at any font metric —
+        // 'pre' never wrapped, so long rows (brake readout, colony line,
+        // values) overflowed horizontally on real-font machines. Vertical
+        // scroll stays; horizontal never (overflowX hidden as the hard
+        // guarantee, pre-wrap + anywhere as the readable mechanism).
+        whiteSpace: 'pre-wrap',
+        overflowWrap: 'anywhere',
         maxHeight: '80vh',
         overflowY: 'auto',
+        overflowX: 'hidden',
       }}
     >
       <div style={{ fontWeight: 'bold', marginBottom: 4 }}>perf overlay (P / ~)</div>

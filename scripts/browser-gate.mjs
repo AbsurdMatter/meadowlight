@@ -191,8 +191,62 @@ async function runChecks(browser) {
           JSON.stringify(winter) + ' (winter: all solitaries resting at the hotel, curve floor held)',
         );
       } else if (check === 'perf') {
-        // full-polish gate handled by the dedicated perf script
-        record('perf.placeholder', true, '');
+        // #95: the P panel opens on the real P key and NEVER overflows
+        // horizontally — scrollWidth <= clientWidth on the panel element and
+        // every descendant row, at 1280x800 AND 360x800, in both locales.
+        // Vertical scroll is fine; horizontal never. The computed-style
+        // assertion (pre-wrap) makes the mechanism check deterministic
+        // agent-side; the scroll assertions are the user-machine acceptance
+        // (real-font metrics overflow under 'pre' even when headless does not).
+        await page.evaluate(() => {
+          const w = window.__meadowlight;
+          w.dismissOnboardingForTest();
+          w.resetWorld();
+          w.placeStructure('hive', 0, 0);
+          w.placeStructure('hotel', -3, 3);
+          const ids = ['lavender', 'cosmos', 'poppy', 'clover', 'thyme', 'crocus'];
+          for (let i = 0; i < 12; i++) w.plant(ids[i % ids.length], -8 + (i % 4) * 5, -6 + Math.floor(i / 4) * 5);
+          w.setSeason('winter'); // the longest colony-line row
+          w.setSeasonProgressForTest(0.5);
+        });
+        await page.waitForTimeout(1200);
+        await page.keyboard.press('p'); // the real open path
+        await page.waitForTimeout(800);
+        const opened = await page.evaluate(() => !!document.querySelector('[data-perf-panel="p"]'));
+        record('perf.panel-opens-on-p-key', opened, 'panel present after P key: ' + opened);
+        for (const vp of [{ w: 1280, h: 800 }, { w: 360, h: 800 }]) {
+          await page.setViewportSize({ width: vp.w, height: vp.h });
+          for (const loc of ['en', 'sl']) {
+            await page.evaluate((l) => window.__meadowlight.setLocaleForTest(l), loc);
+            await page.waitForTimeout(400);
+            const m = await page.evaluate(() => {
+              const panel = document.querySelector('[data-perf-panel="p"]');
+              if (!panel) return { open: false };
+              const offenders = [];
+              for (const el of [panel, ...panel.querySelectorAll('*')]) {
+                if (el.scrollWidth > el.clientWidth) {
+                  offenders.push(el.tagName + ' sw=' + el.scrollWidth + ' cw=' + el.clientWidth + ' text=' + (el.textContent || '').slice(0, 36));
+                }
+              }
+              const cs = getComputedStyle(panel);
+              return {
+                open: true,
+                ws: cs.whiteSpace,
+                panelSW: panel.scrollWidth,
+                panelCW: panel.clientWidth,
+                nOff: offenders.length,
+                offenders: offenders.slice(0, 6),
+              };
+            });
+            record(
+              `perf.panel-no-horizontal-overflow@${vp.w}x${vp.h}@${loc}`,
+              m.open === true && m.panelSW <= m.panelCW && m.nOff === 0 && m.ws === 'pre-wrap',
+              JSON.stringify(m),
+            );
+          }
+        }
+        await page.evaluate(() => window.__meadowlight.setLocaleForTest('en'));
+        await page.keyboard.press('p'); // close the panel again
       } else {
         record(`unknown-check:${check}`, false, 'no such check');
       }
