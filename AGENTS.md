@@ -49,6 +49,22 @@ aths, and wild-corner patches — all voxel, all charming.
 7. Save/load to localStorage; postcard screenshot button.
 8. No console errors; verified by running the dev server.
 
+### Final state (end of session 10, PR #57 head)
+
+The session-3 DoD above is met and extended. Final state at the PR #57 head:
+
+- Full gate suite **202 PASS / 0 FAIL** on a fresh dev server (committed
+  runner `scripts/run-all-gates.ps1`, invoked per family; check-name
+  consistency enforced by `gate-list-lint` in CI on every push).
+- All invariants in-tree: engine unit suite (113 tests) covers the rim/ridge
+  layout sweeps (#66/#83 class), the magnifier claim rules (#85), the
+  postcard layout (#67), the seeding brake (#78); gate scripts parse-checked
+  and linted in `test:smoke` (unit + tsc + vite build + gate lints).
+- CI green on every commit of the branch (PR #57 runs all `success`).
+- Every fix landed with a named commit and its issue closed with green
+  evidence (the #59–#86 sweep plus #67/#76/#78 close-out fixes); the v4
+  post-mortem with 13 lessons is posted on PR #57 under `## v4`.
+
 ## Workflow rules
 
 - After completing each numbered session goal in ROADMAP.md, commit with a
