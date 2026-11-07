@@ -100,32 +100,28 @@ export function resolveWildlifeHit(
 export const WILDLIFE_CONTAINMENT_RADIUS = 0.2;
 
 /**
- * #85: the symmetric claim rule (#6384878002) extended to wildlife — but
- * with REAL on-creature containment. When a creature is hit, it may overtake
- * a MESH-OWNED entry (flower/structure) only if BOTH hold: the ray passes
- * through the creature's body (perpSq <= containment radius^2 — the creature
- * is actually under the pointer), AND the creature is nearer ALONG the ray
- * than the live mesh claim bar. Hovering a bee dead-on in front of a flower
- * shows the BEE; a creature merely beside the ray never displaces a mesh
- * claim. Mesh-vs-mesh ownership is unchanged, and on a MISS the mesh-owned
- * entry is never touched (the resolver's miss path keeps that rule
- * absolutely).
+ * #85 round 4: OWNERSHIP-FIRST, absolute. A MESH-OWNED entry (flower /
+ * structure hover) is NEVER overtaken by wildlife — not even by a creature
+ * dead-on under the pointer and nearer along the ray. The aefcd1b verdict
+ * measured both: a hoverfly owned a flower hover, and a hivebee 0.86u from
+ * a flower owned a clustering entry after a 2s hold, with the entry STABLE
+ * (held >= 250ms) — both creatures were genuinely dead-on in front of the
+ * mesh (along < claim bar), so the along-rule overtake fired; the resolver
+ * genuinely preferred creatures over the hovered mesh, and that is the world
+ * bug. The rule per the issue body: mesh-owned entries may not be overtaken.
+ * Wildlife claims only over a claimable entry (null or visitor).
  */
-export function wildlifeOvertakesMeshClaim(
-  hit: WildlifeHit | null,
-  claimBar: number | null,
-): boolean {
-  if (!hit) return false;
-  if (hit.perpSq > WILDLIFE_CONTAINMENT_RADIUS * WILDLIFE_CONTAINMENT_RADIUS) return false;
-  return claimBar === null || hit.along < claimBar;
+export function wildlifeClaimableHit(hit: WildlifeHit | null, currentMeshOwned: boolean): WildlifeHit | null {
+  if (currentMeshOwned) return null; // ownership-first: the mesh owns the entry
+  return wildlifeClaimHit(hit);
 }
 
 /**
- * #85 round 3: the containment gate for EVERY wildlife claim, not only the
- * mesh overtake. A creature merely NEAR the ray — inside the glass reach
- * (1.1u) but off the body (perp > 0.2u) — must never win or switch the
- * entry: the resolver treats a non-contained hit exactly like a miss. Only
- * a creature the pointer ray actually passes through may hold the card.
+ * #85 round 3: the containment gate for every wildlife claim. A creature
+ * merely NEAR the ray — inside the glass reach (1.1u) but off the body
+ * (perp > 0.2u) — must never win or switch the entry: a non-contained hit
+ * is treated exactly like a miss. Only a creature the pointer ray actually
+ * passes through may hold the card.
  */
 export function wildlifeClaimHit(hit: WildlifeHit | null): WildlifeHit | null {
   return hit !== null && hit.perpSq <= WILDLIFE_CONTAINMENT_RADIUS * WILDLIFE_CONTAINMENT_RADIUS

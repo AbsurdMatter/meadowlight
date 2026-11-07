@@ -104,7 +104,7 @@ const { isPlantableCell, groundAt: groundAtReadback } = require(OUT + '/engine/g
 const { hillsCover: hillsCoverReadback, rimBoxes: rimBoxesReadback, hillsBoxes: hillsBoxesReadback, ridgeBoxes: ridgeBoxesReadback, hillsInstanceCapacity: hillsInstanceCapacityReadback, ridgeInstanceCapacity: ridgeInstanceCapacityReadback } = require(OUT + '/engine/hillsLayout.js');
 const { seasonWindows, precipReadback, tickPrecipScheduleForTest, nextWindowAfter } = require(OUT + '/engine/rainSchedule.js');
 const { wasVisitedThisSeason, withVisit, visitedParents } = require(OUT + '/engine/visits.js');
-const { resolveWildlifeHit, nextWildlifeEntry, wildlifeOvertakesMeshClaim, wildlifeClaimHit } = require(OUT + '/engine/magnifierHit.js');
+const { resolveWildlifeHit, nextWildlifeEntry, wildlifeClaimableHit, wildlifeClaimHit } = require(OUT + '/engine/magnifierHit.js');
 const { MAGNIFIER_WILDLIFE } = require(OUT + '/data/magnifierWildlife.js');
 const { MAGNIFIER_KINDS } = require(OUT + '/data/magnifierKinds.js');
 const { starterPatchFor } = require(OUT + '/engine/starterPatch.js');
@@ -1672,20 +1672,19 @@ test('wildlife hit: the hit carries its along-ray distance for claim comparison 
   assert.ok(Math.abs(hit.along - 30) < 1e-9, 'along = distance along the ray to the winner, got ' + hit.along);
 });
 
-test('#85: wildlife overtakes a mesh claim only when ON the creature AND nearer along the ray', () => {
-  const onCreature = { kind: 'hivebee', along: 5, perpSq: 0.01 }; // ray through the body
-  assert.strictEqual(wildlifeOvertakesMeshClaim(onCreature, 10), true, 'dead-on creature nearer along the ray than the mesh claim wins');
-  assert.strictEqual(wildlifeOvertakesMeshClaim(onCreature, 3), false, 'creature behind the mesh claim loses (the flower in front owns the card)');
-  assert.strictEqual(wildlifeOvertakesMeshClaim(onCreature, null), true, 'no live mesh claim — the resolver claims freely');
-  assert.strictEqual(wildlifeOvertakesMeshClaim(null, 10), false, 'a miss never overtakes a mesh-owned entry');
-  // round 2: containment boundary — a creature BESIDE the ray (perp 0.27u,
-  // within the glass reach but outside the body) never displaces a mesh
-  // claim, even when nearer along the ray than the claim bar
+test('#85 round 4: ownership-first — wildlife NEVER overtakes a mesh-owned entry, even dead-on and nearer along the ray', () => {
+  const onCreature = { kind: 'hivebee', along: 5, perpSq: 0.01 }; // ray through the body, nearer than any mesh claim
+  assert.strictEqual(wildlifeClaimableHit(onCreature, true), null, 'a mesh-owned (flower/structure) entry is never overtaken — the aefcd1b hoverfly/hivebee flower-hover thefts were dead-on AND nearer and still must not win');
+  assert.strictEqual(wildlifeClaimableHit(onCreature, false), onCreature, 'over a claimable entry (null/visitor) a dead-on creature claims freely');
+  assert.strictEqual(wildlifeClaimableHit(null, false), null, 'a miss never claims');
+  // round 3 containment still applies on the claimable side: a creature
+  // BESIDE the ray (perp 0.27u, within the glass reach but outside the body)
+  // never wins or switches the entry (the 857e4f4 overcorrection)
   const beside = { kind: 'hivebee', along: 5, perpSq: 0.27 * 0.27 };
-  assert.strictEqual(wildlifeOvertakesMeshClaim(beside, 10), false, 'creature 0.27u off-ray beside the hovered flower must NOT steal the entry (the 857e4f4 overcorrection)');
-  assert.strictEqual(wildlifeOvertakesMeshClaim(beside, null), false, 'containment is required even with no live mesh claim bar');
+  assert.strictEqual(wildlifeClaimableHit(beside, false), null, 'creature 0.27u off-ray must not win even with no mesh-owned entry live');
+  assert.strictEqual(wildlifeClaimableHit(beside, true), null, 'creature 0.27u off-ray must not win over a mesh-owned entry either');
   const atEdge = { kind: 'hivebee', along: 5, perpSq: 0.2 * 0.2 };
-  assert.strictEqual(wildlifeOvertakesMeshClaim(atEdge, 10), true, 'perp exactly at the containment radius still counts as on-creature');
+  assert.strictEqual(wildlifeClaimableHit(atEdge, false), atEdge, 'perp exactly at the containment radius still claims over a claimable entry');
 });
 
 test('#85 round 3: containment gates EVERY wildlife claim — a near-ray creature is a miss, never the entry', () => {

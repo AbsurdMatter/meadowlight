@@ -253,6 +253,26 @@ async function checkMagnifier() {
     await page.mouse.move(flowerHover.screen.x, flowerHover.screen.y);
   }
   await page.waitForTimeout(1500); // hover + resolver frames elapse
+  // #85 round 4 (aefcd1b verdict): the probes must assert the STABLE entry —
+  // the same 250ms stability standard the journal write uses (89182a6), not
+  // a single instant read that can catch a transient dead-on crossing. Read,
+  // wait past the standard, read again. A FAIL names its side: stable entry
+  // is the creature => WORLD (the resolver genuinely prefers creatures over
+  // the hovered mesh); stable entry is the flower but the instant read
+  // flipped => DETECTOR (transient read, stability discipline).
+  const readStableEntry = async () => {
+    const instant = await page.evaluate(() => window.__meadowlight.magnifierReadback().entry);
+    await page.waitForTimeout(300); // > the 250ms stability standard
+    const stable = await page.evaluate(() => window.__meadowlight.magnifierReadback().entry);
+    const agrees = JSON.stringify(instant) === JSON.stringify(stable);
+    const side =
+      stable && stable.kind !== 'flower'
+        ? 'WORLD (stable entry is ' + JSON.stringify(stable) + ')'
+        : agrees
+          ? 'neither'
+          : 'DETECTOR (stable=flower, instant read flipped transiently)';
+    return { instant, stable, agrees, side };
+  };
   const flowerHoverCard = await page.evaluate(() => {
     const w = window.__meadowlight;
     const el = document.querySelector('[data-magnifier-card="true"]');
@@ -264,12 +284,13 @@ async function checkMagnifier() {
       pointerEvents: el ? getComputedStyle(el).pointerEvents : 'n/a',
     };
   });
-  // THE REGRESSION ASSERTION: after hover + resolver frames, the entry is
-  // STILL a flower (the resolver must not steal it — pollinators cluster
+  // THE REGRESSION ASSERTION: after hover + resolver frames, the STABLE
+  // entry is a flower (the resolver must not steal it — pollinators cluster
   // on flowers) and the card shows the flower fact + visit readout
+  const flowerStable = await readStableEntry();
   const flowerHoverOk =
     flowerHover.ok &&
-    flowerHoverCard.entry.entry?.kind === 'flower' &&
+    flowerStable.stable?.kind === 'flower' &&
     flowerHoverCard.visible &&
     flowerHoverCard.text.length > 0 &&
     /waiting for its first pollinator visit|visited by a pollinator this season/.test(flowerHoverCard.text);
@@ -277,7 +298,9 @@ async function checkMagnifier() {
     !flowerHover.ok
       ? 'hover-path setup failed: ' + (flowerHover.reason ?? '')
       : flowerHoverCard.visible
-        ? 'real-hover entry: ' + JSON.stringify(flowerHoverCard.entry.entry) + ' — card: ' + flowerHoverCard.text.slice(0, 60)
+        ? 'real-hover instant entry: ' + JSON.stringify(flowerHoverCard.entry.entry) +
+          ' — stable entry (300ms re-read): ' + JSON.stringify(flowerStable.stable) +
+          ' — side: ' + flowerStable.side + ' — card: ' + flowerHoverCard.text.slice(0, 60)
         : 'no card rendered on real flower hover with glass armed');
   // #6384690070, THE CLUSTERING CASE: hover a flower WITH a pollinator on
   // it — the ecological scenario where a creature sits within wildlifeReach
@@ -340,24 +363,23 @@ async function checkMagnifier() {
     await page.mouse.move(clusteringHover.screen.x, clusteringHover.screen.y);
     await page.waitForTimeout(2000);
   }
-  const clusteringEntry = await page.evaluate((itemId) => {
-    const w = window.__meadowlight;
-    return { entry: w.magnifierReadback(), wanted: itemId };
-  }, clusteringHover.ok ? clusteringHover.itemId : null);
   // #6384878002 assertion audit: the INVARIANT is that a FLOWER entry
   // survives 2s of resolver frames while a pollinator clusters on it —
   // not that it is one exact projected itemId (the projection can land on
   // an occluding bloom of the same species; the exact-id comparison FAILED
   // while the survival itself held, per the user's output). Assert the
-  // invariant; print the entry for diagnosis.
+  // invariant on the STABLE entry (#85 round 4: same 250ms standard as the
+  // journal write); print instant + stable + the named side for diagnosis.
+  const clusteringStable = await readStableEntry();
   const clusteringOk =
     clusteringHover.ok &&
-    clusteringEntry.entry.entry?.kind === 'flower';
+    clusteringStable.stable?.kind === 'flower';
   rec.record('magnifier.flower-survives-pollinator-clustering', clusteringOk,
     !clusteringHover.ok
       ? 'clustering setup failed: ' + (clusteringHover.reason ?? '')
-      : 'bee ' + clusteringHover.beeDist.toFixed(2) + 'u from flower — entry after 2s hold: ' +
-        JSON.stringify(clusteringEntry.entry.entry));
+      : 'bee ' + clusteringHover.beeDist.toFixed(2) + 'u from flower — instant entry after 2s hold: ' +
+        JSON.stringify(clusteringStable.instant) + ' — stable entry (300ms re-read): ' +
+        JSON.stringify(clusteringStable.stable) + ' — side: ' + clusteringStable.side);
 
   // DoD-walk fix gate (#6384544116): the fireflies note records only inside
   // the NATURAL visibility window — a forced (test) state must NOT write a
