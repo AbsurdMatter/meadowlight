@@ -382,9 +382,19 @@ export function KeyboardShortcuts() {
       // measure exceeds the band, so the rendered bottom never passes floorY
       // (which is already the corner row's measured top - 8) at any viewport.
       const renderedH = panel.getBoundingClientRect().height;
-      if (panelMaxHeight === null) contentHRef.current = Math.max(contentHRef.current, renderedH);
+      // pre-merge FAIL 3 residue (panel∩cornerRow@360x500 on real-font
+      // platforms, e.g. Windows ClearType): the content readback can
+      // under-measure the true RENDERED height (fractional rasterizer rows),
+      // which left the clamp off while the rendered box still overshot the
+      // floor (band 9.6, rendered 28, bottom 378.4 vs cornerRow top 368).
+      // Track the rendered rect on EVERY pass and clamp whenever the rendered
+      // bottom passes floorY — the rendered rect is the only cross-rasterizer
+      // truth. cssMaxHeight = floor(realBand) then pins the rendered bottom at
+      // or under floorY (= cornerTop - 8) on any platform.
+      contentHRef.current = Math.max(contentHRef.current, renderedH);
       const effectiveNatural = Math.max(naturalHeight, contentHRef.current);
-      const needClamp = effectiveNatural > realBand + 0.5;
+      const overFloor = rect.bottom > floorY + 0.5;
+      const needClamp = effectiveNatural > realBand + 0.5 || overFloor;
       const cssMaxHeight = needClamp ? Math.floor(realBand) : null;
       // #65 round-13: the rendered height has a hard floor of padding+border
       // (12+12+2+2 = 28px here) — CSS cannot shrink chrome, so when the
