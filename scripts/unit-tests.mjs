@@ -89,7 +89,7 @@ const { variationFor, rollVariation, noVariation, VARIATION_TUNING } = require(O
 const { choosePlantFact, chooseStructureFact, chooseMeadowFact } = require(OUT + '/engine/factSelection.js');
 const { flowerBlocked, structureBlocked } = require(OUT + '/engine/collision.js');
 const { computeCaptionLayout, fallbackMetrics } = require(OUT + '/engine/postcardLayout.js');
-const { rollVolunteers, compatibleSeedling } = require(OUT + '/engine/seeding.js');
+const { rollVolunteers, compatibleSeedling, seedingBrakeEngaged, maxVolunteerCap } = require(OUT + '/engine/seeding.js');
 const { colonyIntensityTarget, LIFECYCLE_LINES } = require(OUT + '/data/lifecycle.js');
 const { HABITAT_TUNING, cornerFoldCells, cornerKey, pondSegments, fringeCells, pondClusters } = require(OUT + '/data/habitatScenery.js');
 const { NIGHT_SKY_TUNING, CLOUDS_OPACITY_BEFORE } = require(OUT + '/data/nightSky.js');
@@ -836,6 +836,11 @@ test('seeding: the cumulative brake pauses seeding above the share — never rem
   assert.ok(resumed.length >= 0, 'seeding may resume under the new, higher ceiling');
   // and the brake NEVER removes: at-the-share items are untouched
   assert.strictEqual(items.filter((it) => it.volunteer).length, 3, 'no volunteer was removed');
+  // #78: the P panel readout reads the SAME predicate the roll uses
+  assert.strictEqual(seedingBrakeEngaged(3, 20), true, 'at the 15% share the brake reads engaged (3/20)');
+  assert.strictEqual(seedingBrakeEngaged(2, 20), false, 'below the share the brake reads active (2/20)');
+  assert.strictEqual(seedingBrakeEngaged(0, 0), false, 'an empty meadow never reads engaged');
+  assert.strictEqual(maxVolunteerCap(20), 3, 'cap = floor(20 * maxVolunteerFraction)');
 });
 
 test('seeding: volunteers land only in plantable cells, roster-compatible, blooming in the new season', () => {

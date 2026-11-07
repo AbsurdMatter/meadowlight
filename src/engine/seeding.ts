@@ -63,6 +63,20 @@ function regionKey(x: number, z: number): string {
 }
 
 /**
+ * #78: the cumulative brake predicate — the ONE source both the seeding
+ * site (rollVolunteers below) and the P panel readout read. No re-derivation
+ * at the readout: the same share comparison the seeding site uses.
+ */
+export function maxVolunteerCap(totalItems: number): number {
+  return Math.floor(totalItems * SEEDING_TUNING.maxVolunteerFraction);
+}
+
+/** brake engaged = volunteers already at/above the tuned share of the meadow */
+export function seedingBrakeEngaged(existingVolunteers: number, totalItems: number): boolean {
+  return totalItems > 0 && existingVolunteers >= maxVolunteerCap(totalItems);
+}
+
+/**
  * Decide this rollover's volunteers.
  *
  * @param items        live meadow (parents = items blooming in `endedSeason`)
@@ -90,8 +104,8 @@ export function rollVolunteers(
   // removes anything — no fail state); planting more or clearing some
   // resumes it. This is the constraint the returning visitor actually feels.
   const existingVolunteers = items.filter((it) => it.volunteer === true).length;
-  const maxVolunteers = Math.floor(items.length * SEEDING_TUNING.maxVolunteerFraction);
-  if (existingVolunteers >= maxVolunteers) return [];
+  if (seedingBrakeEngaged(existingVolunteers, items.length)) return [];
+  const maxVolunteers = maxVolunteerCap(items.length);
   // parents: flowers that bloomed during the season just ended AND were
   // visited by a pollinator during it (N2: unvisited flowers don't set
   // seed — the precondition is a FILTER before the rolls, so the roll
