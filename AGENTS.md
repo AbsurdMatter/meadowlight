@@ -94,6 +94,29 @@ the following hold:
    before eyeball verdicts; stability-read probes; no new scope without an
    issue.
 
+#### Final state (end of session 11, PR #93 head 3cd4783) — DoD COMPLETE
+
+All six items above are met. R1–R5 plus #92/#94/#95 landed as named commits,
+CI `smoke` green on every commit of the branch:
+
+- R1 kickoff `5abbf29`: this DoD + the check-writing canon; #92 runner fix
+  `de32f47` (PS 5.1-safe invocation block; user's PS 5.1 run = the verdict).
+- R2 #87 `d231756`: bee-year curve at verdict B (winterFloor 0.45, rushing
+  spring), one shared source, slope-gated (colony family 8/8).
+- R3 #88 `aaed2b3`: solitary bees forage (same-frame steering root cause
+  fixed), #85-standard claim checks green.
+- R4 #89 `883158f`: ML2 codes (payload trim 8→5 chars/plant), ML1 migration,
+  uniqueness + legacy round-trip green.
+- R5 #77 `1aa2d93`: brake 0.15→0.40, gate intents moved via readback hooks.
+- #95 `53c48b9` P panel wraps (no horizontal overflow, both viewports/locales);
+  #94 `3cd4783` postcard carries no seed, share panel truncates preview with
+  full code on copy.
+- Acceptance recorded: user eyeballs (seasons, hotel, postcard, share panel,
+  P panel) + committed runner full suite on Windows PowerShell 5.1 (exit 0,
+  12 families). Issues closed with named evidence (#92/#87/#88/#89/#77 + the
+  pre-v5 triage: #19/#20/#33/#39–#43/#47/#50/#51 closed, #44/#45/#46/#52/#54/
+  #55/#56 tagged [session-12]); v5 post-mortem with 6 lessons on PR #93.
+
 ## Workflow rules
 
 - After completing each numbered session goal in ROADMAP.md, commit with a
