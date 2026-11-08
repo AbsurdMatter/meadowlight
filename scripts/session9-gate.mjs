@@ -204,6 +204,12 @@ async function checkChrome() {
         if (intersect(help, dockBox)) hits.push('help∩dock');
         if (panel && intersect(panel, dockBox)) hits.push('panel∩dock');
       }
+      // strip-verdict evidence (6721615413): print the constraint values so a
+      // ClearType re-run can be compared against headless FreeType metrics —
+      // toast bottom (ceiling), corner top (floor), the legal band, and the
+      // panel's rendered box vs both lanes (over = any intersection)
+      const cardsBottomV = toastCards.reduce((m, c) => Math.max(m, c.bottom), 0);
+      const floorV = (corners.cornerControls?.top ?? corners.cornerRow?.top ?? innerHeight) - 8;
       return {
         vp: innerWidth + 'x' + innerHeight,
         vpW: innerWidth,
@@ -213,6 +219,15 @@ async function checkChrome() {
         reset: resetBox,
         share: shareBox,
         toastCount: toastCards.length,
+        toastBottom: +cardsBottomV.toFixed(2),
+        panelFloor: +floorV.toFixed(2),
+        cornerTop: +(corners.cornerControls?.top ?? corners.cornerRow?.top ?? 0).toFixed(2),
+        band: panel ? +(floorV - panel.top).toFixed(2) : null,
+        panelStripFont: panelEl ? getComputedStyle(panelEl).fontSize : null,
+        clearsCeiling: panel ? panel.top >= cardsBottomV + 6 - 0.5 : false,
+        clearsFloor: panel ? panel.bottom <= (corners.cornerControls?.top ?? corners.cornerRow?.top ?? innerHeight) : false,
+        over: hits.length > 0,
+        hits,
         // #65 round-11: raw toast card rects in the dump — a share∩toast FAIL
         // now prints the actual card bottom vs the popover top, measured live
         toastBoxes: toastCards,
@@ -240,7 +255,11 @@ async function checkChrome() {
     });
     rec.record(
       'chrome.help-lane-no-intersection@' + width + 'x' + height,
-      geo.hits.length === 0 && geo.helpInViewport && geo.panelInViewport === true && geo.toastStackExact && geo.panelClearsToastCeiling,
+      // strip-verdict assertions (6721615413), no exemptions: over === false
+      // (no intersection with any corner lane) AND the panel clears BOTH the
+      // toast ceiling and the corner floor at every measured viewport
+      geo.hits.length === 0 && geo.over === false && geo.clearsCeiling && geo.clearsFloor &&
+        geo.helpInViewport && geo.panelInViewport === true && geo.toastStackExact && geo.panelClearsToastCeiling,
       JSON.stringify(geo),
     );
     // #51: the reset button owns its lane below the toasts — with the

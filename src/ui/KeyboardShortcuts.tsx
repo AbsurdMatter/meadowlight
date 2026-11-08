@@ -223,6 +223,10 @@ export function KeyboardShortcuts() {
   // panel's chrome (padding+border is a hard rendered-height floor — CSS
   // cannot shrink it, so a max-height clamp alone cannot clear a short lane)
   const [panelPadY, setPanelPadY] = useState<number | null>(null);
+  // compact-strip mode (user verdict 6721615413): at unsatisfiable viewports
+  // the PANEL is the lane that yields — it collapses to a strip sized to the
+  // legal band, with compact typography, scrolling within itself
+  const [panelStrip, setPanelStrip] = useState(false);
   const toastCount = usePlacementStore((s) => s.toasts.length);
   // closed: drop the measured placement so a reopen re-measures fresh
   useEffect(() => {
@@ -231,6 +235,7 @@ export function KeyboardShortcuts() {
       setPanelMaxWidth(null);
       setPanelMaxHeight(null);
       setPanelPadY(null);
+      setPanelStrip(false);
       contentHRef.current = 0;
     }
   }, [hintOpen]);
@@ -394,7 +399,15 @@ export function KeyboardShortcuts() {
       contentHRef.current = Math.max(contentHRef.current, renderedH);
       const effectiveNatural = Math.max(naturalHeight, contentHRef.current);
       const overFloor = rect.bottom > floorY + 0.5;
-      const needClamp = effectiveNatural > realBand + 0.5 || overFloor;
+      // compact strip (verdict 6721615413): when the legal band between the
+      // toast ceiling and the corner floor is smaller than the panel's minimum
+      // rendered height (chrome floor), the sandwich is unsatisfiable and the
+      // panel yields — strip mode: pinned to the ceiling, sized to the band
+      // exactly (floor(realBand)), zero block padding, compact typography,
+      // scrolling within itself. It never exceeds the band, so its rendered
+      // bottom can never pass floorY on any rasterizer.
+      const strip = realBand < 28;
+      const needClamp = effectiveNatural > realBand + 0.5 || overFloor || strip;
       const cssMaxHeight = needClamp ? Math.floor(realBand) : null;
       // #65 round-13: the rendered height has a hard floor of padding+border
       // (12+12+2+2 = 28px here) — CSS cannot shrink chrome, so when the
@@ -404,11 +417,14 @@ export function KeyboardShortcuts() {
       // Shrink the block padding so the rendered box can fit the lane; the
       // corner row's measured top stays the hard ceiling for the bottom.
       const chromeY = padTop + padBottom + borderY;
-      const padY = needClamp && realBand < chromeY ? Math.max(0, Math.floor((realBand - borderY) / 2)) : null;
-      if (top !== panelTop || cssMaxHeight !== panelMaxHeight || padY !== panelPadY) {
+      // in strip mode the block padding goes straight to zero — the strip is
+      // sized to the legal band, and the border alone (borderY) is the floor
+      const padY = strip ? 0 : needClamp && realBand < chromeY ? Math.max(0, Math.floor((realBand - borderY) / 2)) : null;
+      if (top !== panelTop || cssMaxHeight !== panelMaxHeight || padY !== panelPadY || strip !== panelStrip) {
         setPanelTop(top);
         setPanelMaxHeight(cssMaxHeight);
         setPanelPadY(padY);
+        setPanelStrip(strip);
       }
     };
     // measure after paint, on every toast-stack change, on resize, on
@@ -497,17 +513,19 @@ export function KeyboardShortcuts() {
             zIndex: 6,
           }}
         >
-          <div style={{ ...headingStyle(theme.font.smallSize - 1), textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 8 }}>
+          <div style={{ ...headingStyle(theme.font.smallSize - 1), textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: panelStrip ? 4 : 8 }}>
             {t.shortcutsTitle}
           </div>
           {/* Round-1 finding 4: the content is a GROUPED LIST, not one
               joined block — groups by area (Camera / Tools / Cancel), one
               key + action pair per row. The key column is fixed-width so
               the actions align; the layout is measured (the panel's own
-              placement was finding 2), not assumed. */}
+              placement was finding 2), not assumed. In strip mode the rows
+              compact (smaller font + min-height) — a real degradation, the
+              content scrolls within the strip, never overflow-hidden. */}
           {hintGroups(t).map((group, gi) => (
-            <div key={group.heading} data-shortcut-group={group.heading} style={{ marginBottom: gi < hintGroups(t).length - 1 ? 10 : 0 }}>
-              <div style={{ ...headingStyle(theme.font.smallSize - 1), textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: 3 }}>
+            <div key={group.heading} data-shortcut-group={group.heading} style={{ marginBottom: gi < hintGroups(t).length - 1 ? (panelStrip ? 4 : 10) : 0 }}>
+              <div style={{ ...headingStyle(theme.font.smallSize - (panelStrip ? 3 : 1)), textTransform: 'uppercase', color: theme.color.textFaint, marginBottom: panelStrip ? 1 : 3 }}>
                 {group.heading}
               </div>
               {group.rows.map((row) => (
@@ -524,10 +542,10 @@ export function KeyboardShortcuts() {
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8,
-                    fontSize: theme.font.smallSize + 1,
+                    gap: panelStrip ? 4 : 8,
+                    fontSize: theme.font.smallSize + (panelStrip ? -1 : 1),
                     lineHeight: theme.font.lineHeight,
-                    minHeight: CHROME_TUNING.helpRowMinHeightEm + 'em',
+                    minHeight: (panelStrip ? 1.2 : CHROME_TUNING.helpRowMinHeightEm) + 'em',
                   }}
                 >
                   <span
