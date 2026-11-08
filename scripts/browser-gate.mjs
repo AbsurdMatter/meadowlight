@@ -175,15 +175,28 @@ async function runChecks(browser) {
           w.setSeason('winter');
           w.setSeasonProgressForTest(0.5);
           w.setDayPhase(0.5);
-          await new Promise((r) => setTimeout(r, 8000));
-          const hotel = w.structures().find((s) => s.structureId === 'hotel');
-          const solos = w.wildlifeSightings().filter((s) => s.kind === 'solitarybee');
-          const dists = solos.map((s) => Math.hypot(s.x - hotel.position[0], s.z - hotel.position[2]));
-          return {
-            count: w.solitaryBeeCount(),
-            maxDist: dists.length ? +Math.max(...dists).toFixed(2) : null,
-            target: +w.colonyReadback().target.toFixed(4),
+          const read = () => {
+            const hotel = w.structures().find((s) => s.structureId === 'hotel');
+            const solos = w.wildlifeSightings().filter((s) => s.kind === 'solitarybee');
+            const dists = solos.map((s) => Math.hypot(s.x - hotel.position[0], s.z - hotel.position[2]));
+            return {
+              count: w.solitaryBeeCount(),
+              maxDist: dists.length ? +Math.max(...dists).toFixed(2) : null,
+              target: +w.colonyReadback().target.toFixed(4),
+            };
           };
+          // poll-to-stable (5f6cc1f/5f19e0b discipline): sample until every
+          // solitary rests within the band, bounded — never a fixed-offset
+          // sample of a still-moving swarm (the pre-merge flake: one sample
+          // caught a homing solitary at 2.88u mid-settle)
+          let last = read();
+          const deadline = Date.now() + 12000;
+          while (Date.now() < deadline) {
+            await new Promise((r) => setTimeout(r, 500));
+            last = read();
+            if (last.maxDist !== null && last.maxDist <= 2.5 && last.count >= 1) break;
+          }
+          return last;
         });
         record(
           'solitary.rest-at-hotel-in-winter',

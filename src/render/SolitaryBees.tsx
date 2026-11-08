@@ -220,7 +220,11 @@ export function SolitaryBees() {
       if (bee.restingUntil <= t) {
         const toTarget = target.clone().sub(bee.pos);
         const dist = toTarget.length();
-        if (dist < SOLITARY_BEE_TUNING.arriveRadius) {
+        // a HOMING bee settles within 1.8u of its anchor and rests there
+        // (winter rest canon: the hotel is the only destination) — the plain
+        // 0.4u radius let it orbit at 1-3u forever without ever arriving
+        const arriveR = bee.headingHome ? Math.max(SOLITARY_BEE_TUNING.arriveRadius, 1.8) : SOLITARY_BEE_TUNING.arriveRadius;
+        if (dist < arriveR) {
           // N2: arrival at a flower IS the visit — one write path, deduped
           if (bee.targetFlowerId !== null) usePlacementStore.getState().recordVisit(bee.targetFlowerId);
           bee.restingUntil =
@@ -231,8 +235,13 @@ export function SolitaryBees() {
           bee.headingHome = true;
         } else {
           toTarget.normalize().multiplyScalar(SOLITARY_BEE_TUNING.speed);
-          toTarget.x += Math.sin(t * 3.4 + bee.phase) * SOLITARY_BEE_TUNING.wanderStrength;
-          toTarget.z += Math.cos(t * 2.9 + bee.phase * 1.3) * SOLITARY_BEE_TUNING.wanderStrength;
+          // a HOMING bee flies straight to its anchor: no wobble on the way
+          // home, so it actually settles into the arrive radius and rests at
+          // the hotel — winter rest is canon — instead of orbiting it at
+          // 1-3u forever (the pre-merge flake: headingHome but maxDist 2.88)
+          const wob = bee.headingHome ? 0 : SOLITARY_BEE_TUNING.wanderStrength;
+          toTarget.x += Math.sin(t * 3.4 + bee.phase) * wob;
+          toTarget.z += Math.cos(t * 2.9 + bee.phase * 1.3) * wob;
           bee.vel.lerp(toTarget, Math.min(1, delta * 4));
           bee.pos.addScaledVector(bee.vel, delta);
         }
