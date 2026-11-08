@@ -81,6 +81,20 @@ export function PostcardButton() {
         maxH = Math.max(8, maxH - worst - 1);
       }
       el.style.setProperty('--share-max-h', Math.min(maxH, window.innerHeight - 16).toFixed(1) + 'px');
+      // horizontal clamp (seeds FAIL @360x800@sl): the popover is right:0
+      // against its button wrapper, and wider locale strings shift the
+      // wrapped corner-row anchor — the 260px popover can cross the
+      // viewport's left edge. Clamp into [8, innerWidth-8] with a live
+      // translateX, re-measured every pass like the vertical lane. Measured
+      // via offsetLeft/offsetWidth (layout box, transform-independent) so the
+      // clamp does not oscillate against its own transform.
+      const parentR = el.offsetParent ? el.offsetParent.getBoundingClientRect() : null;
+      const layoutLeft = (parentR ? parentR.left : 0) + el.offsetLeft;
+      const layoutRight = layoutLeft + el.offsetWidth;
+      let dx = 0;
+      if (layoutLeft < 8) dx = 8 - layoutLeft;
+      else if (layoutRight > window.innerWidth - 8) dx = window.innerWidth - 8 - layoutRight;
+      el.style.transform = dx !== 0 ? `translateX(${dx.toFixed(1)}px)` : '';
     };
     update();
     const t = setInterval(update, 400);
@@ -209,8 +223,9 @@ export function PostcardButton() {
             color: theme.color.text,
             fontFamily: theme.font.family,
             fontSize: theme.font.smallSize,
-            maxWidth: 260,
-            // #94: never horizontal scroll — the popover itself never overflows
+            // #94 + seeds@360 sl clamp: never horizontal scroll, and never
+            // wider than the viewport allows
+            maxWidth: 'min(260px, calc(100vw - 16px))',
             overflowX: 'hidden',
             pointerEvents: 'auto',
           }}
