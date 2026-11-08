@@ -664,7 +664,7 @@ async function checkMagnifier() {
   // and an ACTIVE entry, a right-click ON a target must NOT remove it:
   // the target stays present, the save is unchanged, the right-click is
   // consumed by the glass (card dismissed).
-  const glassRemove = await page.evaluate(() => {
+  const glassRemove = await page.evaluate(async () => {
     const w = window.__meadowlight;
     const read = () => JSON.parse(localStorage.getItem('meadowlight.world.v2') || '{}');
     // arm the glass + hold an entry (a flower), frozen clock for the diff.
@@ -677,7 +677,15 @@ async function checkMagnifier() {
     // autosave wrote. Fix: explicit baseline save at the frozen instant.
     const wasPaused = w.timeIsPaused();
     w.timeSetPaused(true);
-    w.save(); // explicit baseline at the frozen instant (same as siblings)
+    // pre-merge flake (user's run): a bee within arriveRadius at the pause
+    // instant fires ONE arrival (recordVisit -> items[i].visitedSeasons) in
+    // the first paused frame, and a 3s autosave landing in the diff window
+    // then persists it — 'changed: items' with count unchanged, intermittent
+    // by which bee was mid-arrival. Same frozen-clock discipline as the
+    // journal fix (5f6cc1f): settle the pause boundary BEFORE the baseline so
+    // the identity window runs on a still world.
+    await new Promise((r) => setTimeout(r, 350));
+    w.save(); // explicit baseline at the frozen, settled instant (same as siblings)
     w.setMagnifierOnForTest(true);
     const target = w.items()[0];
     w.setMagnifierEntryForTest({ kind: 'flower', itemId: target.id });
@@ -742,11 +750,23 @@ async function checkMagnifier() {
         for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) {
           if (JSON.stringify(before[k]) !== JSON.stringify(after[k])) changed.push(k);
         }
+        // name the mutated item+field in the evidence (the diff decides world
+        // vs detector — an unnamed 'items' is not diagnosable)
+        const itemDiffs = [];
+        const bItems = Array.isArray(before.items) ? before.items : [];
+        const aItems = Array.isArray(after.items) ? after.items : [];
+        for (const b of bItems) {
+          const a = aItems.find((x) => x.id === b.id);
+          if (!a) { itemDiffs.push({ id: b.id, fields: ['removed'] }); continue; }
+          const fields = Object.keys(new Set([...Object.keys(b), ...Object.keys(a)]))
+            .filter((k) => JSON.stringify(b[k]) !== JSON.stringify(a[k]));
+          if (fields.length > 0) itemDiffs.push({ id: b.id, fields });
+        }
         const entry = window.__meadowlight.magnifierReadback();
         window.__meadowlight.setMagnifierEntryForTest(null);
         window.__meadowlight.setMagnifierOnForTest(false);
         window.__meadowlight.timeSetPaused(wasPaused);
-        resolve({ beforeCount, afterCount, changed, entry, states });
+        resolve({ beforeCount, afterCount, changed, itemDiffs, entry, states });
       }, 800);
     });
   });
@@ -775,14 +795,18 @@ async function checkMagnifier() {
         states.map((s) => '#' + s.click + (s.glassOn ? ' armed' : ' off') + '/' + (s.entry ?? 'no-entry')).join(', ')
       : 'FAILED predicates: ' + failed75.join('; ') +
         ' — items ' + glassRemove.beforeCount + '->' + glassRemove.afterCount +
-        ', changed: ' + glassRemove.changed.join(', ') + ', states: ' + JSON.stringify(states));
+        ', changed: ' + glassRemove.changed.join(', ') +
+        ', itemDiffs: ' + JSON.stringify(glassRemove.itemDiffs ?? []) +
+        ', states: ' + JSON.stringify(states));
 
   // wildlife inspection is read-only too: same frozen-clock field diff
-  const wildMutation = await page.evaluate(() => {
+  const wildMutation = await page.evaluate(async () => {
     const w = window.__meadowlight;
     const read = () => JSON.parse(localStorage.getItem('meadowlight.world.v2') || '{}');
     const wasPaused = w.timeIsPaused();
     w.timeSetPaused(true);
+    // same pause-boundary settle as the removal-refusal check above
+    await new Promise((r) => setTimeout(r, 350));
     w.save();
     const before = read();
     w.setMagnifierEntryForTest({ kind: 'visitor', visitorId: 'queenbumble' });
