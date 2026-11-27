@@ -72,7 +72,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const OUT = require('node:path').join(__dirname, '..', 'out');
 const { computeAppeal, inBloom, plantedSpecies, hasBloom, yearRoundBloom, beesForHive, FORAGE_RADIUS } = require(OUT + '/engine/pollinator.js');
-const { PLANTS, PLANT_BY_ID } = require(OUT + '/data/plants.js');
+const { PLANTS, PLANT_BY_ID, OFF_BLOOM_SCALE } = require(OUT + '/data/plants.js');
 const { groundAt, waterSurfaceHeight, pondFloorHeight } = require(OUT + '/engine/ground.js');
 const { LAKE, TERRAIN_SHAPE, shapedHeight, POND_FLAT_HEIGHT } = require(OUT + '/data/environment.js');
 const { MEADOW_SIZE, terrainHeight } = require(OUT + '/engine/terrain.js');
@@ -205,6 +205,31 @@ test('reachability: every species is plantable and blooms in a traceable session
   // each season has at least one blooming roster species (no dead season)
   for (const s of SEASONS) {
     assert.ok(hasBloom(all, s), 'no roster species blooms in ' + s);
+  }
+});
+
+// ---------- #55 (session 12 R1): bloom-bottom vs stem-top continuity ----------
+
+test('#55: every species keeps its bloom head on its stem — in bloom AND off-bloom shrunk (planted and wild both render through def.parts)', () => {
+  assert.ok(OFF_BLOOM_SCALE > 0 && OFF_BLOOM_SCALE < 1, 'off-bloom shrink is a real shrink: ' + OFF_BLOOM_SCALE);
+  assert.deepStrictEqual(
+    new Set(Object.keys(PLANT_BY_ID)),
+    new Set(PLANTS.map((p) => p.id)),
+    'every roster id resolves through PLANT_BY_ID — the one def map the planted and wild render paths share',
+  );
+  for (const def of PLANTS) {
+    const stems = def.parts.filter((p) => !p.petal);
+    const petals = def.parts.filter((p) => p.petal);
+    assert.ok(stems.length > 0 && petals.length > 0, def.id + ' fixture must have stem and petal parts (non-vacuous)');
+    const stemTop = Math.max(...stems.map((p) => p.offset[1] + p.size[1] / 2));
+    for (const [state, scale] of [['in-bloom', 1], ['off-bloom', OFF_BLOOM_SCALE]]) {
+      const bloomBottom = Math.min(...petals.map((p) => p.offset[1] - (p.size[1] / 2) * scale));
+      const gap = bloomBottom - stemTop;
+      assert.ok(
+        gap <= 1e-9,
+        def.id + ' ' + state + ': bloom bottom ' + bloomBottom.toFixed(4) + ' floats above stem top ' + stemTop.toFixed(4) + ' (gap ' + gap.toFixed(4) + 'u)',
+      );
+    }
   }
 });
 

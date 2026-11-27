@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { scaledElapsed } from '../engine/scaledTime';
 import * as THREE from 'three';
-import { PLANTS } from '../data/plants';
+import { PLANTS, OFF_BLOOM_SCALE, OFF_BLOOM_LIGHTEN } from '../data/plants';
 import { usePlacementStore } from './placementStore';
 import { meshMayClaim, releaseClaim } from '../data/magnifierKinds';
 import { noVariation } from '../engine/variation';
@@ -24,10 +24,6 @@ const scaleMat = new THREE.Matrix4();
 
 /** generous fixed capacity per species — meshes are never recreated on plant/remove */
 const CAPACITY_PER_SPECIES = 400;
-
-/** out-of-season petals shrink + dull (visible bloom succession) */
-const OFF_BLOOM_SCALE = 0.25;
-const OFF_BLOOM_LIGHTEN = 0.35;
 
 /**
  * Perf pass (session 3):
