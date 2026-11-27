@@ -1,3 +1,7 @@
 node_modules
 dist
 tsconfig.tsbuildinfo
+
+# secrets prophylaxis: the repo is public — local env files must never ship
+.env
+.env.*
